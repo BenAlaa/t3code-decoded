@@ -1,0 +1,355 @@
+---
+slug: six-complete-traces
+order: 390
+number: "39"
+kind: chapter
+part: "Part VIII · Synthesis"
+partOrder: 8
+title: "Six complete traces: ownership, convergence, and failure boundaries"
+shortTitle: Six complete traces
+summary: "Six source-grounded paths connect the book's modules end to end: a local turn, a T3 Connect mobile turn, an approval, an offline outbox drain, a checkpoint diff and revert, and an exact-version service update. Each trace names the owner of every handoff and the point where the observed implementation stops promising convergence."
+status: source-checked
+gates: [sources, interaction, links]
+objectives:
+  - Trace six representative operations across client, relay, domain, side-effect, and projection boundaries.
+  - Distinguish a durable fact from a best-effort handoff, a cached intention, and a completed external effect.
+  - Reuse the owning chapters without flattening their separate authorization, recovery, and update protocols into one story.
+  - Identify the exact failure boundary for each trace before treating a local design choice as a general guarantee.
+keywords: [synthesis, trace, orchestration, T3 Connect, mobile outbox, approval, checkpoint, revert, exact-version update, convergence]
+sourceAreas: [apps/server/src/orchestration, apps/server/src/provider, packages/client-runtime/src, apps/mobile/src/state, infra/relay/src/environments, apps/server/src/checkpointing, apps/server/src/vcs, apps/server/src/cloud, apps/server/src/serviceLauncher.ts, .github/workflows/release.yml, docs/operations/release.md]
+visuals: [synchronized trace swimlanes, six-trace stepper]
+updatedAt: 2026-08-24
+---
+
+import Callout from "../../components/Callout.astro";
+import EvidenceClaim from "../../components/EvidenceClaim.astro";
+import Figure from "../../components/Figure.astro";
+import Mermaid from "../../components/Mermaid.astro";
+import SourceExcerpt from "../../components/SourceExcerpt.astro";
+import SourceList from "../../components/SourceList.astro";
+import SynchronizedTraceLab from "../../components/SynchronizedTraceLab.astro";
+
+This chapter is a synthesis, not a new seventh protocol. It puts already-audited
+pieces on one time axis so that the ownership changes are visible: a device can
+record intent, a relay can authorize connection setup, an environment can commit a
+fact, and a provider, Git driver, or stable launcher can perform a later effect.
+Those verbs are deliberately not interchangeable.
+
+The six traces are chosen because they exercise different seams. They do **not**
+combine into a global exactly-once guarantee. In particular, a server command may
+commit before a hot reactor observes it; a phone file and a server database have no
+shared transaction; a checkpoint revert can mutate files before provider rollback;
+and a prepared service runtime is not committed until its independent launcher says
+so.
+
+<Callout title="How to use this chapter" tone="info">
+  Read a trace straight through once, then use its linked prerequisite chapter for
+  the local state machine. The swimlanes deliberately collapse detail; each arrow
+  means an observed handoff, not an assertion that all arrows are durable, ordered,
+  or retryable in the same way.
+</Callout>
+
+## The common reading key: trigger, owner, durable fact, convergence boundary
+
+Every trace below has four questions:
+
+1. **What triggered work?** A user action, provider callback, queued file, or
+   release workflow begins the path.
+2. **Which owner may act next?** An owner can pass an intent or fact onward, but
+   does not automatically own the recipient's state machine.
+3. **What became durable, where?** A committed orchestration event, mobile outbox
+   file, hidden Git ref, or launcher state has a scope. It is not universal proof.
+4. **What converges—or stops?** Snapshots and subscriptions converge client views;
+   some other paths terminate at an honest failure activity, retry policy, or manual
+   recovery boundary.
+
+<Figure number="39.1" title="Six traces share handoffs, not one universal delivery contract" hint="Read each horizontal band left to right. The repeated lanes are synchronized by the selected trace, while the owner and guarantee change at each handoff." caption="The first band shows a local turn through the environment. The second uses the relay only to authorize, mint, and return a bootstrap for a direct mobile-to-environment session. The third records an approval response before a provider callback can succeed or fail. The fourth drains a durable mobile intent after a live-shell check, then removes it on the command result while projections reconcile separately. The fifth captures and reverts a hidden Git checkpoint through a durable request and a later engine completion. The sixth has release automation publish and expose an exact runtime before a separate connected client requests an update. Dashed paths are deliberately weaker boundaries, not omitted implementation detail." textEquivalent="Across six horizontal trace bands, the lanes are release automation when relevant, device or client, relay if present, environment command and projection state, external worker such as provider, Git, or launcher, and durable stores. A local turn commits before provider work. Relay setup returns endpoint and bootstrap material to the phone, then ends before direct client-to-environment traffic. An approval persists request and response intents around a provider callback that can later reject a stale request. An offline outbox file waits for synchronized shell evidence before remote dispatch; the command result triggers local removal and snapshots reconcile afterward. A checkpoint creates a hidden Git ref before durable checkpoint metadata; revert first commits a request, can stop after file restore, and commits completion only through the engine. Release automation publishes an exact package and exposes a client before that client requests a server update; the stable launcher commits only a prepared trial." sources={["orchestration-transaction", "hot-reactor-no-replay", "connect-relay-control-plane", "managed-relay-dpop-authorization", "permission-response-intent-decider", "mobile-outbox-delivery-policy", "checkpoint-capture-dispatch-order", "checkpoint-revert-effects", "release-exact-version-invariant", "server-update-launcher-handoff"]}>
+  <Mermaid id="six-synchronized-trace-swimlanes" label="Six synchronized end-to-end T3 Code trace swimlanes" chart={`sequenceDiagram
+    participant A as Release automation
+    participant C as Client / device
+    participant R as Relay
+    participant E as Environment + engine
+    participant D as Durable state
+    participant W as Provider / Git / launcher
+    rect rgb(236, 246, 255)
+      Note over C,W: 1 · local first turn
+      C->>E: authorized turn command
+      E->>D: commit event + projection + receipt
+      E-->>W: hot provider intent
+      W-->>E: runtime facts
+      E->>D: commit projected result
+      E-->>C: snapshot / resumed events
+    end
+    rect rgb(247, 242, 255)
+      Note over C,W: 2 · relay-connected mobile turn
+      C->>R: DPoP-bound connect authorization
+      R->>E: short-lived bootstrap mint request
+      E-->>R: proof-bound bootstrap credential
+      R-->>C: endpoint + bootstrap credential
+      C->>E: direct bootstrap exchange + WebSocket ticket
+      C->>E: mobile turn through direct session
+      E-->>C: environment snapshot / stream
+    end
+    rect rgb(255, 248, 234)
+      Note over C,W: 3 · approval round-trip
+      W-->>E: native approval request
+      E->>D: project pending activity
+      E-->>C: synchronized pending request
+      C->>E: response command
+      E->>D: response-requested event
+      E-->>W: hot provider response
+      W-->>E: native resolution or stale-request failure
+      E->>D: later resolution / failure activity
+    end
+    rect rgb(239, 251, 241)
+      Note over C,W: 4 · offline mobile outbox drain
+      C->>D: atomic queued intent confirmation
+      C->>E: after connection + live-shell evidence
+      E->>D: accepted command receipt
+      E-->>C: accepted command result
+      C->>D: remove delivered local item
+      E-->>C: later snapshot / stream reconciliation
+    end
+    rect rgb(255, 241, 241)
+      Note over C,W: 5 · checkpoint diff / revert
+      E-->>W: completion triggers capture
+      W->>D: hidden Git ref + patch result
+      E->>D: checkpoint metadata
+      C->>E: revert request
+      E->>D: durable revert request acceptance
+      E-->>W: ordered restore + provider rollback
+      W-->>E: restore / rollback outcomes
+      E->>D: durable completion only after effects
+    end
+    rect rgb(241, 246, 250)
+      Note over A,W: 6 · stable exact-version update
+      A->>D: publish exact t3@V
+      A->>C: expose compatible client artifact
+      C->>E: request server target V
+      E->>W: preflight then launcher handoff
+      W->>D: snapshot, trial, commit or rollback
+      W-->>E: candidate ready / rollback outcome
+      E-->>C: reconnect / recovery signal
+    end`} />
+</Figure>
+
+## Trace 1 — local first turn: commit intent before provider work
+
+An existing-thread turn begins in a local, web, desktop, or mobile renderer. The
+client sends the typed command through an authenticated RPC method; the server
+normalizes the external input, serializes a decision through its command queue, and
+commits the emitted event, read-model work, and accepted receipt in one SQLite
+transaction. That transaction is the durable acceptance boundary.
+
+Only after that commit does `ProviderCommandReactor` observe the committed intent
+and ask `ProviderService` to establish or continue the provider session and send the
+turn. The provider adapter maps native notifications to the canonical runtime union.
+Runtime ingestion turns those facts back into internal commands, whose resulting
+projections flow to a client through an HTTP snapshot and resumable subscription.
+The detailed command-to-checkpoint path belongs to [Chapter 4](../request-trace/),
+with the lifecycle guards expanded in [Chapter 23](../turn-lifecycle/).
+
+<SourceExcerpt id="orchestration-transaction" focus={[197, 207, 213, 217, 226, 236, 247, 255]} note="One command transaction persists accepted event data, projections, and idempotency receipt before publishing the committed result." />
+
+The decisive limitation is after the commit: the reactor consumes a hot stream, not
+a durable outbox. A crash in the narrow window after the transaction but before the
+provider reactor handles the event does not automatically replay a missing send on
+restart. Retrying the same command finds the accepted receipt and does not create a
+new event. This is intentionally safer than duplicating the durable fact, but it is
+not a proof that every accepted turn reached a harness.
+
+<EvidenceClaim kind="verified" title="A committed turn and a completed harness action are different facts" refs={["orchestration-transaction", "provider-turn-reactor", "hot-reactor-no-replay", "thread-state-runtime"]}>
+  The observed ordering gives one atomic environment-side acceptance point and a
+  later, hot side-effect consumer. Client convergence reads committed projections;
+  it cannot retroactively make an unobserved provider handoff durable.
+</EvidenceClaim>
+
+## Trace 2 — relay-connected mobile turn: launch through the relay, work directly with the environment
+
+A relay-connected phone first holds account authority and a device DPoP key. The
+relay authorizes discovery or connection setup and asks the selected environment to
+mint a short-lived bootstrap credential bound to that proof key, then returns the
+endpoint and bootstrap material to the phone. The phone exchanges that bootstrap
+**directly with the environment**, persists the environment-bound access material,
+gets a direct WebSocket ticket, and then runs the same shared connection, snapshot,
+and command path as another client.
+
+The tunnel can expose the local environment, but the hosted relay does not carry
+normal T3 API or WebSocket traffic after launch. Thus the mobile turn begins only
+after the environment session is established; neither a successful Clerk session
+nor a successful relay call is a thread update. [Chapter 35](../t3-connect/) owns
+the credential ladder and tunnel setup; [Chapter 29](../shared-client-runtime/) and
+[Chapter 33](../mobile-client-continuity/) own the client session and remote-native
+continuity edges.
+
+<SourceExcerpt id="connect-relay-environment-mint" focus={[541, 548, 569, 575, 586, 603, 623, 650, 665]} note="The relay binds its mint operation to the proof-key thumbprint, asks the environment to mint, and returns a bootstrap credential." />
+
+<SourceExcerpt id="managed-relay-dpop-authorization" focus={[189, 203, 239, 250, 264, 276, 284, 285, 293]} note="The client exchanges relay-provided bootstrap material at the environment using its DPoP signer, stores the key-bound token, and obtains a direct socket URL." />
+
+<EvidenceClaim kind="verified" title="Relay success authorizes a launch path; it is not direct-data-plane convergence" refs={["connect-relay-control-plane", "connect-relay-environment-mint", "managed-relay-dpop-authorization", "thread-state-runtime"]}>
+  The relay is explicitly outside normal post-launch traffic. The safe next step is
+  environment-scoped session establishment followed by normal snapshot and stream
+  reconciliation, not treating a control-plane response as authoritative thread
+  state.
+</EvidenceClaim>
+
+## Trace 3 — approval round-trip: persist a request and a response around a native callback
+
+A provider can request approval or structured user input while processing a turn.
+The adapter normalizes that native request; runtime ingestion flushes buffered
+assistant content before the interaction pause, records canonical pending activity,
+and projection storage exposes it to a selected web or mobile thread. The client
+derives a response UI from the synchronized pending request—not from an untrusted
+notification payload or a local approximation of provider state.
+
+When the person answers, the client sends a typed response intent. The decider
+creates a durable response-requested event; the provider command reactor later
+routes it to the exact bound session, and the adapter uses the provider-native reply
+mechanism. A subsequent provider event and projection update are what settle the
+visible pending state. The canonical and provider-specific mapping is in
+[Chapter 24](../permissions-and-input/).
+
+<EvidenceClaim kind="verified" title="An approval response is accepted before native completion is observed" refs={["permission-runtime-activities", "permission-approval-projection", "permission-response-intent-decider", "permission-response-reactor", "permission-mobile-resolution"]}>
+  This trace has two durable request sides—provider request projection and user
+  response intent—but the actual provider callback is a later reactor action. Do not
+  infer universal approval semantics from a T3 runtime-mode label; adapters map
+  their native controls differently.
+</EvidenceClaim>
+
+## Trace 4 — offline mobile task drain: durable phone intent waits for remote evidence
+
+While offline, the phone first exposes a queued row optimistically, then serializes
+an atomic file write. Before delivery, it confirms that the durable record still
+exists behind pending mutations. That prevents an item whose write failed from
+escaping merely because it was briefly visible in the UI.
+
+After reachability returns, the drain does not send every record at once. It handles
+one message globally and the first queued message per thread. For a creation, it
+waits for a **live shell**: a shell that already contains the stable thread id means
+the local cleanup is stale and the item is removed; only a live shell that lacks it
+may send. Existing-thread items likewise wait for enough shell evidence before a
+missing thread is discarded. Settings reconciliation can precede the final turn
+command; the environment then applies its normal receipt and invariant rules.
+
+Once the start-turn command returns its selected success result, the drain removes
+its local file; it does not wait for a later shell/detail projection to make that
+cleanup decision. Snapshot and stream state reconcile afterward and remain useful
+evidence on later drain passes. That joins no transaction across phone storage and
+server SQLite. [Chapter 33](../mobile-client-continuity/) is the full mobile
+state-machine account, while [Chapter 10](../events-receipts/) explains the
+environment receipt boundary.
+
+<SourceExcerpt id="mobile-outbox-optimistic-durability" focus={[91, 95, 100, 102, 104, 107, 119, 123, 124]} note="The mobile queue is visible before its atomic write, while confirmation serializes delivery after that write and reference-based rollback protects a newer retry." />
+
+<SourceExcerpt id="mobile-outbox-delivery-policy" focus={[145, 146, 151, 158, 161, 164, 167, 169, 172, 219, 222, 224, 226]} note="The drain uses synchronized thread existence as a creation replay guard and classifies retryable versus discardable outcomes." />
+
+<EvidenceClaim kind="verified" title="Outbox durability narrows ambiguity; it does not make a distributed transaction" refs={["mobile-outbox-model", "mobile-outbox-manager", "mobile-outbox-optimistic-durability", "mobile-outbox-delivery-policy", "command-receipt-handling"]}>
+  Stable identities, serialized confirmation, live-shell evidence, and environment
+  receipts make retry safer. A crash or network loss between the atomic phone file
+  and the remote command still leaves a cross-store ambiguity that the drain handles
+  with evidence and policy rather than an exactly-once claim.
+</EvidenceClaim>
+
+## Trace 5 — checkpoint diff and revert: Git content first, then a conditional history rewrite
+
+For an eligible completed turn, the checkpoint reactor can capture the workspace
+through a temporary Git index into a hidden, thread-scoped ref. It derives the patch
+against the preceding checkpoint and dispatches a `thread.turn.diff.complete`
+command only after that capture/diff work. The engine then makes the checkpoint
+summary visible in the durable thread projection. A review screen can compare hidden
+turn boundaries; live working-tree and branch modes are separate Git queries.
+
+Revert begins with a durable request event, but it is an ordered saga rather than
+one transaction. It checks the thread, binding, Git workspace, turn count, and
+target; restores content and index, refreshes the workspace, asks the bound provider
+to roll back later turns, attempts ref pruning, returns those outcomes to the
+checkpoint reactor, and only then has the orchestration engine dispatch durable
+completion. If provider rollback or a later step fails after Git restore, files may
+already match the target while provider history and projected thread history do not.
+That partial state is an implementation-path inference, not a promise of automatic
+repair. See [Chapter 27](../checkpoints-revert/) for the full preconditions and
+provider matrix.
+
+<EvidenceClaim kind="inference" title="Revert has an intentional partial-failure seam" refs={["checkpoint-revert-preconditions", "checkpoint-revert-effects", "checkpoint-git-restore", "provider-rollback-service"]}>
+  The ordered calls show filesystem replacement before provider rollback and before
+  durable completion. A failure later in that sequence records failure rather than
+  compensating every changed boundary; a completed projection is therefore not
+  warranted until the completion path runs.
+</EvidenceClaim>
+
+## Trace 6 — stable release and exact-version update: publish, prepare, trial, commit or roll back
+
+The release workflow first resolves a stable version and publishes the exact
+`t3@V` CLI/runtime package. Only then can the GitHub release make clients discoverable
+and a hosted deployment follow. A connected client that asks an eligible server to
+update targets that exact version, not whichever package currently owns an npm
+dist-tag.
+
+The active server rejects non-exact or concurrent targets, stages the immutable
+runtime, preflights it, and hands prepared target information to the stable service
+launcher. The launcher owns the migration/trial boundary: it records pending state,
+captures the SQLite triplet, stops the old child, starts the new candidate, and
+commits only after the candidate reports prepared. A failed or timed-out trial can
+restore the snapshot and select the old runtime; after durable commit, later
+failures are governed by ordinary restart policy instead. [Chapter
+38](../release-updates-observability/) separates this boot-service updater from the
+desktop and mobile state machines.
+
+<SourceExcerpt id="release-exact-version-invariant" focus={[174, 176, 179, 182, 184, 186, 187]} note="Release operations require exact CLI publication before release and hosted-client exposure because clients can request that exact server runtime." />
+
+<SourceExcerpt id="server-update-exact-preflight" focus={[64, 70, 77, 85, 94, 100, 109, 120, 129, 140, 149]} note="The server updater rejects non-exact targets and concurrent work, stages the runtime, and requires a matching preflight result before launcher handoff." />
+
+<EvidenceClaim kind="verified" title="Exact versioning makes the target available; the launcher still owns machine replacement" refs={["release-exact-version-invariant", "release-server-self-update", "server-update-exact-preflight", "server-update-launcher-handoff", "release-server-update-architecture"]}>
+  Publication is a release graph invariant, preflight is an active-server check,
+  and trial/rollback/commit belong to the independent launcher. Conflating these
+  three boundaries would make a package publish look like a successful machine
+  update, which the source does not support.
+</EvidenceClaim>
+
+<SynchronizedTraceLab id="six-end-to-end-traces" />
+
+## What these traces establish—and what they refuse to claim
+
+The repeatable pattern is not “make every operation a distributed transaction.” It
+is more disciplined: give each durable store a narrow contract, serialize the owner
+that must make a decision, pass effects through explicit handoff points, and show
+the reader or operator what evidence establishes convergence. Inference across
+modules is useful only when it keeps the seams visible.
+
+For example, a relay-connected mobile turn legitimately combines credential launch,
+environment supervision, and an ordinary turn. It does **not** imply that the relay
+stores the thread. Likewise, an outbox retry and a command receipt together reduce
+duplicate work, but they cannot promise that every provider-side effect occurred
+once. These distinctions are the basis for the decision review that follows.
+
+<SourceList title="Trace evidence trail" ids={[
+  "turn-start-command",
+  "orchestration-transaction",
+  "provider-turn-reactor",
+  "provider-runtime-ingestion",
+  "hot-reactor-no-replay",
+  "thread-state-runtime",
+  "connect-relay-control-plane",
+  "connect-relay-environment-mint",
+  "managed-relay-dpop-authorization",
+  "permission-runtime-activities",
+  "permission-approval-projection",
+  "permission-response-intent-decider",
+  "permission-response-reactor",
+  "permission-mobile-resolution",
+  "mobile-outbox-model",
+  "mobile-outbox-manager",
+  "mobile-outbox-optimistic-durability",
+  "mobile-outbox-delivery-policy",
+  "command-receipt-handling",
+  "checkpoint-capture-dispatch-order",
+  "checkpoint-diff-query-modes",
+  "checkpoint-revert-preconditions",
+  "checkpoint-revert-effects",
+  "checkpoint-git-restore",
+  "release-exact-version-invariant",
+  "release-server-self-update",
+  "server-update-exact-preflight",
+  "server-update-launcher-handoff",
+  "release-server-update-architecture"
+]} />
