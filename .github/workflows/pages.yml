@@ -1,0 +1,87 @@
+name: Publish GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: github-pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build Pages artifact
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+
+    steps:
+      - name: Check out the book
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Read the canonical source lock
+        id: source-lock
+        run: node scripts/export-source-lock.mjs >> "$GITHUB_OUTPUT"
+
+      - name: Fetch the pinned T3 Code source
+        env:
+          T3CODE_COMMIT: ${{ steps.source-lock.outputs.commit }}
+        run: |
+          git init .source/t3code
+          git -C .source/t3code remote add origin https://github.com/pingdotgg/t3code.git
+          git -C .source/t3code fetch --depth=1 --no-tags origin "$T3CODE_COMMIT"
+          git -C .source/t3code checkout --detach "$T3CODE_COMMIT"
+          test "$(git -C .source/t3code rev-parse HEAD)" = "$T3CODE_COMMIT"
+
+      - name: Configure GitHub Pages
+        id: pages
+        uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24.13.1
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Verify generated excerpts against the source lock
+        run: npm run source:check
+        env:
+          T3CODE_SOURCE_DIR: ${{ github.workspace }}/.source/t3code
+
+      - name: Run tests
+        run: npm test
+
+      - name: Build the source-validated static book
+        run: npm run build
+        env:
+          BASE_PATH: ${{ steps.pages.outputs.base_path }}
+          SITE_URL: ${{ steps.pages.outputs.origin }}
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+        with:
+          path: dist
+
+  deploy:
+    name: Deploy GitHub Pages
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      - name: Deploy
+        id: deployment
+        uses: actions/deploy-pages@cd2ce8fcbc39b97be8ca5fce6e763baed58fa128 # v5.0.0
