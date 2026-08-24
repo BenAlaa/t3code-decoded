@@ -1,0 +1,291 @@
+---
+slug: shared-client-runtime
+order: 290
+number: "29"
+kind: chapter
+part: "Part VI · Client architectures: shared semantics, platform edges"
+partOrder: 6
+title: "Shared runtime: connections, state, and convergence"
+shortTitle: Shared client runtime
+summary: "packages/client-runtime makes web and mobile agree about environment selection, one-attempt RPC sessions, reconnect supervision, and snapshot-plus-cursor convergence. Its most consequential work is rejecting stale history rather than merely rendering new data."
+status: source-checked
+gates: [sources, interaction]
+objectives:
+  - Trace an environment from persisted target through resolution, supervision, and a scoped RPC session.
+  - Separate one WebSocket attempt from retry policy and from subscription replacement.
+  - Explain how keyed Effect Atom state machines own caches, shell state, and thread-detail state.
+  - Follow the snapshot, cursor, pagination, reconnect, and revert race guards that keep a client from resurrecting history.
+keywords: [client-runtime, environment, websocket, RPC, Effect Atom, snapshot, cursor, reconnect, retry, pagination, revert, cache]
+sourceAreas: [packages/client-runtime/src/connection, packages/client-runtime/src/rpc, packages/client-runtime/src/state, packages/contracts/src/orchestration.ts, apps/server/src/ws.ts]
+visuals: [shared-runtime convergence map, client convergence lab]
+updatedAt: 2026-08-24
+---
+
+import Callout from "../../components/Callout.astro";
+import ClientConvergenceLab from "../../components/ClientConvergenceLab.astro";
+import EvidenceClaim from "../../components/EvidenceClaim.astro";
+import Figure from "../../components/Figure.astro";
+import Mermaid from "../../components/Mermaid.astro";
+import SourceExcerpt from "../../components/SourceExcerpt.astro";
+import SourceList from "../../components/SourceList.astro";
+
+Web and mobile do not share a DOM, storage adapter, or platform lifecycle. They do
+share the code that answers a harder question: *what is the currently justified
+local view of one server-owned environment?* `packages/client-runtime` is that
+shared seam. It turns a selected environment into a supervised RPC lease, then
+builds keyed state machines whose snapshots, cursors, and reducers converge after
+disconnects and reordered deliveries.
+
+This chapter calls the state “converged” only when the implementation has an
+authoritative snapshot or has caught a known snapshot up to its cursor. It does not
+mean every client has already rendered the same frame, nor that a local cache has
+become a second source of truth.
+
+<Callout title="Three separate recovery loops" tone="info">
+  Do not credit the WebSocket client with all reconnection behavior. An RPC session
+  opens one socket attempt with its transport retries disabled. The environment
+  supervisor classifies failures and decides retry/backoff. A durable shell or
+  thread subscription switches to each resulting session and makes its own
+  snapshot/resume decision.
+</Callout>
+
+## 1. An environment target names a route, not a live connection
+
+The target union has four variants: **Primary**, **Bearer**, **Relay**, and **SSH**.
+Primary holds direct HTTP and WebSocket bases and may operate without a bearer when
+the platform provides none. Bearer and SSH targets hold a `connectionId` whose
+profile/credential data is resolved locally. Relay names the target environment and
+obtains its relay bootstrap through the cloud/device path. SSH asks a
+platform-provided gateway to prepare a bootstrap, persists the returned SSH target
+profile, then authorizes the resulting endpoint with the bootstrap bearer.
+
+Those are target-specific preparation paths, not four client data models. Each
+successful path returns the same `PreparedConnection`: expected environment id,
+label, HTTP base, socket URL, optional HTTP authorization, and the original target.
+The resolver checks that a profile or authorization result names the expected
+environment; a stored connection id is therefore not treated as proof that it
+still points at the intended server.
+
+| Target | Resolving edge | Credential fact worth preserving |
+|---|---|---|
+| Primary | direct bases, plus optional platform bearer authorization | it may be unauthenticated at this layer |
+| Bearer | stored profile plus stored bearer, then remote authorization | profile and token must match the target environment |
+| Relay | cloud session/device identity → managed-relay bootstrap → DPoP authorization | relay bootstrap is distinct from a reusable direct bearer |
+| SSH | platform SSH gateway → fresh bootstrap → bearer authorization | the gateway, not shared TypeScript, owns the SSH transport |
+
+<EvidenceClaim kind="verified" title="All target kinds converge before socket creation" refs={["connection-target-model", "client-connection-resolver", "client-connection-driver"]}>
+  The resolver switches on the four tagged targets and produces one prepared
+  connection shape. The driver then reports preparation/opening/synchronizing,
+  constructs a session through the session factory, and waits for that session's
+  readiness before returning a lease.
+</EvidenceClaim>
+
+The `EnvironmentRegistry` owns the next level of multiplicity. It loads persisted
+targets into a catalog, creates a scoped supervisor on demand per environment, and
+uses a per-environment lease lock so concurrent consumers acquire the same current
+supervisor instead of independently opening competing connections. Closing that
+service scope closes the supervisor and its resources. This is why an atom or RPC
+helper is keyed by `environmentId`: the key chooses an authority boundary, not
+merely a UI filter.
+
+## 2. One attempt has a deliberately narrow job
+
+`RpcSessionFactory.connect` creates connection/disconnection deferreds, opens a
+WebSocket with a 15-second open timeout, and creates Effect's socket RPC protocol
+with `retryTransientErrors: false` and `Schedule.recurs(0)`. It caches the initial
+`serverGetConfig` request; readiness requires both the socket-connect signal and
+that initial configuration. Its probe either calls `serverProbe` when the config
+advertises it or reuses the config request. The session exposes its closure as a
+transient transport failure.
+
+<SourceExcerpt id="thread-resume-race" focus={[1411, 1413, 1419, 1424, 1429, 1439, 1473]} note="The server attaches a live thread buffer before loading/replaying state. It replays only a bounded cursor gap; an invalid or too-large gap instead produces a new snapshot, and overlap is intentionally left for the client sequence guard." />
+
+The seemingly strict “no retry” setting is a division of responsibility. The
+supervisor owns intent (`connect`/`disconnect`), network status, session generation,
+last failure, and the visible phases `available`, `offline`, `connecting`,
+`backoff`, `connected`, and `blocked`. It reports preparation, opening, and
+synchronization separately. Transient failures retry on the pinned 3/4/8/16-second
+ladder; blocked errors wait for an external signal rather than spinning. A stable
+connection for at least 30 seconds resets retry state. A manual retry resets it;
+a foreground probe can replace a stale mobile lease and make the immediate first
+reconnect without the first backoff rung. These are policy choices in the
+supervisor—not a promise that every failed operation is idempotent.
+
+<EvidenceClaim kind="verified" title="Reconnect changes the lease generation, not the local authority" refs={["client-rpc-session", "client-connection-supervisor-state", "client-connection-supervisor-retry", "client-rpc-dynamic-subscription"]}>
+  The session owns one attempt. The supervisor publishes the replacement session
+  and generation after a successful connection. `subscribeDynamic` switch-maps
+  its durable subscription to that current session; a transport failure waits for
+  the next session instead of performing a hidden socket retry inside the stream.
+</EvidenceClaim>
+
+## 3. Atom families supply one machine per key
+
+The runtime's helpers create Effect Atom families around an environment key and,
+where needed, an input or thread id. They route effects through the registry's
+environment lease. Query families watch connected generations, use stale-while-
+revalidate behavior, and have an idle TTL; subscription families follow the live
+environment stream. Command helpers execute through an `AtomRegistry`, and their
+scheduler can be parallel, FIFO serial, single-flight, or latest-wins per key.
+
+This is not a global “store of all server objects.” The registry is the mounted
+atom runtime; individual families own the lifetime of a particular observable
+state machine. `createEnvironmentShellAtoms` and
+`createEnvironmentThreadStateAtoms`, for example, return environment/thread-keyed
+atoms. The app surface decides how to mount and render them; the shared package
+decides how their data reaches a justified state.
+
+<Callout title="Platform edge, shared semantic core" tone="info">
+  Platform capabilities inject storage, primary auth, relay identity, or an SSH
+  gateway. Shared runtime code does not pretend that a browser can tunnel SSH or
+  that mobile persistence is web localStorage. It does centralize the target,
+  authorization, supervisor, RPC, cache, cursor, reducer, and state-machine
+  semantics that must not drift between clients.
+</Callout>
+
+## 4. Caches accelerate first paint; snapshots re-establish authority
+
+Shell and eligible settled thread state can be read from `EnvironmentCacheStore`.
+That starts the UI in `cached`, rather than erasing a useful previous view. Active
+or starting thread sessions are deliberately not persisted on every streamed
+change: their large, rapid payloads remain server-authoritative until settling.
+Persist writes travel through a one-item sliding queue and a 500 ms debounce, so
+cache encoding is not put on the event-stream hot path.
+
+But a cursor alone is insufficient across a new RPC session. For the shell,
+`lastAuthoritativeSession` distinguishes a foreground resubscription on the same
+session (resume from the in-memory snapshot cursor) from a replacement session
+(fetch HTTP snapshot first). If that refresh fails, it omits the cached cursor so
+the server must send a complete socket snapshot. Threads similarly seed a warm
+cache's `lastSequence`, fetch an HTTP snapshot if they have no local detail, then
+subscribe with `afterSequence` only when they have a current detail.
+
+The server's paired protocol makes that defensible: it attaches live delivery
+before loading snapshot/replay state, captures a head for the bounded replay, then
+emits the buffered tail. A completion marker, when the server advertises support,
+means the buffered work before that marker has been delivered; it is not a claim
+that future domain events have stopped.
+
+<Figure number="29.1" title="A keyed client state machine converges on a supervised session" hint="read the arrows as ownership and ordering, not a universal request trace" caption="A target is resolved to a prepared connection; the registry acquires its supervisor; the driver creates a one-attempt RPC session. Shell and thread machines hydrate cache, obtain an authoritative snapshot when necessary, resume with a sequence cursor, and apply only newer stream items. Thread pagination adds a history epoch and watermark gate so stale pages cannot reintroduce reverted content." textEquivalent="Four target kinds resolve into one prepared connection. An environment registry owns one supervisor per environment. The supervisor creates successive one-attempt RPC sessions. Keyed shell and thread state machines read cache, fetch an authoritative snapshot when needed, resume an event stream after a cursor, ignore duplicates, and persist settled data. Thread pagination waits for a page watermark and rejects pages from an older history epoch." sources={["connection-target-model", "client-environment-registry", "client-registry-supervisor-lease", "client-rpc-session", "client-state-runtime-families", "client-shell-reconnect", "client-thread-race-guards", "thread-resume-race"]}>
+  <Mermaid id="client-runtime-convergence" label="Shared client runtime convergence flow" chart={`flowchart LR
+    T[Primary / Bearer / Relay / SSH target] --> R[Resolver]
+    R --> P[Prepared connection]
+    P --> G[Environment registry + supervisor]
+    G --> S[One-attempt RPC session\nnew generation on reconnect]
+    S --> H[Shell state machine]
+    S --> D[Thread state machine]
+    C[(platform cache)] --> H
+    C --> D
+    H -->|HTTP snapshot if new session| X[authoritative snapshot]
+    D -->|HTTP snapshot if needed| X
+    X -->|afterSequence| L[bounded replay + live tail]
+    L -->|newer only| H
+    L -->|newer only| D
+    D --> E[history epoch + page watermark]
+    E --> D`} />
+</Figure>
+
+## 5. The sequence rule handles snapshot overlap and duplicate delivery
+
+The shell reducer replaces state on a snapshot and applies a shell event only when
+its sequence is greater than `snapshotSequence`. Thread state does the analogous
+check against `lastSequence`; an event at or below it is ignored. This is expected
+to discard replay/live overlap, an event already represented in an HTTP snapshot,
+and duplicate delivery after resubscription. It is not an attempt to make delivery
+exactly once.
+
+When the cursor is missing, ahead of the server, or beyond the configured bounded
+gap, the server chooses a fresh snapshot rather than silently truncating replay.
+On a fresh thread snapshot, the client sets the new sequence and **replaces all
+loaded history**, then advances the history epoch. That replacement matters: a
+client disconnected during a revert has no remaining per-event removal to apply to
+an older cached page.
+
+<EvidenceClaim kind="verified" title="A newer sequence wins; a reset replaces history" refs={["client-shell-convergence", "client-thread-convergence", "client-thread-race-guards", "ws-shell-resume", "ws-thread-subscription"]}>
+  Shell and thread folds ignore events at or below their watermarks. The server
+  falls back to snapshots for invalid/oversized cursor gaps. Thread snapshot
+  application increments the history epoch and replaces loaded windowed history,
+  while a `thread.reverted` event also increments that epoch before its reducer
+  filters loaded turns.
+</EvidenceClaim>
+
+## 6. Pagination is a second stream race, not “just append older rows”
+
+Thread detail may begin with a recent turn window and a keyset `beforeCursor`.
+“Load earlier” is serialized through a sliding one-item request queue, no-ops while
+one page is loading, and is enabled only after the connected server advertises
+pagination. The client merges only windowed collections from the older snapshot;
+newer thread metadata stays authoritative. Identity de-duplication protects
+overlapping rows even if a server/cursor edge returns them.
+
+The awkward cases are intentional design constraints:
+
+- **Stale page:** a response whose snapshot sequence is below loaded state, or
+  whose epoch differs from the request's epoch, is discarded under the same lock
+  used for live stream application.
+- **Page ahead of live cursor:** it is parked instead of merged. Its
+  thread-scoped watermark may include out-of-window updates the subscription has
+  not delivered; merging immediately could show them and later replay them again.
+  The parked page merges only once live `lastSequence` reaches that watermark.
+- **Snapshot or revert during page fetch:** both rewrite the meaningful history
+  and bump the epoch. The in-flight page cannot merge afterwards, so removed turns
+  cannot be resurrected.
+- **Reconnect to an older server:** pagination support is reset on disconnect and
+  re-read from the new session config. A cached window is dropped before resume if
+  the replacement server lacks pagination, because it could not supply the missing
+  older pages.
+
+<Callout title="Cursor validity and history validity are different checks" tone="warning">
+  The reducer can safely ignore an old *event* by sequence. An older-page HTTP
+  response contains a history window, so it needs the additional epoch and
+  page-watermark checks. A keyset cursor remaining syntactically usable after a
+  revert does not authorize an in-flight response captured before that revert to
+  merge.
+</Callout>
+
+<ClientConvergenceLab id="client-convergence-races" />
+
+The lab is intentionally a small model rather than a network mock. Each control
+advances one visible transition: it can replace a snapshot, reject a duplicate,
+choose snapshot recovery for a gap, replace the session, invalidate history on a
+revert, or park/merge/reject an older page. Its rules mirror the boundaries above;
+it does not claim to emulate Effect scheduling or a real server.
+
+## 7. Read a reconnect as a proof obligation
+
+The practical question after a disconnect is not “did the socket reopen?” It is:
+
+1. Did a target resolve and a supervisor publish a ready session?
+2. Did the relevant state machine obtain an authoritative snapshot for that session
+   or a bounded replay after a known snapshot cursor?
+3. Did its reducer reject overlap, and—if it is a thread—did its page merge survive
+   both the sequence/watermark and history-epoch tests?
+
+Only then is it reasonable for the UI to label the state live. That discipline
+lets web and mobile differ at the platform edge while sharing the same answer to
+the expensive correctness questions: what may be cached, what may be resumed, and
+what must be thrown away.
+
+<SourceList ids={[
+  "client-runtime-package",
+  "client-connection-directory",
+  "connection-target-model",
+  "client-connection-resolver",
+  "client-environment-registry",
+  "client-registry-supervisor-lease",
+  "client-connection-driver",
+  "client-rpc-session",
+  "client-connection-supervisor-state",
+  "client-connection-supervisor-retry",
+  "client-rpc-dynamic-subscription",
+  "client-state-runtime-families",
+  "client-shell-reconnect",
+  "client-shell-convergence",
+  "thread-state-runtime",
+  "client-thread-convergence",
+  "client-thread-race-guards",
+  "client-thread-subscription",
+  "orchestration-snapshot-contracts",
+  "ws-shell-resume",
+  "ws-thread-subscription",
+  "thread-resume-race",
+]} />
