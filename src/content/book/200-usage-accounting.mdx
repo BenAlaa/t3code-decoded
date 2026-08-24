@@ -1,0 +1,285 @@
+---
+slug: usage-accounting
+order: 200
+number: "20"
+kind: chapter
+part: Part IV · Five harnesses, one product model
+partOrder: 4
+title: Usage accounting without a false ledger
+shortTitle: Usage accounting
+summary: "The live context meter and historical transcript usage view are deliberately different measurements: one projects the latest usable context snapshot for a thread, while the other scans provider-owned files into a deduplicated, priced historical estimate."
+status: source-checked
+gates: [sources, interaction]
+objectives:
+  - Trace the live context-window snapshot from provider adapter to the web composer.
+  - Trace historical Claude and Codex transcript records through parsing, deduplication, bucketing, pricing, and environment merge.
+  - Interpret coverage, source fingerprints, cache state, and cost provenance without claiming a billing settlement.
+  - Keep task and subagent accounting as a distinct later concern.
+keywords: [usage, context window, transcripts, pricing, deduplication, cache, RPC, provenance, environments]
+sourceAreas: [packages/contracts/src/providerRuntime.ts, packages/contracts/src/usage.ts, apps/server/src/provider/Layers, apps/server/src/orchestration/Layers, apps/server/src/usage, packages/shared/src/usageMerge.ts, apps/web/src/components/usage, apps/mobile/src/features/usage]
+visuals: [two-lane usage pipeline, usage accounting lab, source-fingerprint merge]
+updatedAt: 2026-08-24
+---
+
+import Callout from "../../components/Callout.astro";
+import EvidenceClaim from "../../components/EvidenceClaim.astro";
+import Figure from "../../components/Figure.astro";
+import Mermaid from "../../components/Mermaid.astro";
+import SourceExcerpt from "../../components/SourceExcerpt.astro";
+import SourceList from "../../components/SourceList.astro";
+import UsageAccountingLab from "../../components/UsageAccountingLab.astro";
+
+“Usage” names two different questions in T3 Code.
+
+The composer asks: **how full is this thread's context window at the latest valid
+provider update?** The Usage screens ask: **what token-shaped records can this
+environment read from selected provider transcript directories over a historical
+time range?** They share words such as model, tokens, and session, but they do not
+share a source of truth, an update cadence, or a settlement guarantee.
+
+<Callout title="Read the two lanes separately" tone="warning">
+  A current context snapshot is not added to the historical Usage total. Conversely,
+  a historical transcript scan cannot certify that the currently displayed context
+  meter is complete, current, or billed. The first is a live operational aid; the
+  second is an evidence-limited accounting estimate.
+</Callout>
+
+## The live lane projects a current context snapshot
+
+The runtime contract calls the canonical event
+`thread.token-usage.updated`. Its snapshot requires `usedTokens`; it may also carry
+the provider's total processed tokens, maximum context size, input/cache/output
+breakdown, reasoning subset, duration, tool count, and a compaction flag. The event
+also carries provider, thread, time, and optional turn and provider-instance
+identity.
+
+<SourceExcerpt id="usage-live-contract" focus={[309, 310, 312, 315, 319, 323, 327, 331]} note="This union member carries the context snapshot payload. Provider, thread, timestamp, and optional turn/instance identity come from the canonical runtime-event base fields catalogued with the chapter sources." />
+
+At this pinned revision, source inspection finds canonical token-usage emission in
+two adapters:
+
+<div class="table-scroll" tabindex="0" role="region" aria-label="Live token usage adapter coverage">
+<table class="comparison">
+  <caption class="sr-only">Canonical live token usage emission paths found in the pinned provider adapters</caption>
+  <thead><tr><th scope="col">Adapter</th><th scope="col">Provider-side input</th><th scope="col">Canonical emission boundary</th><th scope="col">Coverage qualification</th></tr></thead>
+  <tbody>
+    <tr><th scope="row">Codex</th><td>native <code>thread/tokenUsage/updated</code> notification</td><td><code>CodexAdapter</code> normalizes it, rejecting a non-positive <code>usedTokens</code></td><td>emitted when that native notification arrives; total processed is read from native <code>total</code>, current use from native <code>last</code></td></tr>
+    <tr><th scope="row">Claude</th><td>normalized Claude SDK message / task-progress usage</td><td><code>emitThreadTokenUsage</code></td><td>emitted only when normalization produced usage; the adapter remembers its last known values</td></tr>
+    <tr><th scope="row">Cursor, Grok, OpenCode, ACP adapters</th><td>no canonical emission branch found in this revision</td><td>—</td><td>absence in this audit is not evidence that a provider can never expose usage; it means this build does not project it through this event</td></tr>
+  </tbody>
+</table>
+</div>
+
+<SourceExcerpt id="usage-codex-normalization" focus={[159, 164, 168, 172, 178, 182, 186, 190]} note="Codex converts native total/last fields and optional categories to the canonical snapshot." />
+
+<SourceExcerpt id="usage-codex-emission" focus={[1000, 1003, 1007, 1011, 1014, 1018]} note="Only the native thread/tokenUsage/updated notification reaches the canonical Codex emission path." />
+
+<SourceExcerpt id="usage-claude-emission" focus={[2051, 2055, 2061, 2068, 2074, 2081, 2088]} note="Claude emits only after a usable normalization and stores its last known usage values." />
+
+The provider service validates the provider/instance association, optionally writes
+the canonical event to its best-effort NDJSON log, and publishes it on the hot
+runtime stream. Runtime ingestion accepts a token-usage event
+only when `usedTokens > 0`, then writes one `context-window.updated` activity with
+the event id as activity id. The web selector walks activities from newest to oldest
+and takes the first valid context-window payload. It derives percentage and
+remaining capacity from `usedTokens / maxTokens` only when a usable maximum exists.
+It does not sum snapshots, recover skipped notifications, or consult transcript
+files.
+
+<SourceExcerpt id="usage-live-activity" focus={[766, 770, 774, 778, 782, 784]} note="Ingestion turns an accepted runtime token snapshot into a context-window activity." />
+
+<SourceExcerpt id="usage-web-context-meter" focus={[50, 54, 61, 69, 78, 86, 92, 96]} note="The selector chooses the latest valid activity; the composer meter renders that one snapshot rather than a historical accumulation." />
+
+<EvidenceClaim kind="verified" title="The live meter is provider-conditional current state" refs={["provider-runtime-event-base", "usage-live-contract", "usage-codex-normalization", "usage-codex-emission", "usage-claude-emission", "provider-service-runtime-correlation", "usage-live-admission", "usage-live-activity", "usage-web-context-meter"]}>
+  The meter can be absent because no valid activity has reached it, because an
+  adapter has no current emission path, or because the activity has no finite used
+  token value. A snapshot without a usable maximum still renders a raw used-token
+  control; only its percentage, remaining-capacity, and progress visualization are
+  unavailable. Its `totalProcessedTokens` is provider-reported progress
+  metadata—not a cross-thread, cross-day, or cost total.
+</EvidenceClaim>
+
+## The historical lane scans files, not orchestration state
+
+The version-4 usage contract intentionally reads selected CLI homes: Claude JSONL
+under a resolved Claude home (preferring `.claude/projects`, with a `projects`
+fallback) and Codex JSONL under the resolved Codex shared-home `sessions` tree. The
+server exposes preaggregated buckets, never raw transcript records. Consequently it
+can include provider turns made outside T3 Code, but it cannot account for a
+provider whose history is not in those two scanned layouts.
+
+<SourceExcerpt id="usage-summary-contract" focus={[4, 10, 20, 24, 26, 48, 53, 59, 64, 74, 82, 95, 100]} note="The contract fixes version 4, two scan providers, time-zone semantics, and token/cost categories." />
+
+<SourceExcerpt id="usage-home-discovery" focus={[187, 192, 198, 205, 212, 218, 225]} note="Discovery follows the legacy Claude and Codex settings paths. Window validation and candidate-file slack are catalogued separately below." />
+
+The time rule has two layers. Daily buckets use the caller-selected IANA time zone
+so a day reflects the user's experience. Hourly queries have exact inclusive/
+exclusive instants and are capped at 24 hours. Candidate files are screened using a
+UTC window with a 36-hour mtime slack, then individual records are parsed and tested
+against the actual requested range. A file's mtime is therefore an optimization
+filter, not the semantic timestamp of a usage record.
+
+Parser rules are provider-specific. Claude accepts assistant records with a usage
+object and deduplicates repeated content-block accounting by message/request key.
+Codex follows turn-context model state and `last_token_usage` deltas; it subtracts
+cached tokens from the reported input count and applies a one-second fork-copy
+suppression heuristic. Codex records carry no global duplicate key: consecutive
+delta suppression and fork-copy suppression are parser-local. That one-second
+threshold is implementation behavior, not a portable provider promise.
+
+<SourceExcerpt id="usage-transcript-parsers" focus={[78, 84, 91, 99, 108, 117, 126, 137]} note="Claude assistant records require provider-specific normalization and duplicate keys. The separate Codex parser is catalogued below." />
+
+## Deduplicate before bucketing, then price with provenance
+
+The reader streams JSONL files and uses a cache only when path, provider, size, and
+mtime still match. A cache miss or unreadable file does not change the semantic
+deduplication order: after provider-local parser suppression, aggregation removes
+non-null duplicate keys within a file, then removes matching Claude copy/fork keys
+across files, then applies time bounds and buckets by day (and optional hour),
+provider, and model. Totals treat reasoning as a subset of output, not an additional
+token category.
+
+<SourceExcerpt id="usage-dedup-buckets" focus={[109, 114, 121, 129, 138, 149, 160, 171, 178]} note="Global duplicate keys are applied before time bounds and aggregation into the selected bucket." />
+
+When a transcript contains a finite provider-reported USD value, that value wins.
+Otherwise the server can multiply uncached input, cache reads, cache creation, and
+output by a LiteLLM rate table. The cache is memory-then-disk, has a 24-hour TTL,
+and falls back to a still-cached table after a rate-fetch failure; without a usable
+table, a model is unpriced. The UI therefore labels the computed value as an API
+estimate. It is not evidence of subscription charges, discounts, enterprise
+contracts, or a provider invoice.
+
+<SourceExcerpt id="usage-pricing-cache" focus={[85, 90, 98, 105, 112, 119, 128, 138, 148]} note="Reported cost wins; otherwise pricing is a base-tier rate-table calculation with explicit unpriced handling. Rate-table acquisition and transcript scan caching are catalogued separately." />
+
+<EvidenceClaim kind="verified" title="A priced bucket still has limited financial meaning" refs={["usage-summary-contract", "usage-pricing-cache"]}>
+  `providerReported`, `modelPriced`, and `unpriced` describe cost provenance, not
+  payment finality. Cached input and cache creation are distinct from uncached
+  input; reasoning is already inside output and must not be charged again.
+</EvidenceClaim>
+
+## Coverage and merge are part of the result
+
+Each environment returns source diagnostics and a fingerprint containing host id,
+provider, resolved home path, and filesystem volume id. The web and mobile clients
+request every connected environment, reject an incompatible contract version, and
+merge only one claimant for an identical non-missing source fingerprint. They sum
+distinct source sessions rather than adding bucket session counts, which could count
+one session repeatedly across day/model buckets.
+
+<EvidenceClaim kind="verified" title="Web and mobile fan out before they merge" refs={["usage-web-environment-queries", "usage-mobile-environment-queries", "usage-environment-merge"]}>
+  Each client enumerates its connected environment presentations, requests one usage
+  summary per environment/window, retains pending and failure status per source, and
+  passes answered summaries to the shared versioned merge.
+</EvidenceClaim>
+
+<SourceExcerpt id="usage-rpc-contract" focus={[260, 264, 268, 272, 276, 280, 284]} note="The server exposes a typed, versioned Usage summary rather than raw transcript rows." />
+
+<SourceExcerpt id="usage-environment-merge" focus={[102, 108, 115, 123, 132, 141, 151, 163]} note="The client merge rejects stale contract versions and uses exact source fingerprints to choose one environment's contribution. Total reconstruction is catalogued separately." />
+
+<Figure number="20.1" title="Two measurements travel through different evidence chains" hint="the lanes share no accumulator" caption="Live context updates become a latest-valid thread activity and a composer meter. Historical usage scans selected provider transcript homes, normalizes and deduplicates records, optionally prices buckets, then merges equivalent physical sources across environments. No edge is drawn between the lanes: neither lane settles the other." textEquivalent="The left lane starts with Codex or Claude provider events, validates a positive used-token snapshot, persists a context-window activity, selects the newest valid activity for one thread, and renders a context meter. The right lane starts with selected Claude and Codex transcript directories, streams JSONL records, parses provider-specific usage, removes within-file and cross-file duplicates, applies time bounds and buckets, obtains provider-reported or rate-table cost provenance, and merges environment summaries by a host/provider/home/volume fingerprint. There is no arrow from the context meter into the historical total." sources={["usage-live-contract", "usage-live-activity", "usage-web-context-meter", "usage-summary-contract", "usage-dedup-buckets", "usage-pricing-cache", "usage-rpc-contract", "usage-environment-merge"]}>
+  <Mermaid id="two-lane-usage-accounting" label="Live context and historical transcript accounting" chart={`flowchart LR
+    subgraph L[Live thread context · current state]
+      A[Codex / Claude adapter event] --> B{usedTokens > 0?}
+      B -->|yes| C[context-window.updated activity]
+      C --> D[newest valid activity for thread]
+      D --> E[composer context meter]
+    end
+    subgraph H[Historical transcript accounting · selected files]
+      F[Claude / Codex JSONL homes] --> G[parse + normalize]
+      G --> I[within-file and cross-file dedupe]
+      I --> J[time bounds + day/hour buckets]
+      J --> K[reported cost or rate-table estimate]
+      K --> M[environment fingerprint merge]
+      M --> N[historical usage total]
+    end
+    %% Invisible layout constraint only; no data flows between lanes.
+    A ~~~ F`} />
+</Figure>
+
+There is an important diagnostic limitation at this pinned revision. The contract
+permits `ok`, `missing`, `partial`, and `failed` source states, but the service path
+observed here emits `missing` when the directory is absent—or when the existence
+check itself fails—and otherwise reports `ok`. Directory listing errors are swallowed
+by the reader; unreadable files
+increment skipped-file work but return no records; malformed-record count is
+initialized to zero. An apparently `ok` zero is therefore not a proof that every
+eligible record was readable. Treat coverage indicators as useful evidence, not as
+completeness certificates.
+
+<SourceExcerpt id="usage-reader-failure-policy" focus={[92, 97, 104, 111, 119, 126, 134, 140]} note="The reader returns null for an unreadable file rather than failing the whole scan. Directory-listing behavior is catalogued separately." />
+
+<SourceExcerpt id="usage-source-status" focus={[352, 360, 368, 377, 386, 396, 404, 408]} note="For an existing directory, this path reports status ok even when files were skipped, while malformedRecords is set to zero." />
+
+<EvidenceClaim kind="inference" title="Coverage reporting is weaker than its result type suggests" refs={["usage-summary-contract", "usage-reader-failure-policy", "usage-source-status"]}>
+  The contract has partial and failed states, but this service implementation's
+  observed success path does not surface per-file read/list failures as either. That
+  conclusion compares the declared result vocabulary with the reader/service control
+  flow; it is not a claim that all future implementations behave this way.
+</EvidenceClaim>
+
+## Work the accounting lab by hand
+
+The lab keeps the two lanes visible. Its historical miniature has one duplicate
+inside a Claude file, one resumed/forked duplicate across files, and a distinct
+Codex record. Advance the stages to see why the final total is 218 tokens, while a
+live `88,000 / 200,000` context snapshot remains deliberately outside that total.
+
+<UsageAccountingLab id="transcript-pipeline" />
+
+## Time, sessions, and scope are constraints—not decoration
+
+- A daily range is inclusive by local day in the supplied IANA zone. An hourly
+  range uses exact `[since, until)` instants and can span at most 24 hours. Invalid
+  IANA input falls back to UTC in the aggregation helper, so callers should supply
+  a real zone rather than infer one after the fact.
+- Transcript session totals describe distinct contributing source sessions. They do
+  not establish a one-to-one mapping to T3 threads, provider native sessions, live
+  context snapshots, invoices, or a user's total work.
+- Scan-home resolution uses legacy Claude/Codex provider settings. It is not a
+  registry-wide scan of every possible provider instance configuration.
+- The scan cache trades repeated parsing for path/size/mtime reuse. It is local
+  implementation state, not an immutable evidence store; cross-file dedupe still
+  runs after cached records are read.
+
+<Callout title="Deferred: task and subagent usage" tone="info">
+  Runtime task/subagent work has its own lifecycle and optional usage-shaped data.
+  This chapter intentionally does not roll it into thread context telemetry or
+  provider-transcript accounting. The planned Chapter 25 will define its identity,
+  fan-out, retries, and attribution rules before a task-level total is presented.
+</Callout>
+
+<EvidenceClaim kind="future" title="A stronger accounting contract would expose scan incompleteness" refs={["usage-summary-contract", "usage-home-discovery"]}>
+  A future version could distinguish a clean zero-record scan from listing failure,
+  unreadable file, malformed record, stale pricing, and deduplicated shadow source.
+  Such a change should be versioned; it cannot be inferred retroactively from the
+  current summary.
+</EvidenceClaim>
+
+<SourceList ids={[
+  "usage-live-contract",
+  "provider-runtime-event-base",
+  "usage-codex-normalization",
+  "usage-codex-emission",
+  "usage-claude-emission",
+  "provider-service-runtime-correlation",
+  "usage-live-admission",
+  "usage-live-activity",
+  "usage-web-context-meter",
+  "usage-summary-contract",
+  "usage-home-discovery",
+  "usage-window-validation",
+  "usage-transcript-parsers",
+  "usage-codex-transcript-parser",
+  "usage-dedup-buckets",
+  "usage-pricing-cache",
+  "usage-rate-table-acquisition",
+  "usage-scan-cache",
+  "usage-rpc-contract",
+  "usage-environment-merge",
+  "usage-web-environment-queries",
+  "usage-mobile-environment-queries",
+  "usage-merge-totals",
+  "usage-reader-failure-policy",
+  "usage-transcript-listing",
+  "usage-source-status",
+]} />

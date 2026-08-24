@@ -1,0 +1,133 @@
+---
+slug: claude-agent-sdk
+order: 170
+number: "17"
+kind: chapter
+part: Part IV · Five harnesses, one product model
+partOrder: 4
+title: Claude through the Agent SDK
+shortTitle: Claude Agent SDK
+summary: Claude uses an SDK query stream rather than app-server RPC; T3 holds live query context and deferred interactions while normalizing assistant, tool, task, plan, usage, and result observations into one product contract.
+status: source-checked
+gates: [sources, interaction]
+objectives: [Follow Claude query configuration resume steering interruption and cleanup, Map permissions input tools TodoWrite tasks and results, Separate provider-owned stream state from durable T3 history, Explain skills commands and live usage without cross-provider overclaim]
+keywords: [Claude, Agent SDK, query stream, permissions, skills, commands, TodoWrite, tasks, resume, usage]
+sourceAreas: [apps/server/src/provider/Layers/ClaudeAdapter.ts, apps/server/src/provider/Drivers/ClaudeDriver.ts, apps/server/src/provider/Drivers/ClaudeSkills.ts]
+visuals: [Claude SDK message normalization, skill precedence, query lifecycle]
+updatedAt: 2026-08-24
+---
+
+import Callout from "../../components/Callout.astro";
+import ClaudeSdkStreamLab from "../../components/ClaudeSdkStreamLab.astro";
+import EvidenceClaim from "../../components/EvidenceClaim.astro";
+import Figure from "../../components/Figure.astro";
+import Mermaid from "../../components/Mermaid.astro";
+import SourceExcerpt from "../../components/SourceExcerpt.astro";
+import SourceList from "../../components/SourceList.astro";
+
+Claude reaches T3 through the Agent SDK query/message stream, not Codex app-server
+and not ACP. The adapter owns a live context per T3 thread: pending approval/input
+deferreds, turn bookkeeping, task state, model/mode, resume metadata, and last-known
+context telemetry. That creates a coherent product surface; it is not a durable
+cross-provider scheduler or replay log of SDK traffic.
+
+## Configure a query, then preserve enough to resume
+
+<SourceExcerpt id="claude-adapter-query-config" focus={[4138, 4139, 4140, 4141, 4143, 4158, 4159, 4160, 4166, 4168, 4171, 4173, 4176, 4177, 4178, 4180, 4181, 4183, 4187, 4190, 4196]} note="The adapter maps three T3 runtime modes to explicit SDK permission modes, then assembles options for cwd, model, effort, permissions, native resume/new-session identity, environment, allowed directories, and optional T3 MCP access." />
+
+<SourceExcerpt id="claude-query-invocation" focus={[4223, 4225, 4226, 4227, 4229, 4230, 4233]} note="The prepared prompt and queryOptions cross into createQuery here; a synchronous startup failure becomes a typed provider process error." />
+
+The adapter derives native SDK permission behavior from T3 runtime policy:
+`full-access` maps to `bypassPermissions`, `auto-accept-edits` to `acceptEdits`, and
+`auto` to `auto`. `approval-required` has no mapping, so `permissionMode` is omitted
+and the SDK default applies. Instance-bound model selection controls effort, fast,
+and thinking options only where the selected model supports them.
+
+Resume is metadata, not a replayed T3 transcript. The adapter validates a persisted
+cursor containing the T3 thread id, a provider-native `resume` identifier (while
+accepting legacy `sessionId`), optional `resumeSessionAt`, and a turn count, then
+supplies those hints to a fresh query. T3 durable history remains an independent
+orchestration record.
+
+<Figure number="17.1" title="A Claude SDK stream is normalized, then durably re-entered" hint="query state and deferred responses are live memory" caption="T3 configures a Claude SDK query with model, mode, cwd, and optional resume metadata. Assistant, tool, TodoWrite/task, request, result, and error messages flow into the adapter. It emits canonical runtime events that ingestion turns into internal commands; only those command transactions become durable T3 events and projections." textEquivalent="A T3 thread starts or resumes a Claude SDK query. The adapter keeps a live context containing pending approval and input deferreds, task and plan state, turn metadata, model selection, resume ids, and last-known token usage. SDK messages map to canonical content, item, plan, task, request, completion, error, and token-usage events. Runtime ingestion dispatches internal commands. The event store and projections are durable; query objects, deferred responses, stream position, and adapter maps are volatile." sources={["claude-adapter-query-config", "claude-query-invocation", "claude-adapter-resume", "claude-adapter-runtime-events", "provider-runtime-ingestion"]}>
+  <Mermaid id="claude-sdk-normalization" label="Claude Agent SDK query stream normalization" chart={`flowchart LR
+    S[ProviderService start / resume] --> Q[Claude SDK query]
+    Q -->|assistant · tool · TodoWrite · result| A[Claude adapter]
+    Q -->|approval / input request| D[pending Deferred]
+    D -->|client response| Q
+    A -->|canonical ProviderRuntimeEvent| H{{hot runtime stream}}
+    H --> I[runtime ingestion]
+    I -->|internal command| T[(durable event + projections)]
+    A -. live resume / usage / tasks .-> M[volatile session context]`} />
+</Figure>
+
+<EvidenceClaim kind="verified" title="Claude query settings preserve provider-specific responsibility" refs={["claude-adapter-query-config", "claude-query-invocation", "claude-adapter-permission-tests", "claude-adapter-resume"]}>
+  Runtime policy selects SDK permission behavior; it does not create a universal
+  sandbox. Resume gives a later query provider-specific identifiers and context
+  hints, while durable T3 history is separately owned by orchestration.
+</EvidenceClaim>
+
+## A second send while work is live is a steer
+
+When a turn is active, a later `sendTurn` continues that live provider turn instead
+of creating a second canonical one. This is an adapter semantic grounded in Claude
+query behavior—not a claim that all providers accept concurrent prompts identically.
+Interruption uses native terminal-result classification, distinguishing explicit
+aborts and cancellation from real provider failures.
+
+<Callout title="Steering is not a durable queue primitive" tone="warning">
+  A running query and active-turn bookkeeping live in the adapter process. After a
+  crash, durable turn-start intent and any cursor remain, but in-flight SDK messages
+  and uncommitted observations do not become a transaction automatically.
+</Callout>
+
+## Tools, requests, plans, and tasks are separate translations
+
+<SourceExcerpt id="claude-adapter-interaction-handlers" focus={[4497, 4504, 4509, 4514, 4522, 4527]} note="Approval and structured-input responses resolve only known pending deferreds in a live Claude session context." />
+
+Tool activity maps to canonical item lifecycle. For approval or structured input,
+the adapter stores a deferred, emits a canonical request observation, and resumes the
+native interaction after the client response. Unknown ids are typed request errors.
+The pending maps are not durable inboxes; restart empties them until the provider
+flow creates another request.
+
+TodoWrite and agent/task-shaped messages are interpreted into product plan steps,
+task activity, completion, and selected per-task usage. This feeds T3 work views,
+but does not make a T3 plan control Claude’s scheduler or establish the same task
+vocabulary for every adapter.
+
+<ClaudeSdkStreamLab id="native-product-durability" />
+
+## Skills and commands are discovered native configuration
+
+The Claude driver probes account/capability information and scans native slash-command
+and skill paths with normalized path/preference rules. That enriches a configured
+provider instance. It is distinct from adapter message normalization: discovery does
+not prove a skill loaded for a particular query, and query activity is not proof that
+every installed skill was discoverable.
+
+<EvidenceClaim kind="inference" title="Skill precedence and task normalization solve different problems" refs={["claude-driver-capability-probe", "claude-skills-scanner", "claude-adapter-task-normalization"]}>
+  The driver discovers native metadata for configuration/UI. The adapter interprets
+  SDK activity after a query starts. The inspected paths do not show a durable,
+  universal T3 skill-execution ledger joining both stages.
+</EvidenceClaim>
+
+## Live context telemetry is not historical accounting
+
+Claude result and selected message usage can update a per-thread token/context
+snapshot, including input/cache/output/reasoning/tool/duration fields where present.
+This supports the live context meter. Chapter 20’s Usage page independently scans
+provider-owned transcripts, de-duplicates them, and prices where possible; it does
+not use this runtime event as its source of truth.
+
+At the pinned revision only Codex and Claude emit this live telemetry. A generic
+runtime schema can represent future data, but that is not evidence Cursor, Grok, or
+OpenCode emit it now.
+
+`stopSession` closes a Claude context and emits an exit observation; session listing
+and finalization operate on in-memory contexts. Tests cover permission modes,
+model/effort options, assistant/tool mapping, steering, TodoWrite plans, resume,
+approval/input, usage, and cleanup. They do not prove crash recovery of a pending
+SDK deferred or replay of an event published but not yet ingested.
+
+<SourceList ids={["claude-adapter-query-config", "claude-query-invocation", "claude-adapter-resume", "claude-adapter-runtime-events", "claude-adapter-interaction-handlers", "claude-adapter-task-normalization", "claude-adapter-permission-tests", "claude-adapter-tests", "claude-driver-capability-probe", "claude-skills-scanner", "provider-runtime-event-union", "provider-runtime-ingestion"]} />
