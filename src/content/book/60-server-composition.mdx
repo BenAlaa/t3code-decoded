@@ -1,0 +1,185 @@
+---
+slug: server-composition
+order: 60
+number: "6"
+kind: chapter
+part: Part II · Boot and connect
+partOrder: 2
+title: Server composition, activation, and readiness
+shortTitle: Server activation
+summary: Effect layers acquire the server graph, while an explicit activation barrier separates listening, parked roots, command admission, and lifecycle readiness.
+status: source-checked
+gates: [sources, interaction]
+objectives:
+  - Read the server as a scoped layer graph rather than one startup function.
+  - Distinguish an open listener from an activated, command-ready runtime.
+  - Trace startup failure and shutdown ownership without inventing transactional guarantees.
+keywords: [Effect layers, activation, readiness, server startup, SQLite, shutdown]
+sourceAreas: [apps/server/src/server.ts, apps/server/src/serverRuntimeStartup.ts, apps/server/src/serverActivation.ts, apps/server/src/persistence]
+visuals: [layer stack, activation-barrier flow, startup failure explorer]
+updatedAt: 2026-08-24
+---
+
+import Callout from "../../components/Callout.astro";
+import EvidenceClaim from "../../components/EvidenceClaim.astro";
+import Figure from "../../components/Figure.astro";
+import FlowLab from "../../components/FlowLab.astro";
+import Mermaid from "../../components/Mermaid.astro";
+import ScenarioLab from "../../components/ScenarioLab.astro";
+import SourceExcerpt from "../../components/SourceExcerpt.astro";
+import SourceList from "../../components/SourceList.astro";
+
+Chapter 5 ended with one resolved `ServerConfig`. It does not get passed to a
+constructor that imperatively starts everything. `runServer` launches an Effect
+layer whose acquisition builds a graph of platform services, application services,
+routes, long-running roots, and release finalizers. A second mechanism—the
+activation barrier—controls when already-acquired roots may begin external work.
+
+## The server is a scoped graph
+
+<Figure number="6.1" title="Layer acquisition and runtime ownership" hint="solid arrows provide dependencies; dotted arrows open parked roots" caption="Platform services support durable and runtime services; those services support HTTP, WebSocket RPC, MCP, and static routes. Activation crosses the graph separately, after every required root has reported that it is parked." textEquivalent="ServerConfig selects Bun or Node platform services. Platform and SQLite services support persistence, authentication, settings, orchestration, providers, VCS, checkpoints, terminals, preview, relay, and telemetry. Those application services support HTTP, WebSocket RPC, MCP, and static routes. The HTTP server owns the assembled graph for one Effect scope. An activation deferred is a separate gate shared by long-running roots." sources={["server-platform-layers", "server-service-composition", "server-route-composition", "server-activation-barrier"]}>
+  <Mermaid id="server-layer-graph" label="T3 server layer graph" chart={`flowchart TB
+    C[ServerConfig] --> P[Bun or Node platform]
+    P --> DB[SQLite + migrations]
+    P --> OS[filesystem · process · PTY · HTTP]
+    DB --> D[persistence · auth · settings]
+    D --> K[orchestration · providers · VCS · checkpoints]
+    OS --> K
+    K --> E[terminal · preview · workspace · cloud · telemetry]
+    E --> R[HTTP API · assets · WebSocket RPC · MCP]
+    R --> H[scoped HTTP server]
+    A{{activation deferred}} -.opens after preparation.-> K
+    A -.opens after preparation.-> E`} />
+</Figure>
+
+The graph is broad because the environment server is the execution authority from
+Chapter 1. Composition still preserves boundaries: each service exposes a typed
+interface, layers declare requirements, and the launched scope owns acquisition and
+release. `makeServerLayer` is the composition root; `Layer.launch` keeps it alive.
+
+### SQLite is acquired before command traffic
+
+The SQLite layer configures a busy timeout, enables foreign keys, selects WAL, and
+runs a statically ordered migration manifest during acquisition. At this revision
+the manifest contains 41 migrations. That number is a fact about the pinned source,
+not a compatibility promise for later revisions.
+
+<EvidenceClaim kind="verified" title="Migration order is code, not directory discovery" refs={["sqlite-acquisition", "sqlite-migration-manifest"]}>
+  The migration map imports and numbers every migration explicitly. Startup does not
+  scan a folder and hope filesystem ordering matches schema history.
+</EvidenceClaim>
+
+## Four signals that sound similar but are not
+
+<div class="table-scroll" tabindex="0" role="region" aria-label="Server startup synchronization signals">
+<table class="comparison">
+  <caption class="sr-only">Distinct synchronization signals in server startup</caption>
+  <thead><tr><th>Signal</th><th>What it proves</th><th>What it does not prove</th></tr></thead>
+  <tbody>
+    <tr><td>HTTP listening</td><td>the platform server has bound an address</td><td>commands are accepted or auxiliary roots are active</td></tr>
+    <tr><td>parked / routes ready</td><td>each participating root reached its pre-activation wait point</td><td>the activation gate has opened</td></tr>
+    <tr><td>command ready</td><td>the global route barrier and startup command queue may release waiting effects</td><td>every later lifecycle subscriber has observed <code>ready</code></td></tr>
+    <tr><td><code>ready</code> event</td><td>activation and command admission have occurred and startup publishes its final lifecycle payload</td><td>all future optional integrations will remain healthy</td></tr>
+  </tbody>
+</table>
+</div>
+
+The listener can therefore exist while every route effect waits behind global
+middleware; a separate FIFO startup queue also holds WebSocket-dispatched commands.
+That is intentional: routes need a real bound address before presentation and
+remote-access setup can be prepared, but external work must not race ahead of a
+candidate runtime that has not crossed its activation boundary.
+
+<SourceExcerpt id="startup-readiness-order" focus={[514, 516, 518, 519, 520, 521, 524, 527, 528, 529, 532, 535, 536, 538, 539, 540, 541, 542, 543, 544, 545]} note="The prepared boundary occurs only after the listener and auxiliary roots are parked. The launcher trial, base welcome, activation, command gate, and ready event then happen in that order." />
+
+<FlowLab id="server-activation-sequence" title="Open the server in the order the code does" prompt="Play the one-shot sequence or select any boundary. Notice that listening arrives before activation, while command readiness arrives after it." steps={[
+  { label: "Acquire", title: "Layers acquire dependencies and SQLite", detail: "The selected platform, database pragmas and migrations, application services, routes, and scoped resources are constructed. Acquisition failure prevents a usable runtime.", actor: "Effect layers", sourceIds: ["server-platform-layers", "server-service-composition", "sqlite-acquisition", "sqlite-migration-manifest"], tone: "durable" },
+  { label: "Park roots", title: "Long-running roots start but await activation", detail: "The orchestration reactors and provider-session reaper are started inside a dedicated scope; activation-aware children first signal that they are parked.", actor: "startup + forkParked", sourceIds: ["orchestration-reactor-start", "activation-fork-parked", "startup-authoritative-sequence"], tone: "runtime" },
+  { label: "Reconcile", title: "Orphaned provider state is repaired best-effort", detail: "Startup reconciles persisted sessions that cannot still be live after process loss. This precedes welcome publication and command admission.", actor: "serverRuntimeStartup", sourceIds: ["startup-authoritative-sequence"], tone: "durable" },
+  { label: "Listen", title: "HTTP and every auxiliary participant report prepared", detail: "The HTTP layer marks its bound listener; runtime state, routes, cloud link, and optional Tailscale roots reach their parked points. Route effects still wait behind the readiness barrier.", actor: "makeServerLayer", sourceIds: ["server-activation-barrier", "server-route-readiness-barrier", "startup-authoritative-sequence"], tone: "transport" },
+  { label: "Prepare trial", title: "The managed launcher evaluates the candidate", detail: "Only at the prepared boundary does startup ask the service launcher to prepare a managed-update trial and capture its outcome.", actor: "ServiceLauncherClient", sourceIds: ["startup-authoritative-sequence"], tone: "runtime" },
+  { label: "Activate", title: "Welcome publishes and the shared gate opens", detail: "Startup publishes the base welcome payload, then resolves the activation deferred. Parked roots may now perform their work and activation-owned side effects may begin.", actor: "activation deferred", sourceIds: ["server-activation-barrier", "startup-authoritative-sequence"], tone: "side-effect" },
+  { label: "Admit", title: "Commands are released, then ready is published", detail: "The command gate is signaled before the ready lifecycle event. Startup failures instead fail the command gate and invoke the layer's abort path.", actor: "command gate", sourceIds: ["startup-command-gate", "startup-authoritative-sequence"], tone: "client" }
+]} />
+
+After `activate`, the parked fibers are released concurrently. Heartbeat,
+browser/headless presentation, optional auto-bootstrap welcome, runtime-state
+persistence, and remote-access work may interleave with command admission and the
+`ready` publication. The flow orders the gate operations; it does not serialize all
+post-activation side effects.
+
+## Why park before activating?
+
+`forkParked` is small but architectural. Its child fiber first fulfills a “parked”
+deferred and then waits on `ServerActivation`. The parent can prove all participating
+roots exist and are waiting before it releases a single shared gate. That prevents
+one early root from acting against a partially prepared graph.
+
+This is synchronization, not a global transaction. Once activation opens, roots can
+perform filesystem, provider, Tailscale, cloud, browser, or other side effects with
+their own failure handling. Effect scopes provide release ownership; they do not
+magically roll back every effect that crossed an external boundary.
+
+<ScenarioLab id="startup-failure-boundaries" title="Inject a startup or shutdown condition" prompt="Choose a condition to see what the barrier guarantees and what remains best-effort." scenarios={[
+  {
+    label: "Settings warning",
+    title: "Startup deliberately degrades and continues",
+    summary: "Keybinding and settings start errors are caught, logged as warnings, and do not fail the activation sequence.",
+    facts: ["The runtime may become ready with a reported configuration issue.", "This exception is local to those startup phases, not a blanket ignore policy.", "Later settings operations still use their typed service errors."],
+    sourceIds: ["startup-authoritative-sequence"],
+    tone: "warning"
+  },
+  {
+    label: "Before prepared",
+    title: "A required failure prevents activation",
+    summary: "If a non-degraded startup phase fails before the prepared boundary, the startup fiber records a ServerRuntimeStartupError.",
+    facts: ["Command readiness is failed, so waiting command effects fail instead of hanging indefinitely.", "The abort hook fails the activation deferred.", "The surrounding server scope owns acquired-resource cleanup."],
+    sourceIds: ["startup-command-gate", "startup-authoritative-sequence", "server-activation-barrier"],
+    tone: "failure"
+  },
+  {
+    label: "After activation",
+    title: "Individual roots own later resilience",
+    summary: "Activation establishes a common start boundary, not permanent health of every auxiliary integration.",
+    facts: ["Tailscale and cloud-link paths catch and log selected failures.", "Commands are already admitted after the shared gate opens.", "Service-specific retry and cleanup policies determine later behavior."],
+    sourceIds: ["server-activation-barrier", "startup-authoritative-sequence"],
+    tone: "warning"
+  },
+  {
+    label: "Scope closes",
+    title: "Release finalizers run under Effect ownership",
+    summary: "Closing the launched scope closes the reactor scope and releases acquired resources such as persisted runtime state and configured Tailscale Serve.",
+    facts: ["Registered finalizers run according to their owning scopes.", "The composition root does not assemble one production-wide atomic drain across every external side effect.", "External systems may require their own compensating cleanup."],
+    sourceIds: ["server-activation-barrier", "startup-authoritative-sequence"],
+    tone: "safe"
+  }
+]} />
+
+<Callout title="The internal overview is stale at this boundary" tone="warning">
+  `docs/internals/overview.md` places command readiness before listener readiness and
+  describes a different final order. At the pinned revision, executable code places
+  listener/auxiliary preparation first, then launcher trial, welcome, activation,
+  command readiness, and `ready`. This book follows code and keeps the contradictory
+  documentation as evidence of drift.
+</Callout>
+
+<EvidenceClaim kind="verified" title="Readiness is a protocol inside the process" refs={["startup-command-gate", "startup-authoritative-sequence", "server-activation-barrier", "stale-startup-overview"]}>
+  No single Boolean explains startup. Several deferreds and a lifecycle event encode
+  which consumers may proceed at each boundary. Treating “socket accepted” as “server
+  ready” erases the command gate and makes the stale overview look plausible.
+</EvidenceClaim>
+
+<SourceList ids={[
+  "server-platform-layers",
+  "server-service-composition",
+  "server-route-composition",
+  "server-route-readiness-barrier",
+  "server-activation-barrier",
+  "startup-command-gate",
+  "startup-authoritative-sequence",
+  "activation-fork-parked",
+  "sqlite-acquisition",
+  "sqlite-migration-manifest",
+  "orchestration-reactor-start",
+  "stale-startup-overview"
+]} />
