@@ -1,0 +1,358 @@
+---
+slug: mobile-client-continuity
+order: 330
+number: "33"
+kind: chapter
+part: "Part VI · Client architectures: shared semantics, platform edges"
+partOrder: 6
+title: "Mobile: persistence, outbox, sharing, and native systems"
+shortTitle: Mobile continuity
+summary: "The Expo client reuses T3 Code's connection and projection semantics but owns a deliberately mobile durability layer: cached snapshots in SQLite, credentials in secure storage, drafts and commands in atomic files, a transactional share inbox, native rendering bridges, and an OTA restart gate that yields to unsaved work."
+status: source-checked
+gates: [sources, interaction]
+objectives:
+  - Locate the React Native shell, shared connection runtime, platform services, and native UI boundaries.
+  - Separate cached server projections, credentials, composer drafts, queued commands, incoming shares, and authoritative server state.
+  - Trace an offline command from optimistic enqueue through durable confirmation, shell convergence, retry, and cleanup.
+  - Explain why OTA application waits for persistence and a genuinely safe background transition.
+keywords: [mobile, Expo, React Native, connection runtime, SQLite, SecureStore, drafts, outbox, sharing, native terminal, native diff, Live Activity, OTA]
+sourceAreas: [apps/mobile/app.config.ts, apps/mobile/src/App.tsx, apps/mobile/src/Stack.tsx, apps/mobile/src/connection, apps/mobile/src/persistence, apps/mobile/src/state, apps/mobile/src/features/sharing, apps/mobile/src/features/updates, apps/mobile/modules]
+visuals: [mobile ownership graph, offline and OTA continuity simulator, native capability matrix]
+updatedAt: 2026-08-24
+---
+
+import Callout from "../../components/Callout.astro";
+import EvidenceClaim from "../../components/EvidenceClaim.astro";
+import Figure from "../../components/Figure.astro";
+import Mermaid from "../../components/Mermaid.astro";
+import MobileContinuityLab from "../../components/MobileContinuityLab.astro";
+import SourceExcerpt from "../../components/SourceExcerpt.astro";
+import SourceList from "../../components/SourceList.astro";
+
+The phone is a **remote-native client**, not a pocket-sized T3 server. It owns
+navigation, presentation, connection credentials, caches, unsent intent, and
+device integrations. The selected environment still owns projects, threads,
+workspaces, provider processes, terminals, Git, and authoritative orchestration
+state.
+
+That distinction makes the mobile implementation easier to read. Most of its
+special machinery answers one of two questions:
+
+1. How can a device remain useful while its process, network, and foreground state
+   are unstable?
+2. Which work belongs in a native surface without moving server authority onto the
+   phone?
+
+<Callout title="Offline-capable is not offline-authoritative" tone="warning">
+  A cached thread can render while disconnected, a draft can survive a restart,
+  and a queued command can wait for delivery. None of those records proves that an
+  environment accepted a turn. The server's synchronized shell/detail projections
+  and command result remain the authority after reconnection.
+</Callout>
+
+## 1. The application shell wraps one shared connection runtime
+
+`App.tsx` mounts one Effect Atom registry, cloud-auth and appearance providers,
+gesture/keyboard/safe-area hosts, the incoming-share provider, and a static native
+navigation tree. Deep links wake navigation, except for Expo's development-client
+and share-extension lifecycle URLs: the latter is deliberately ignored because the
+**durable share inbox**, not a transient URL, owns presentation.
+
+<SourceExcerpt id="mobile-app-root-composition" focus={[63, 64, 65, 80, 81, 82, 95, 96, 97, 103]} note="The root composes one Atom registry and native application hosts. Incoming shares wrap navigation because their durable inbox participates in route presentation." />
+
+The connection runtime is not a mobile rewrite of Chapter 29. It merges the shared
+`Connection.layer` and shared shell/thread snapshot loaders with mobile platform
+services:
+
+- Expo network state supplies current connectivity and change events.
+- foreground transitions emit a lightweight probe or a stronger reconnect wakeup,
+  depending on how long the app was backgrounded;
+- the mobile catalog supplies targets, profiles, credentials, and DPoP tokens;
+- SQLite implements the shared environment-cache interface;
+- a mobile background-activity observer/reporter narrows connection work while the
+  app is not active;
+- environment removal also clears that environment's drafts and outbox records.
+
+<SourceExcerpt id="mobile-connection-runtime-layer" focus={[1, 2, 3, 11, 18, 22, 28, 34, 38, 42]} note="The mobile Atom runtime combines the shared connection/snapshot layers with device-specific connectivity, wakeup, persistence, and background-activity services." />
+
+The platform supplies no SSH gateway. Its `SshEnvironmentGateway` operations fail
+with an explicit “desktop only” blocked error. Mobile can connect through supported
+direct/bearer or relay targets, but it does not provision a remote CLI over SSH and
+does not spawn a local provider. Chapter 34 returns to the access transports;
+Chapter 35 follows relay authentication and tunneling.
+
+<Figure number="33.1" title="The phone persists client continuity around a remote authority" hint="solid arrows cross a device-owned boundary; the red node remains remote" caption="The React Native shell and shared client runtime project one selected environment. SQLite caches server snapshots and preferences; secure storage retains the connection catalog and credentials; atomic document files retain drafts, queued commands, and incoming shares. Native terminal/diff/widget surfaces consume client projections or server streams. Only the remote environment accepts commands and owns workspaces, providers, terminals, Git, and durable thread truth." textEquivalent="On the phone, the React Native shell uses the shared client runtime. The runtime connects to a remote environment. Device-local SQLite stores caches and preferences, secure storage stores connection material, and atomic document files store drafts, outbox messages, and incoming shares. Native terminal, diff, keyboard, and Live Activity surfaces attach to the phone UI. The remote environment remains authoritative for projects, threads, providers, terminal processes, files, and Git." sources={["mobile-app-root-composition", "mobile-stack-continuity-workers", "mobile-connection-runtime-layer", "mobile-platform-connection-services", "mobile-persistence-schema", "mobile-secure-connection-catalog", "context-mobile-drafts", "context-mobile-outbox-storage", "mobile-share-inbox", "workbench-terminal-mobile"]}>
+  <Mermaid id="mobile-client-ownership" label="Mobile client ownership and data paths" chart={`flowchart LR
+    subgraph Phone[Expo / React Native client]
+      UI[Native navigation + feed]
+      CR[Shared client runtime]
+      DB[(SQLite cache + preferences)]
+      SS[(Secure connection catalog)]
+      FS[(Atomic files: drafts / outbox / shares)]
+      NS[Terminal / diff / keyboard / Live Activity]
+      UI --> CR
+      UI --> NS
+      CR <--> DB
+      CR <--> SS
+      UI <--> FS
+    end
+    CR <-->|authenticated HTTP + WebSocket| ENV[Environment server]
+    ENV --> AUTH[Durable thread projections]
+    ENV --> OWN[Workspace / provider / PTY / Git]
+    FS -. queued intent after reconnect .-> CR`} />
+</Figure>
+
+## 2. “Mobile persistence” is four stores, not one database
+
+The persistence layer merges an Expo SQLite database, Expo SecureStore, preferences,
+connection/cache adapters, and a few file-backed state machines. Their records have
+different confidentiality, failure, and authority properties.
+
+| Store | Representative records | Write semantics | What it is not |
+|---|---|---|---|
+| SQLite `t3code-client.db` | shell/thread/server-config/VCS caches; client preferences | WAL database; keyed upserts; corrupt cache entries can be discarded | the server event store |
+| SecureStore | connection targets/profiles/credentials, remote DPoP tokens, device identity/registration | serialized catalog update behind a semaphore | a workspace or transcript store |
+| document files | composer drafts, one JSON file per queued command, one JSON file per incoming share | serialized and/or atomic file writes, feature-specific recovery | one general transaction spanning every feature |
+| kept Effect Atoms / React state | hydrated views, optimistic queue row, route and disclosure state | process-local, sometimes seeded from a durable store | proof of server acceptance |
+
+SQLite creates `client_cache` with the compound key
+`(environment_id, kind, cache_key)` and a singleton `client_preferences` row. Cache
+payloads remain schema-versioned envelopes. An unavailable or corrupt cache can
+degrade to an empty client view; it must not become fabricated server truth.
+
+<SourceExcerpt id="mobile-persistence-schema" focus={[244, 248, 250, 257, 263, 267, 270, 271, 273]} note="The local database stores client cache and preference documents. It migrates older file caches, then version-stamps the database; these are client resilience records rather than orchestration tables." />
+
+The secure connection catalog has its own schema and lock. It migrates a legacy
+connection list, keeps a memory copy after decoding, and persists each transformed
+catalog before swapping that copy. The shared runtime sees narrow interfaces for
+target registration, profiles, credentials, and remote access tokens instead of an
+Expo-specific storage API.
+
+<EvidenceClaim kind="verified" title="Cache cleanup and intent cleanup are deliberately separate" refs={["mobile-local-state-cleanup", "mobile-environment-cache-store", "mobile-platform-connection-services"]}>
+  Removing an environment clears the shared environment cache through its cache
+  store and separately asks the mobile platform cleanup service to clear composer
+  drafts and queued messages. This is not one cross-store transaction; failures in
+  the intent cleanup path are logged so connection removal is not silently treated
+  as a successful atomic purge of every device record.
+</EvidenceClaim>
+
+## 3. A draft and an outbox message represent different commitments
+
+A composer draft is editable device state: text, attachments, imported-share ids,
+provider/model/mode choices, and an optional workspace selection. Draft changes
+update a kept Atom and schedule a 200 ms serialized atomic-file write. Ordinary
+background persistence is best-effort so an I/O failure does not make the composer
+unusable. The explicit flush path is stricter: it lands every pending debounce and
+propagates a write failure to an OTA coordinator deciding whether teardown is safe.
+
+<SourceExcerpt id="mobile-draft-update-flush" focus={[212, 217, 220, 224, 225, 228, 229]} note="The explicit draft flush drains any debounce and serialized write that could otherwise be lost during an app-update restart." />
+
+An outbox message is a stronger delivery intent. Its versioned record carries stable
+environment, thread, message, and command ids plus the payload and selected runtime
+settings. A new-thread item additionally snapshots project presentation/workspace
+inputs so it stays editable and deliverable even if the live project shell is not
+currently loaded.
+
+Enqueue has a carefully split acknowledgment:
+
+1. publish the row synchronously into the kept Atom for immediate UI feedback;
+2. serialize an atomic file write for crash recovery;
+3. if that write fails, remove **that object reference**, not every value with the
+   same message id, because a later retry may already have replaced it;
+4. before delivery, serialize a `confirmQueued` read behind pending mutations so an
+   optimistically visible record whose file write failed can never reach the server.
+
+<SourceExcerpt id="mobile-outbox-optimistic-durability" focus={[91, 95, 100, 102, 104, 107, 119, 123, 124]} note="Optimistic visibility precedes the file write, while delivery confirmation is serialized after it. Reference-based rollback protects a newer retry with the same id." />
+
+This is a client-side durability barrier, not a distributed transaction with the
+environment. Once RPC begins, the stable command/message/thread identities and the
+server's command receipts/invariants take over.
+
+## 4. The drain waits for synchronized evidence, then classifies failure
+
+The root stack mounts the outbox drain in a null-rendering leaf. That placement is a
+performance boundary: queue, shell, project, and connection updates do not need to
+rerender the whole navigation layout. The drain considers only the first queued
+message per thread and dispatches one message globally at a time.
+
+For a queued **creation**, transport connection is insufficient. It waits until the
+shell is `live`, because a previously accepted creation whose local cleanup failed
+could otherwise look absent and be issued again. A live shell that already contains
+the stable thread id selects `remove`; a live shell without it can select `send`.
+For an existing-thread message, a missing thread is removed only after a live shell
+establishes the absence; before then it waits.
+
+<SourceExcerpt id="mobile-outbox-delivery-policy" focus={[145, 146, 151, 158, 161, 164, 167, 169, 172, 219, 222, 224, 226]} note="Creation delivery uses synchronized thread existence as a replay guard. Retry classification is broader for settings sync and interruptions than for a terminal start-turn failure." />
+
+One subtle implementation fact is worth making explicit: the resolver accepts a
+`threadBusy` input, and the hook supplies the current session status, but the pinned
+decision function does not consult it. Do not describe this client outbox as an
+idle-thread scheduler. It may cross RPC while a thread appears busy; current server
+normalization and domain invariants still determine whether that command is legal.
+
+Before an existing-thread `startTurn`, the drain can send deterministic settings
+commands to reconcile model selection, runtime mode, and interaction mode with the
+queued snapshot. Any settings-sync failure retries. For the final turn command,
+interruptions, `ConnectionTransientError`, and recognized transport errors retry;
+other observed failures select discard. Retry delay grows from one second and caps
+at sixteen seconds. While retrying, the durable file remains.
+
+<EvidenceClaim kind="verified" title="The mobile outbox narrows an ambiguity; it does not promise exactly-once side effects" refs={["mobile-outbox-model", "mobile-outbox-manager", "context-mobile-outbox-storage", "mobile-offline-outbox", "command-receipt-handling"]}>
+  Stable ids, durable confirmation, serialized one-at-a-time dispatch, live-shell
+  existence checks, and server receipts make retries safer. There is still no
+  atomic commit spanning the phone's file and the remote environment's database.
+  The explicit creation-replay check exists because acceptance and local deletion
+  can be separated by a process or network failure.
+</EvidenceClaim>
+
+<MobileContinuityLab id="mobile-intent-and-update" />
+
+## 5. Incoming sharing uses a durable handoff before navigation
+
+The system share extension supplies transient native payloads. The app converts
+them into a draft with a SHA-256 content-derived handoff id, but it does **not** clear
+the native payload first. `IncomingShareInbox` serializes all mutations, loads and
+deduplicates persisted drafts, writes the newly built draft, cleans temporary
+files, and only then acknowledges the native handoff.
+
+If the app terminates after the durable write but before native acknowledgement,
+the next refresh sees the same id, cleans any replayed image payload, and clears the
+handoff without adding a second inbox row. Once a share is consumed and its file is
+removed, a later intentional share of identical content can be ingested again.
+
+<SourceExcerpt id="mobile-share-commit-boundary" focus={[46, 50, 75, 88, 91, 92, 100, 106, 116, 119, 121, 122]} note="The persisted inbox write is the handoff boundary. Native acknowledgement happens afterward so a crash leaves a recoverable copy on at least one side." />
+
+Presentation adds another durable state: `reserve(shareId, destination)` binds a
+share to one environment/project draft. Re-reserving for the same destination is
+idempotent; a different destination is rejected. Conditional release refuses to
+erase a reservation that changed underneath the caller. The root navigation layout
+observes the oldest pending presentation candidate and opens the new-task sheet,
+but that route is only a view over the inbox record.
+
+## 6. Native systems are presentation and OS-integration edges
+
+Mobile is not “the web UI in a WebView.” It uses a native-stack route tree and an
+adaptive workspace layout. The thread feed is a keyboard-aware virtualized
+LegendList with fixed-size hints for compact rows, per-type estimation for variable
+messages, visible-content preservation, and end-follow controls. Those choices are
+implementation strategies, not a benchmark claim.
+
+| Edge | JavaScript responsibility | Native responsibility | Authority retained elsewhere |
+|---|---|---|---|
+| Terminal | attach to server terminal stream; replay buffer; translate input/resize | Ghostty-backed view renders and encodes device input | server owns PTY/process/history boundary |
+| Review diff | parse/categorize change data; flatten rows/comments; cache mapping | Swift/Kotlin canvas renders large code surfaces | server/Git services own diff inputs and mutation |
+| Selectable Markdown/composer | derive structured spans/chips and callbacks | native text/editor views handle selection and keyboard behavior | thread message remains server state; draft remains client state |
+| Hardware keyboard | most-recently-mounted scoped handler dispatch | iOS native module exposes command events; platform shortcuts wake routes | command target still resolves through current screen/runtime |
+| Agent Activity | derive a compact activity projection and registration intent | iOS widget/Live Activity renders lock-screen/Dynamic Island families | relay/environment activity remains the remote source |
+
+The native terminal wrapper checks whether its Expo view config exists, caches a
+successful resolution, permanently remembers a failed resolution for the process,
+and exposes a compiled hardware-key revision. That revision is a version-skew
+diagnostic: JavaScript can detect an older binary instead of assuming every OTA
+bundle has the expected native code.
+
+<SourceExcerpt id="mobile-native-surface-probe" focus={[48, 53, 57, 61, 66, 76, 79, 84, 89, 92]} note="The native terminal view is optional at runtime, and the wrapper exposes a native revision for stale-binary diagnosis." />
+
+The review adapter similarly converts parsed files, hunk/line/comment rows, themes,
+and word-diff ranges into a native-friendly flattened model; a WeakMap reuses that
+expensive mapping until comment identity changes. Native rendering avoids moving
+Git authority to the device.
+
+Agent-awareness settings are explicitly presented as **iOS only** at this revision.
+Release iOS builds configure an Agent Activity widget/Live Activity and push
+capability; personal-team builds remove capabilities they cannot sign. Android has
+an Expo notification resource configuration, so the precise claim is about the
+inspected product capability gate and Live Activity path—not that no Android
+notification API could exist in the binary. Chapter 36 traces notification and
+multi-environment reconciliation in full.
+
+## 7. OTA updates coordinate binary compatibility and volatile work
+
+Expo Updates uses a fingerprint runtime-version policy rather than the marketing
+app version. Native dependencies, config plugins, and patches therefore participate
+in compatibility: a JavaScript bundle should not land on a binary missing the
+native surface it expects.
+
+After download, normal application is deferred. The next background transition
+tries to flush composer drafts and outbox writes, then rechecks that the app is
+still backgrounded and that no app-initiated foreground handoff is active. Android
+can report background while an image picker, auth tab, or share surface covers the
+activity; a small reference-counted handoff marker prevents the update coordinator
+from tearing down that live flow.
+
+<SourceExcerpt id="mobile-update-restart-guard" focus={[417, 422, 424, 425, 426, 432, 435, 438, 463, 466, 476, 477, 480]} note="Deferred update application flushes both state-bearing stores and rechecks lifecycle safety. A failed prerequisite keeps the current runtime alive and rearms a future background." />
+
+If a flush fails or the lifecycle check is unsafe, the install stays pending and is
+rearmed for a **future** background rather than polling inside the same background
+session. If the app remains foregrounded for thirty minutes with a ready update, it
+asks whether to install now. An explicit user-requested install may proceed after a
+failed flush once the failure is reported; automatic application does not. A remote
+rollback directive also takes the immediate path, though an automatic rollback
+whose flush fails is retained for deferred retry.
+
+<EvidenceClaim kind="verified" title="Update eagerness yields to unsaved client intent" refs={["mobile-app-distribution", "mobile-update-flow", "mobile-update-restart-guard", "mobile-foreground-handoff", "mobile-draft-update-flush", "context-mobile-outbox-storage"]}>
+  The compatibility fingerprint protects the native/JavaScript boundary. The
+  flush and lifecycle guards protect drafts, queued commands, and active OS
+  handoffs. Neither mechanism upgrades a client cache into server authority; after
+  reload, Chapter 29's snapshot/cursor convergence still reconciles with each
+  environment.
+</EvidenceClaim>
+
+## 8. The design lesson is selective durability
+
+T3 Code does not place every mobile value in one “offline database.” It gives each
+kind of state the smallest recovery contract it needs:
+
+- server projections are schema-versioned, replaceable cache;
+- credentials and connection profiles use secure device storage;
+- drafts favor responsive editing plus best-effort persistence, with a strict flush
+  only at a teardown boundary;
+- queued commands add stable ids, atomic files, serialized confirmation, replay
+  guards, and retry classification;
+- incoming shares make the file write the native-to-app transaction boundary and
+  add destination reservation;
+- OTA restart waits for those state-bearing stores instead of assuming
+  `background` means “safe now.”
+
+For a meta-harness, the transferable pattern is not “add an outbox everywhere.” It
+is: identify which intent must survive client death, bind it to stable remote
+identities, make replay ambiguity observable through synchronized server state,
+and keep caches visibly subordinate to authority.
+
+<SourceList ids={[
+  "mobile-app-root-composition",
+  "mobile-stack-continuity-workers",
+  "mobile-connection-runtime-layer",
+  "mobile-platform-connection-services",
+  "mobile-environment-cache-store",
+  "mobile-persistence-layer",
+  "mobile-persistence-schema",
+  "mobile-secure-connection-catalog",
+  "mobile-storage-domain",
+  "mobile-draft-update-flush",
+  "context-mobile-drafts",
+  "mobile-outbox-model",
+  "mobile-outbox-manager",
+  "mobile-outbox-optimistic-durability",
+  "mobile-outbox-delivery-policy",
+  "context-mobile-outbox-storage",
+  "mobile-offline-outbox",
+  "mobile-share-config",
+  "mobile-share-provider",
+  "mobile-share-inbox",
+  "mobile-share-commit-boundary",
+  "mobile-share-storage",
+  "mobile-thread-feed",
+  "workbench-terminal-mobile",
+  "mobile-native-surface-probe",
+  "mobile-native-review-adapter",
+  "mobile-hardware-keyboard",
+  "mobile-agent-activity-widget",
+  "mobile-notification-capability",
+  "mobile-app-distribution",
+  "mobile-update-flow",
+  "mobile-update-restart-guard",
+  "mobile-foreground-handoff",
+  "mobile-local-state-cleanup",
+  "command-receipt-handling"
+]} />

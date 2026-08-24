@@ -1,0 +1,261 @@
+---
+slug: desktop-electron
+order: 320
+number: "32"
+kind: chapter
+part: "Part VI · Client architectures: shared semantics, platform edges"
+partOrder: 6
+title: "Electron desktop: one renderer, explicit native authority"
+shortTitle: Electron desktop
+summary: "The desktop reuses the web renderer but not browser authority: Electron main assembles effects, supervises local backend children, exposes a narrow preload bridge, and separately brokers WSL, SSH, previews, menus, updates, telemetry, and shutdown."
+status: source-checked
+gates: [sources, interaction]
+objectives:
+  - Locate authority across Electron main, preload, renderer, local backend children, WSL, and SSH.
+  - Trace desktop boot through endpoint selection, protocol and IPC setup, backend readiness, and window creation.
+  - Distinguish the host-local primary and Windows-only WSL pool instances from an SSH remote-environment gateway.
+  - Read fd3, fd4, and fd5 as separate bootstrap, telemetry, and diagnostics-demand channels.
+keywords: [electron, desktop, preload, backend pool, WSL, SSH, telemetry, preview, shutdown]
+sourceAreas: [apps/desktop/src/main.ts, apps/desktop/src/app, apps/desktop/src/backend, apps/desktop/src/wsl, apps/desktop/src/ssh, apps/desktop/src/preload.ts, apps/desktop/src/preview]
+visuals: [desktop process topology, interactive boot readiness shutdown lab]
+updatedAt: 2026-08-24
+---
+
+import Callout from "../../components/Callout.astro";
+import DesktopProcessLab from "../../components/DesktopProcessLab.astro";
+import EvidenceClaim from "../../components/EvidenceClaim.astro";
+import Figure from "../../components/Figure.astro";
+import Mermaid from "../../components/Mermaid.astro";
+import SourceExcerpt from "../../components/SourceExcerpt.astro";
+import SourceList from "../../components/SourceList.astro";
+
+Electron desktop is not “the web app in a window.” The renderer shares much of the
+web client, but its extra powers remain on the other side of two boundaries:
+**Electron main** owns native APIs and child processes; **preload** exposes a
+curated set of IPC calls; **renderer** renders product state and asks through that
+bridge. The environment server still owns the workbench and orchestration services
+described in earlier chapters.
+
+<Callout title="Name the local processes precisely" tone="warning">
+  The ordinary primary is a pooled child on the host—macOS, Linux, or Windows. On
+  Windows, WSL-only mode can make the primary itself a Linux child; dual mode keeps
+  the Windows primary and registers a second WSL pool instance. An SSH target is
+  neither: it is a remote environment reached through the desktop SSH gateway and
+  its tunnel lifecycle. Do not draw SSH as another local pool member.
+</Callout>
+
+## 1. Authority is layered before it is interactive
+
+The main entry builds an Electron service layer, desktop foundation services,
+server-exposure and preview services, window services, the backend pool, the WSL
+orchestrator, local-environment authentication, then application services including
+lifecycle, menu, shell, SSH, and updates. Strict pre-ready configuration wraps the
+runtime so Electron options that must precede readiness are acquired before ordinary
+startup work.
+
+At startup, main installs the shell environment, resolves early Linux password-store
+options, selects Electron user data, loads settings, configures app identity and
+lifecycle/Clerk hooks, then awaits Electron readiness. Only after that does it
+configure identity again, application menu, updates, Linux URL handling, and the
+desktop bootstrap. This is a dependency order, not an instruction for a renderer to
+call native modules.
+
+The preload uses `contextBridge.exposeInMainWorld` to publish `desktopBridge` with
+specific operations: local bootstrap credentials, connection catalog, SSH discovery
+and connection, server exposure and WSL settings, file/dialog helpers, menu/window
+events, update actions/state, and preview actions. It does not publish raw
+`ipcRenderer`, Node process spawning, or Electron `BrowserWindow` control to page
+code. Main registers the IPC handlers before the backend is started.
+
+<SourceExcerpt id="desktop-preload-bridge" focus={[30, 42, 49, 54, 58, 66, 68, 70, 75, 77, 92, 95, 98, 99, 101, 102, 103]} note="Preload publishes named operations rather than raw Electron or Node authority. Local bootstrap, SSH, exposure, WSL, and file selection all cross explicit IPC methods." />
+
+<EvidenceClaim kind="verified" title="Shared UI code does not erase the authority boundary" refs={["web-runtime-selection", "desktop-app-assembly", "desktop-native-boundary"]}>
+  The web runtime selects an Electron-aware route when available, while the desktop
+  implementation keeps native service assembly and the curated preload surface out
+  of the renderer. A renderer request is therefore an IPC request, not authority to
+  invoke arbitrary Electron APIs.
+</EvidenceClaim>
+
+## 2. Bootstrap chooses an endpoint before it opens a window
+
+Desktop bootstrap obtains the pool's primary instance, selects a configured port or
+scans upward from the desktop default across `127.0.0.1`, `0.0.0.0`, and `::`, then
+configures server exposure from persisted settings. Local-only binds loopback;
+network-accessible mode may bind broadly and advertises a usable LAN endpoint. If no
+LAN address is available, it falls back to local-only rather than pretending the
+network endpoint exists.
+
+That resolved backend URL is also an input to desktop protocol registration: the
+renderer target is the development server in development and the backend HTTP origin
+in production, while the protocol knows the backend origin for its own routing
+rules. IPC handlers are installed next. In WSL-only mode the window service can show
+a connecting splash; otherwise the primary starts, and WSL reconciliation is forked
+so a slow `wsl.exe` cold start does not block the primary readiness path.
+
+<SourceExcerpt id="desktop-bootstrap-order" focus={[142, 144, 157, 175, 178, 181, 184, 200, 203, 208, 211, 217]} note="Desktop resolves exposure and protocol origins, registers IPC, starts the selected primary pool instance, then reconciles an optional WSL secondary without blocking primary readiness." />
+
+<Figure number="32.1" title="Desktop boot, steady state, and shutdown topology" hint="solid arrows are process or transport paths; primary branches are mutually exclusive" caption="Electron main configures exposure and the desktop protocol, registers IPC, and starts one primary pool instance. The ordinary primary is host-local; Windows WSL-only mode instead resolves the primary as WSL, while dual mode may register a separate WSL secondary. Host-local delivery uses fd3/fd4/fd5; WSL delivery uses stdin because wsl.exe drops extra descriptors. HTTP readiness gates each child. SSH remains a separately owned remote gateway." textEquivalent="Electron main owns the backend pool, window, menu, update, preview, telemetry, server-exposure, and SSH services. Preload is the renderer-to-main bridge. Primary configuration chooses either a host-local child on macOS, Linux, or Windows, or a WSL primary in Windows WSL-only mode. A host-local child receives bootstrap on fd3, host telemetry on fd4, and returns diagnostic-demand control on fd5. A WSL primary or optional dual-mode WSL secondary receives bootstrap on stdin because wsl.exe drops extra descriptors. Each local child has an HTTP readiness path. SSH flows from renderer through preload and Electron main to a remote T3 environment and is never a local pool child. Graceful shutdown stops every pool instance; SSH disconnection is separate." sources={["desktop-bootstrap-order", "desktop-primary-platform-selection", "desktop-backend-pool-lifecycle", "desktop-backend-process-wiring", "desktop-native-boundary", "desktop-wsl-reconciliation", "desktop-ssh-gateway"]}>
+  <Mermaid id="desktop-process-topology" label="Electron desktop process topology and lifecycle" chart={`flowchart TB
+    R[Web renderer] -->|curated preload IPC| M[Electron main]
+    M -->|protocol + window + menu + updates| R
+    M --> C{Primary configuration}
+    C -->|ordinary host-local| P[Host-local primary\nmacOS / Linux / Windows]
+    C -->|Windows WSL-only| WP[WSL primary]
+    M -. dual-mode registration .-> W[Optional WSL secondary]
+    M -->|fd3 bootstrap + fd4 telemetry| P
+    P -->|fd5 diagnostics demand| M
+    M -->|stdin bootstrap| WP
+    M -->|stdin bootstrap| W
+    P -->|HTTP readiness| M
+    WP -->|HTTP readiness| M
+    W -->|HTTP readiness| M
+    R -->|SSH IPC request| M
+    M -->|SSH gateway / tunnel| S[Remote SSH environment]
+    R -->|preview IPC| M
+    M -->|validates and owns| G[Guest Chromium WebContents]
+    M -->|SIGTERM + grace| P
+    M -->|SIGTERM + grace| WP
+    M -->|SIGTERM + grace| W
+    M -->|disconnect lifecycle| S`} />
+</Figure>
+
+## 3. The pool supervises local instances, not all environments
+
+`DesktopBackendPool` makes one primary instance for its lifetime. It can register
+additional instances with a child scope; unregistering a non-primary closes that
+scope and invokes the instance's stop finalizer. The pool refuses to unregister the
+primary. Each instance has independent configuration resolution, state, mutex,
+restart loop, readiness flag, and active child process. A ready primary calls the
+window service with its HTTP base URL; a ready WSL secondary does not replace that
+window callback.
+
+The WSL orchestrator reconciles persisted enablement/distro settings after primary
+start and after its IPC settings changes. In dual mode, it allocates a distinct port,
+registers `wsl:default` or `wsl:<distro>`, and starts that child. It deliberately
+does nothing parallel in WSL-only mode because the primary itself is then resolved
+as WSL. The Linux child omits the Windows T3 home so it does not share the primary's
+database, and the renderer discovers it through the desktop-local bootstrap/saved-
+environment path.
+
+<SourceExcerpt id="desktop-primary-platform-choice" focus={[689, 693, 696, 698, 705, 710, 712, 720, 722, 725, 727]} note="The primary is a long-lived pool identity whose configuration is resolved again on restart. Non-Windows hosts label it Local environment; Windows can select WSL-only when available or fall back to Windows." />
+
+<SourceExcerpt id="desktop-pool-scope-lifecycle" focus={[327, 340, 346, 356, 367, 369, 381, 396, 417, 419]} note="Each dynamically registered pool instance owns a child scope. Unregister closes that scope and removes the instance, while the primary id is explicitly protected from unregister." />
+
+SSH takes a different route. The preload asks main to discover hosts, ensure a
+target, bootstrap a bearer session, issue a WebSocket token, inspect session state,
+or disconnect. `DesktopSshEnvironment` delegates those operations to the SSH
+environment manager with desktop password prompts. A ready remote descriptor is a
+normal environment connection; it does not create a local `DesktopBackendInstance`.
+
+<EvidenceClaim kind="verified" title="Pool membership means a local supervised child" refs={["desktop-primary-platform-selection", "desktop-backend-pool-lifecycle", "desktop-wsl-reconciliation", "desktop-ssh-gateway", "connection-target-model"]}>
+  The host-local primary and WSL instances have desktop bootstrap/process
+  configuration. SSH remains one
+  branch of the client connection-target model and is entered through the desktop
+  SSH IPC surface. The distinction preserves separate filesystem, process, and
+  shutdown ownership.
+</EvidenceClaim>
+
+## 4. Three file descriptors carry three different concerns
+
+For the ordinary host-local primary, the child is run in Node mode and receives its JSON
+bootstrap envelope on **fd3** (`--bootstrap-fd 3`). The envelope specifies desktop
+mode, `noBrowser`, port, home, bind host, bootstrap token, exposure settings, and
+the telemetry descriptors. It sets **fd4** as parent-to-child host telemetry and
+**fd5** as child-to-parent telemetry control.
+
+fd4 starts with a hello and carries sampled Electron-main host/power/process data.
+fd5 carries control messages such as `setDiagnosticsDemand`: main tracks the demand
+per backend source, samples expensive Electron app metrics only while at least one
+source demands diagnostics, and removes demand when a control stream stops or a
+backend exits. It is a demand signal, not a general command channel and not a claim
+that the server can directly inspect every renderer or remote machine.
+
+<SourceExcerpt id="desktop-process-channels" focus={[451, 453, 458, 459, 465, 468, 474, 480, 483, 486, 504, 507, 509, 521]} note="The host-local process receives bootstrap and telemetry through input descriptors and exposes diagnostics demand through one output descriptor. WSL swaps bootstrap delivery to stdin and does not inherit the extra channels." />
+
+WSL is the explicit exception. `wsl.exe` drops extra file descriptors across the
+Windows-to-Linux handoff, so the WSL child uses stdin (`--bootstrap-fd 0`) for the
+bootstrap envelope. The packaged Windows sidecar is also not passed to Linux;
+resource telemetry is unavailable for that WSL backend configuration. The fd3/fd4/
+fd5 diagram therefore describes the primary local spawn, not a universal property
+of every environment.
+
+<EvidenceClaim kind="verified" title="Bootstrap, telemetry, and demand are separate directions" refs={["desktop-bootstrap-envelope", "desktop-backend-process-wiring", "desktop-process-channels"]}>
+  The primary configuration assigns telemetry fd 4 and control fd 5 beside its fd-3
+  bootstrap. The desktop process runner treats control as an output stream from the
+  child, disables demand when that stream ends, and uses stdin only for the WSL
+  forwarding exception.
+</EvidenceClaim>
+
+## 5. Readiness opens the main window; preview guests stay in main
+
+Starting a child is not readiness. The manager repeatedly probes its configured
+HTTP URL while the child remains alive. On success it resets that instance's restart
+attempt and invokes the instance callback. For the primary, the pool passes that URL
+to the window service, which handles the main-window-ready transition. A slow WSL
+cold boot gets another probe interval rather than making the primary window wait.
+
+<SourceExcerpt id="desktop-http-readiness-loop" focus={[566, 568, 571, 574, 576, 580, 583, 591]} note="Readiness is an HTTP proof repeated with fresh budgets while the child is alive. A successful probe invokes the instance callback; a timeout records failure and allows another round." />
+
+The desktop preview is another useful boundary test. The renderer can request tab,
+navigation, zoom, screenshot, picking, recording, and automation operations through
+the curated preload API. Electron main's preview manager validates and owns the
+guest Chromium `WebContents`. Server preview state can coordinate a tab record, but
+neither a remote client nor the page renderer thereby owns a browser process.
+
+<EvidenceClaim kind="verified" title="Readiness and guest-browser ownership are distinct callbacks" refs={["desktop-backend-process-supervision", "desktop-http-readiness-loop", "desktop-native-boundary", "workbench-desktop-preview-preload", "workbench-desktop-preview-ipc", "workbench-desktop-preview-manager"]}>
+  HTTP readiness is the local-child gate used by the primary window callback. Preview
+  actions cross renderer-to-main IPC, where the desktop preview manager validates
+  and retains the guest WebContents instead of exposing it to renderer code.
+</EvidenceClaim>
+
+## 6. Menus, updates, and termination are stateful platform edges
+
+Main configures the application menu and update service after Electron becomes ready;
+the renderer receives menu actions and update state through subscription-shaped
+preload calls and requests update checks/download/install through named IPC methods.
+Those UI messages are not the updater itself. The lifecycle code makes an important
+exception for updater-controlled quit: preventing the following `before-quit` can
+break Electron's native install/relaunch sequence, especially on macOS.
+
+For ordinary quit, the lifecycle marks the app as quitting, requests desktop
+shutdown, waits for the program's finalization route, and then allows Electron to
+quit. The finalizer lists every pool instance and stops them concurrently, so WSL is
+not left to an OS hard kill. Individual backend stops cancel restart work, request
+SIGTERM with a grace period, and clear readiness. A child that exits unexpectedly
+while still desired schedules its own restart; that is intentionally different from
+the explicit shutdown path. On macOS, closing every window does not itself quit;
+activation can re-open the window if shutdown has not begun.
+
+<SourceExcerpt id="desktop-updater-quit-boundary" focus={[198, 203, 205, 208, 215, 219, 220, 225]} note="Updater-controlled quit is granted its own pass through before-quit. Ordinary quit still takes the lifecycle hold, while activation and window-close behavior remain platform-aware." />
+
+<SourceExcerpt id="desktop-all-instance-shutdown" focus={[295, 301, 304, 309, 310, 311, 314]} note="The desktop program finalizer enumerates the current pool and stops every local instance concurrently before marking shutdown complete." />
+
+<Callout title="Shutdown is best effort across boundaries" tone="info">
+  The code establishes a graceful stop path for locally supervised backends, but it
+  cannot promise that every child, updater, operating system, or remote SSH process
+  reaches a clean application-level checkpoint. “Restart” is also context-specific:
+  an unexpected local child exit can retry, a deliberate pool stop suppresses that
+  retry, and updater-controlled quit follows Electron's updater sequence.
+</Callout>
+
+<EvidenceClaim kind="verified" title="Quit, restart, and updater install are deliberately non-equivalent" refs={["desktop-lifecycle-quit", "desktop-app-pool-shutdown", "desktop-backend-process-supervision", "desktop-native-boundary", "service-update-recovery"]}>
+  The desktop program finalizer stops all current pool instances. Preload separately
+  exposes update state/actions, while the lifecycle permits the updater's own quit
+  sequence instead of treating it as an ordinary cancellable window close.
+</EvidenceClaim>
+
+## Work the process map
+
+Use the lab to choose the host-local primary, Windows + WSL delivery, or SSH gateway, then
+advance from boot to readiness to shutdown. The labels intentionally keep transport
+and authority separate: a remote environment can be fully connected without being a
+locally pooled process.
+
+<DesktopProcessLab id="authority-lifecycle" />
+
+The durable rule is compact: **renderer asks; preload narrows; main owns native
+effects; local pool owns local children; WSL is optional local Linux delivery; SSH
+owns a remote connection path.** Keeping those nouns separate prevents both unsafe
+desktop APIs and misleading topology diagrams.
+
+<SourceList ids={["web-runtime-selection", "desktop-package", "desktop-app-assembly", "desktop-native-boundary", "desktop-backend-port-selection", "desktop-bootstrap-envelope", "desktop-preload-bridge", "desktop-bootstrap-order", "desktop-primary-platform-selection", "desktop-primary-platform-choice", "desktop-backend-pool-lifecycle", "desktop-pool-scope-lifecycle", "desktop-backend-process-supervision", "desktop-backend-process-wiring", "desktop-process-channels", "desktop-http-readiness-loop", "desktop-wsl-reconciliation", "desktop-ssh-gateway", "desktop-lifecycle-quit", "desktop-updater-quit-boundary", "desktop-app-pool-shutdown", "desktop-all-instance-shutdown", "connection-target-model", "desktop-preview-gate", "workbench-desktop-preview-preload", "workbench-desktop-preview-ipc", "workbench-desktop-preview-manager", "service-update-recovery", "service-launcher-trial-handoff"]} />

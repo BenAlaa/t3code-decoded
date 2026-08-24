@@ -1,0 +1,213 @@
+---
+slug: web-product-surfaces
+order: 310
+number: "31"
+kind: chapter
+part: "Part VI · Client architectures: shared semantics, platform edges"
+partOrder: 6
+title: One thread, many deliberate projections
+shortTitle: Web product surfaces
+summary: "The composer, timeline, Agents panel, review panel, and sidebar do not own competing thread records. They select and project one canonical environment-scoped thread through different interaction contracts, including optimistic local affordances that must yield to canonical state."
+status: source-checked
+gates: [sources, interaction]
+objectives:
+  - Trace composer content, attachments, provider commands and skills to a durable turn lifecycle without confusing UI insertion with execution.
+  - Distinguish an optimistic client affordance from accepted durable state and streamed projection.
+  - Explain quiet work-log and Agents views as different folds of canonical thread activity.
+  - Compare review modes and sidebar sorting/pinning as surface-specific selections of one scoped thread model.
+keywords: [composer, attachment, command, skill, optimistic UI, Agents, work log, review, sidebar, pinning, projection]
+sourceAreas: [apps/web/src/components/chat, apps/web/src/components/AgentsPanel.tsx, apps/web/src/components/DiffPanel.tsx, apps/web/src/components/Sidebar.tsx, packages/client-runtime/src/state]
+visuals: [interactive thread projection lab]
+updatedAt: 2026-08-24
+---
+
+import Callout from "../../components/Callout.astro";
+import EvidenceClaim from "../../components/EvidenceClaim.astro";
+import Figure from "../../components/Figure.astro";
+import SourceExcerpt from "../../components/SourceExcerpt.astro";
+import SourceList from "../../components/SourceList.astro";
+import ThreadProjectionLab from "../../components/ThreadProjectionLab.astro";
+
+The web application has many ways to look at a thread. That does not make each
+panel a source of truth. The canonical thread projection carries its messages,
+activities, turn/session state, checkpoints, lifecycle overlays, and provider
+observations. Web surfaces take selections from that material:
+
+- the composer prepares the next intent;
+- the timeline favors conversation and quiet grouped work;
+- Agents unfolds retained task evidence into a roster;
+- review selects one comparison basis;
+- the sidebar sorts, shelves, and pins thread shells.
+
+All of those are scoped by environment and thread identity. A title, pin order,
+or status pill in a sidebar is not a competing copy of the conversation.
+
+<Callout title="A projection may be useful without being complete" tone="info">
+  The timeline intentionally hides or groups some task rows. The Agents panel
+  makes those task details visible. Neither behavior deletes the underlying
+  activity or proves that the other surface is stale; they answer different
+  navigation questions from the same retained evidence.
+</Callout>
+
+## The composer composes intent; the server accepts or rejects it
+
+The composer combines prompt text with selected provider/model/mode controls,
+attachments, terminal and preview context, pending approval/input/review states,
+and menu affordances. Before a regular turn is sent, web code persists selected
+model and modes on the thread. The server's normalizer then owns timestamp,
+workspace, and attachment normalization before dispatch. A successful dispatch
+result names the accepted command/sequence boundary; it is stronger than a local
+button state, but later provider work still crosses the post-commit reactor seam
+described in Chapters 10–12 and 23.
+
+<EvidenceClaim kind="verified" title="Composer state is preparation, not durable completion" refs={["turn-lifecycle-web-mode-persist", "turn-normalizer", "turn-lifecycle-command-contract", "dispatch-result", "turn-lifecycle-engine-commit"]}>
+  The web persists chosen mode/model before sending a turn; normalization and
+  dispatch occur at the server boundary. An accepted result records a command
+  outcome, while provider execution remains a subsequent asynchronous concern.
+  The composer cannot turn a locally selected file, model, or button label into a
+  completed provider turn by itself.
+</EvidenceClaim>
+
+### Attachments are references with a lifecycle
+
+Attachments are not just inline text pasted into a browser control. The server
+normalizes attachment paths under its attachment root and later collects projected
+attachment references for cleanup. A rendered attachment token therefore must not
+be treated as proof that arbitrary files on the browser's machine are readable, or
+that an attachment will survive a thread deletion indefinitely.
+
+<EvidenceClaim kind="verified" title="Attachment handling remains server-governed" refs={["turn-normalizer", "attachment-path-safety", "projection-attachment-cleanup", "attachment-projection-cleanup"]}>
+  The inspected paths normalize and constrain attachment paths, and projection
+  processing collects retained references before best-effort cleanup. This is an
+  authority and lifecycle boundary; it does not establish a client-side filesystem
+  sync protocol.
+</EvidenceClaim>
+
+### Commands and skills are prompt affordances, not generic jobs
+
+In the `/` menu, web combines built-in commands with provider slash commands and
+eligible provider skills. Enabled skills join that menu only when the relevant
+setting is enabled; a visible skill can suppress a same-named provider slash
+command. A `$` skill choice replaces prompt text with `$skill ` syntax. Provider
+slash command selection similarly inserts `/command ` text. These operations are
+useful because the selected provider sees its native prompt convention; they do not
+by themselves create a durable task, plan step, or scheduler assignment.
+
+<EvidenceClaim kind="verified" title="Provider inventory informs menus; it is not an orchestration command catalog" refs={["work-provider-skill-contract", "work-provider-inventory-contract", "work-provider-skill-menu", "work-web-skill-composer", "work-web-skill-insertion"]}>
+  Commands and skills arrive in provider-instance inventory and are filtered for
+  this web menu. Selecting a command or skill edits the prompt according to the
+  UI policy; durable work begins only if a later turn is actually accepted.
+</EvidenceClaim>
+
+## Optimistic state is a temporary projection with a surrender rule
+
+Some interactions must feel immediate before the durable stream reflects them.
+The sidebar's pin drag keeps an optimistic ordering snapshot containing the desired
+order, its observed pin-order keys, and the keys it wrote. It retains that local
+order until canonical state confirms it—but releases it if membership changes, a
+foreign concurrent key lands, all local assignments land, or canonical order
+already agrees. That last set of conditions is the important contract: local
+optimism may bridge latency, but it must yield to the canonical thread projection.
+
+<SourceExcerpt id="web-sidebar-optimistic-pinning" focus={[2554, 2557, 2561, 2567, 2571, 2572, 2573, 2574, 2575, 2576, 2577, 2583, 2587, 2591, 2598, 2607, 2610]} note="Pinned ordering has a local override with observed keys and explicit release conditions for concurrent or canonical changes." />
+
+<EvidenceClaim kind="verified" title="Optimistic pin ordering does not overwrite a concurrent canonical reorder" refs={["web-sidebar-optimistic-pinning", "work-thread-lifecycle-decisions"]}>
+  The web release logic recognizes a pin key that it did not write as a foreign
+  update and drops the optimistic override. The server's lifecycle commands remain
+  responsible for projected pin state; the browser merely presents a short-lived
+  preferred order while that state converges.
+</EvidenceClaim>
+
+## Quiet log and Agents roster intentionally disagree in granularity
+
+The timeline's quiet-work policy groups direct agents by spawn turn and workflow
+members under their coordinator. It replaces a flood of task lifecycle rows with a
+call to action that opens Agents. The client-runtime fold reads retained `task.*`
+and agent-owned tool activity into a source-neutral roster, tolerating missing
+starts, late completion, reactivation, and session death. The web Agents panel then
+shows rows and aggregate information from that folded model.
+
+<EvidenceClaim kind="verified" title="Agents and the quiet timeline are sibling projections, not two task stores" refs={["work-web-quiet-timeline", "work-subagent-fold", "work-web-agent-panel", "work-web-agent-summary"]}>
+  The quiet timeline deliberately condenses activity; the Agents panel expands
+  derived task state. Both consume retained thread evidence through client logic.
+  In particular, elapsed display is a presentation concern and a task rollup is
+  provider-observed activity data—not an invoice or a global scheduler record.
+</EvidenceClaim>
+
+## Review modes select a comparison, not a different thread
+
+The review panel can select working-tree changes, branch changes, the latest turn,
+or an earlier turn. A turn selection derives an adjacent checkpoint range; a
+non-turn selection asks the environment for a working-tree or branch diff. The
+panel refreshes an applicable branch diff on browser focus and after the newest
+completed turn changes. Those are different evidence sources and cache scopes, but
+they remain anchored to the active environment/thread/workspace context.
+
+<Callout title="A review label states the chosen comparison basis" tone="warning">
+  “Latest turn” is a checkpoint-based turn comparison in this path. “Working tree”
+  and “Branch changes” are live VCS-oriented queries. A rendered diff does not
+  certify that it is complete, untruncated, merged, committed, or reviewed by a
+  human; the panel retains explicit loading, error, and truncation states.
+</Callout>
+
+## Sidebar shelves and sorts the same thread shells
+
+The sidebar creates one visible ordering from pinned, active, route-preserved
+snoozed, and visible settled threads. Pinning is a lifecycle overlay, not a new
+thread type: the durable model provides `pinOrderKey`, snooze, settlement, and
+archive fields; the UI applies shelving and sorting policy. The active route is
+special-cased so a snoozed thread reached through a deep link does not disappear
+behind a collapsed shelf.
+
+<EvidenceClaim kind="verified" title="Sidebar organization is a view over durable lifecycle overlays" refs={["work-thread-record", "work-thread-lifecycle-events", "work-thread-lifecycle-decisions", "web-sidebar-row-locality", "web-sidebar-optimistic-pinning"]}>
+  The durable thread model carries lifecycle and pin fields. The sidebar chooses
+  visible shelves and order, retaining an active routed snoozed row for navigation
+  continuity. Drag state may be optimistic, but it has explicit surrender rules.
+</EvidenceClaim>
+
+## Exercise the projection boundary
+
+The lab keeps one canonical thread scenario on the left and lets each surface
+choose its own projection. Change the scenario and selected surface, then compare
+the displayed pin, task, review, and local-view fields to see why a quiet timeline
+and a detailed Agents panel can honestly look different without holding different
+canonical threads.
+
+<Figure number="31.1" title="One canonical thread, six focused projections" hint="change the durable scenario, then compare what each surface consumes and suppresses" caption="Chat, composer, quiet work log, Agents, review, and sidebar select different fields and expose different local controls around one environment-scoped thread identity. The lab separates server-state mutations from view-local state and makes intentional suppression visible; a quiet row is therefore not evidence that its underlying task activity disappeared." textEquivalent="The interactive lab offers three canonical thread scenarios and six product surfaces. For each surface it lists the canonical fields consumed, fields intentionally suppressed, server-state controls, and local-view controls. Chat emphasizes messages and session activity; composer combines a draft with submission controls; the quiet log condenses activity; Agents expands task evidence; review selects checkpoint and diff data; sidebar projects thread identity, pinning, and ordering. All retain the same thread identity and none becomes a second durable transcript." sources={["work-thread-record", "turn-lifecycle-web-mode-persist", "work-web-quiet-timeline", "work-subagent-fold", "checkpoint-web-review-modes", "web-sidebar-optimistic-pinning"]}>
+  <ThreadProjectionLab id="canonical-thread-projections" />
+</Figure>
+
+<EvidenceClaim kind="inference" title="Surface divergence is a product-design choice constrained by common identity" refs={["work-thread-record", "work-web-quiet-timeline", "work-subagent-fold", "checkpoint-web-review-modes", "web-sidebar-row-locality"]}>
+  The inspected surfaces all take environment-scoped thread data or activities and
+  apply different filters, folds, and comparison selectors. It is therefore a
+  reasonable architectural inference that their visible disagreement is usually
+  intentional projection policy rather than evidence of competing durable thread
+  stores. This inference does not rule out an individual implementation bug or a
+  temporarily stale client connection.
+</EvidenceClaim>
+
+<SourceList ids={[
+  "work-thread-record",
+  "work-thread-lifecycle-events",
+  "work-thread-lifecycle-decisions",
+  "turn-lifecycle-web-mode-persist",
+  "turn-normalizer",
+  "turn-lifecycle-command-contract",
+  "dispatch-result",
+  "turn-lifecycle-engine-commit",
+  "attachment-path-safety",
+  "projection-attachment-cleanup",
+  "attachment-projection-cleanup",
+  "work-provider-skill-contract",
+  "work-provider-inventory-contract",
+  "work-provider-skill-menu",
+  "work-web-skill-composer",
+  "work-web-skill-insertion",
+  "web-sidebar-optimistic-pinning",
+  "work-web-quiet-timeline",
+  "work-subagent-fold",
+  "work-web-agent-panel",
+  "work-web-agent-summary",
+  "checkpoint-web-review-modes",
+  "web-sidebar-row-locality"
+]} />

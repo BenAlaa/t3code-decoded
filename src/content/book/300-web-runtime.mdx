@@ -1,0 +1,211 @@
+---
+slug: web-runtime
+order: 300
+number: "30"
+kind: chapter
+part: "Part VI · Client architectures: shared semantics, platform edges"
+partOrder: 6
+title: One React renderer, three runtime edges
+shortTitle: Web runtime
+summary: "The web client keeps one route tree and environment-oriented state model across hosted, locally served, and Electron renderer deployments. Platform differences enter at history, authentication, native-host, and transport boundaries—not in a forked product model."
+status: source-checked
+gates: [sources, interaction]
+objectives:
+  - Separate the hosted, locally served, and Electron-renderer deployment choices from the shared React application.
+  - Trace entry, AppRoot, atom registry, router history, generated route tree, and environment-scoped session state.
+  - Explain why virtualized timelines and row-local structural sharing are implementation choices, not performance benchmarks.
+  - Locate tracing export and the browser terminal at their respective client/server authority boundaries.
+keywords: [web, Electron, history, router, environment, atoms, virtualization, tracing, terminal, performance]
+sourceAreas: [apps/web/src/main.tsx, apps/web/src/AppRoot.tsx, apps/web/src/router.ts, apps/web/src/connection, apps/web/src/components/chat, apps/web/src/components/ThreadTerminalDrawer.tsx]
+visuals: [web runtime architecture and hot path]
+updatedAt: 2026-08-24
+---
+
+import Callout from "../../components/Callout.astro";
+import EvidenceClaim from "../../components/EvidenceClaim.astro";
+import Figure from "../../components/Figure.astro";
+import Mermaid from "../../components/Mermaid.astro";
+import SourceExcerpt from "../../components/SourceExcerpt.astro";
+import SourceList from "../../components/SourceList.astro";
+
+The web client is not three applications. It is one React renderer deployed in
+three circumstances with materially different edges:
+
+- **Hosted web** serves the app as a regular browser application and can connect
+  to environments discovered or paired through the product's connection model.
+- **Locally served web** is the same browser application delivered by a local T3
+  server; the server distribution copies the already-built web bundle.
+- **Electron renderer** loads that renderer from a file-backed shell, gains a
+  preload bridge and Electron-only hosts, and uses hash history so route paths do
+  not become file paths.
+
+This is a deployment distinction, not evidence of three independent thread
+stores. The selected environment remains the authority for sessions, snapshots,
+commands, and streamed updates in every case.
+
+<SourceExcerpt id="web-main-runtime-entry" focus={[21, 22, 24, 26, 31, 38, 40, 42, 43, 52]} note="The entry selects hash history only under the Electron bridge, creates one router, and conditionally wraps the same AppRoot in the appropriate authentication provider." />
+
+<Callout title="Do not infer a local backend from an Electron renderer" tone="warning">
+  Electron changes browser integration and can assemble a managed backend elsewhere
+  in the desktop application. The renderer's <code>isElectron</code> branch alone
+  does not prove that the selected environment is local, connected, online, or
+  authoritative for a particular thread.
+</Callout>
+
+## Entry establishes the small platform seam
+
+At module load, `isElectron` means that the preload bridge placed
+`window.desktopBridge` on the page. The entry then chooses TanStack Router's hash
+history for Electron and browser history otherwise, creates the router once, and
+performs Electron-specific window-control class synchronization. Cloud
+authentication is optional: it is enabled only when both a publishable key and
+public cloud configuration are present; Electron receives its Electron Clerk
+provider and passkey support, while a normal browser receives the browser provider.
+In both branches, the child is the same `AppRoot`.
+
+The local CLI packaging path provides another useful boundary: it packages a
+built web client as server static output. That says how a browser gets the assets;
+it does not merge the React process and the server process into one memory space.
+
+<EvidenceClaim kind="verified" title="History and authentication are runtime seams; route semantics are shared" refs={["web-main-runtime-entry", "web-runtime-selection", "cli-web-bundle"]}>
+  The inspected entry constructs one router from one route tree. Its explicit
+  Electron divergence is hash history, document integration, and an Electron
+  authentication provider; otherwise the same AppRoot is rendered. The CLI build
+  copies built web assets into the server distribution, which is delivery reuse—not
+  proof that browser state is server state.
+</EvidenceClaim>
+
+## AppRoot owns renderer-wide state, then routes
+
+`AppRoot` supplies one Effect atom registry around both routed content and its
+longer-lived hosts. The router renders the generated file-route tree. Preview
+automation hosts, the Electron browser host, and the quit-hold overlay sit beside
+the router rather than inside a route. The source comment makes the reason
+concrete: Electron webviews must survive a route transition, while still sharing
+the registry with the routed UI.
+
+<SourceExcerpt id="web-app-root-providers" focus={[9, 10, 11, 12, 14, 16, 17, 18, 19, 20]} note="AppRoot supplies the atom registry to the router and persistent renderer hosts; the Electron browser host is intentionally outside route transitions." />
+
+<SourceExcerpt id="web-router-composition" focus={[1, 3, 5, 6, 8, 9, 10, 14]} note="The router is constructed from the generated route tree and receives the history chosen by main.tsx." />
+
+The file routes divide broadly into connection/pairing, settings, usage, project
+redirects, and the `_chat` shell. The chat subtree provides an index, a draft view,
+a scoped `$environmentId/$threadId` view, and pull-request work. A URL therefore
+names a presentation location and a scoped thread identity; it is not a substitute
+for the environment session or a serialized thread snapshot.
+
+<EvidenceClaim kind="verified" title="Persistent hosts share state without becoming routes" refs={["web-app-root-providers", "web-router-composition", "workbench-preview-web-gate"]}>
+  The browser host and automation hosts are renderer-wide siblings of
+  `RouterProvider`. Preview use still has a runtime gate: a regular web route does
+  not acquire an in-app Chromium host merely by navigating to a chat route.
+</EvidenceClaim>
+
+## Environment atoms keep connection multiplicity out of route components
+
+The web layer creates one connection atom runtime, uses it to make an environment
+catalog and per-environment session atoms, and exposes hooks that read an
+environment id rather than a process-global server. A prepared connection carries
+the HTTP base URL for the named environment; session state is independently read
+from that environment's authentication endpoint. The registry is renderer-wide and
+is reset only by the test helper, not on each route render.
+
+<SourceExcerpt id="web-environment-atom-catalog" focus={[1, 3, 5]} note="The web catalog is constructed from the shared connection atom runtime." />
+
+<SourceExcerpt id="web-environment-session-atoms" focus={[7, 8, 10, 12, 16, 17, 20, 24, 26, 30, 35, 36]} note="Prepared connections and authentication session state are addressed by EnvironmentId; a null selection uses a deliberately empty atom." />
+
+This pattern matters because a route can be active while its environment is
+reconnecting, and a client can hold several environment presentations at once.
+The route tells the UI *which* scoped thread to request; the registry and
+environment atoms answer *through which prepared connection* it can be reached.
+
+<Figure number="30.1" title="One renderer, explicit platform and hot-path seams" hint="solid arrows carry ordinary data; dashed arrows are optional runtime edges" caption="The entry creates one router from a history chosen at the runtime edge. AppRoot supplies a shared atom registry to routed UI and persistent hosts. A chat route selects an environment-scoped thread connection; snapshot plus stream state feeds the virtualized timeline and memoized sidebar rows. Terminal bytes remain server-owned and arrive through the terminal session. Client tracing exports to the selected primary environment's observability endpoint. Electron-only browser hosting is outside the router. This is an architecture diagram, not a latency, throughput, or memory benchmark." textEquivalent="Hosted and locally served browsers use browser history; an Electron renderer uses hash history and Electron authentication/window integrations. All create the same router and AppRoot. AppRoot supplies an atom registry around RouterProvider, preview automation, the Electron browser host, and a quit overlay. Chat routes select environment-scoped thread state. Environment catalog and session atoms prepare connections and obtain snapshot plus live updates. Those updates feed a virtualized message timeline and memoized sidebar rows. The browser terminal attaches to a server-owned terminal session. Client tracing exports OTLP to the selected primary environment. Electron browser webviews sit outside route transitions. No arrow claims that a browser owns a PTY, that tracing proves a span was accepted, or that the diagram measures performance." sources={["web-main-runtime-entry", "web-app-root-providers", "web-router-composition", "web-environment-atom-catalog", "web-environment-session-atoms", "thread-state-runtime", "web-timeline-list-virtualization", "web-timeline-row-structural-sharing", "web-sidebar-row-locality", "workbench-terminal-web", "web-client-tracing-export"]}>
+  <Mermaid id="web-runtime-hot-path" label="Web runtime architecture and hot path" chart={`flowchart LR
+    H[Hosted or local browser] --> BH[browser history]
+    E[Electron file shell] --> HH[hash history]
+    BH --> R[one router + generated route tree]
+    HH --> R
+    R --> A[AppRoot + atom registry]
+    A --> C[chat route: environmentId + threadId]
+    A --> X[Electron BrowserHost\noutside router]
+    C --> EC[environment catalog + session atoms]
+    EC --> S[snapshot + resumable stream]
+    S --> T[LegendList timeline\nstable row identities]
+    S --> SB[sidebar\nmemoized rows]
+    C --> TS[terminal session attach]
+    TS --> PTY[server-owned PTY]
+    A -. OTLP batches .-> O[primary environment\nobservability endpoint]`} />
+</Figure>
+
+## The chat hot path constrains work per update
+
+The message timeline uses `LegendList`, stable row ids, estimated item size, end
+anchoring, and explicit visible-content maintenance. Before it reaches the list,
+the row builder structurally reuses a prior row object whenever its relevant fields
+are unchanged. Shared callbacks and non-row-scoped state travel through React
+context so they do not need to become freshly allocated props for every row.
+
+<SourceExcerpt id="web-timeline-list-virtualization" focus={[585, 586, 587, 588, 589, 590, 591, 592, 593, 594, 595, 641, 642]} note="The timeline passes stable keys, estimated size, scroll anchoring, and visible-content maintenance policy to LegendList." />
+
+<SourceExcerpt id="web-timeline-row-structural-sharing" focus={[2100, 2101, 2102, 2104, 2107, 2108, 2109]} note="The row helper remembers prior rows and returns prior object references when the relevant row content did not change." />
+
+The sidebar follows the same intent at a different scale. It derives a visible
+order—pinned, active, a route-preserved snoozed row, and the visible settled tail—
+then stores ordering and lookup data in refs for callbacks. The comment is explicit
+that passing fresh collection identities through row props would defeat
+memoization during streaming. That is a narrowly scoped update-locality decision;
+it is not a claim that every update repaints only one DOM node.
+
+<SourceExcerpt id="web-sidebar-row-locality" focus={[2208, 2210, 2213, 2222, 2223, 2233, 2234, 2235, 2237, 2239, 2249, 2250, 2251, 2252]} note="The sidebar preserves a routed snoozed row and uses refs for order/maps so streaming updates do not force fresh callback props into every memoized row." />
+
+<EvidenceClaim kind="verified" title="The source encodes update-locality safeguards, not benchmark results" refs={["web-timeline-list-virtualization", "web-timeline-row-structural-sharing", "web-sidebar-row-locality"]}>
+  The timeline virtualizes items and preserves unchanged row identities; the
+  sidebar avoids collection-dependent row callbacks during streaming. These are
+  implementation choices intended to bound avoidable render work. The inspected
+  source supplies no frame-time, CPU, heap, or maximum-list-size measurement, so
+  none should be inferred from them.
+</EvidenceClaim>
+
+## Trace export is observability, not an application event log
+
+Client tracing builds an OTLP delegate whose URL is resolved from the primary
+environment and labels the resource as `t3-web` with `browser` or `electron` mode.
+It replaces and closes an earlier tracing runtime when configuration changes, and
+logs a sanitized configuration failure. This is a best-effort observability
+pipeline: successful configuration makes a delegate available locally; it does not
+prove remote collector durability or replay a product command.
+
+<SourceExcerpt id="web-client-tracing-export" focus={[15, 16, 17, 18, 47, 54, 57, 58, 60, 64, 72, 73, 75, 79, 82, 84, 89, 90, 91, 96]} note="The client tracer labels browser/Electron mode, resolves an observability URL from the primary environment, and replaces prior tracing state on configuration changes." />
+
+## A browser terminal renders a remote screen
+
+The terminal drawer creates a Ghostty surface in the browser, but its session is
+addressed by environment, thread, terminal id, cwd, optional worktree, and runtime
+environment. User input becomes a typed write command; resize becomes a typed
+resize command; the renderer hydrates the terminal surface from the attached
+session's buffered text and status. The client owns the screen component and local
+focus/selection behavior. The environment server owns the PTY, as Chapter 28
+establishes.
+
+<Callout title="Performance claims need a measurement contract" tone="info">
+  Virtualization, memoization, bounded detail windows, and worker-pool sizing are
+  defensible design evidence. A statement such as “the chat stays at 60 fps” needs
+  a workload, device/browser, instrumentation, and observed result; it is not
+  established by an import of `LegendList` or a `memo` call.
+</Callout>
+
+<SourceList ids={[
+  "web-main-runtime-entry",
+  "web-runtime-selection",
+  "cli-web-bundle",
+  "web-app-root-providers",
+  "web-router-composition",
+  "web-environment-atom-catalog",
+  "web-environment-session-atoms",
+  "thread-state-runtime",
+  "web-timeline-list-virtualization",
+  "web-timeline-row-structural-sharing",
+  "web-sidebar-row-locality",
+  "web-client-tracing-export",
+  "workbench-terminal-web",
+  "workbench-preview-web-gate"
+]} />
