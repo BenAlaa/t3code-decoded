@@ -1,0 +1,11 @@
+node_modules/
+dist/
+.astro/
+.DS_Store
+*.log
+
+# Local source checkout pointers and authoring caches.
+.source/
+.source-cache/
+.env
+.env.local

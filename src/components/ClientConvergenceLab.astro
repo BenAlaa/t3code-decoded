@@ -1,0 +1,162 @@
+---
+interface Props { id: string; }
+const { id } = Astro.props;
+---
+
+<section class="convergence-lab" data-convergence-lab data-ready="pending" aria-labelledby={`${id}-title`}>
+  <header class="convergence-lab__head">
+    <span>Interactive convergence lab</span>
+    <h3 id={`${id}-title`}>Reject what cannot still be true</h3>
+    <p>Advance one race at a time. The first render is a still, authoritative snapshot at sequence 10.</p>
+  </header>
+
+  <div class="convergence-lab__controls" aria-label="Convergence race controls">
+    <button type="button" data-race="snapshot">Apply snapshot</button>
+    <button type="button" data-race="duplicate">Deliver duplicate</button>
+    <button type="button" data-race="gap">Resolve gap</button>
+    <button type="button" data-race="reconnect">Reconnect</button>
+    <button type="button" data-race="revert">Revert history</button>
+    <button type="button" data-race="older">Resolve older page</button>
+    <button type="button" data-race="reset">Reset</button>
+  </div>
+
+  <p class="convergence-lab__status" role="status" aria-live="polite" aria-atomic="true" data-convergence-status>
+    Snapshot at sequence 10 is loaded. No page request is in flight.
+  </p>
+
+  <div class="convergence-lab__metrics" aria-label="Convergence state">
+    <div><span>Session</span><output data-field="session">A</output></div>
+    <div><span>Live cursor</span><output data-field="cursor">10</output></div>
+    <div><span>History epoch</span><output data-field="epoch">0</output></div>
+    <div><span>Older page</span><output data-field="page">idle</output></div>
+  </div>
+
+  <ol class="convergence-lab__ledger" data-convergence-ledger aria-label="Applied convergence decisions">
+    <li><strong>Snapshot</strong><span>authoritative window: turns 8–10</span></li>
+  </ol>
+
+  <details class="convergence-lab__fallback" open>
+    <summary>Static race reference</summary>
+    <ul>
+      <li>A snapshot replaces loaded history and establishes its cursor.</li>
+      <li>An event at or below that cursor is ignored as overlap or a duplicate.</li>
+      <li>An invalid or oversized resume gap receives a new snapshot, not a partial replay.</li>
+      <li>A new session refreshes authority before reusing a cursor.</li>
+      <li>A revert increments history epoch, so a pre-revert older page is discarded.</li>
+      <li>An older page ahead of live cursor waits for its watermark; a stale page does not merge.</li>
+    </ul>
+  </details>
+  <noscript><p class="convergence-lab__noscript">JavaScript is off. The static race reference records the convergence rules.</p></noscript>
+</section>
+
+<script>
+  document.querySelectorAll<HTMLElement>("[data-convergence-lab]").forEach((lab) => {
+    if (lab.dataset.ready === "true") return;
+    const status = lab.querySelector<HTMLElement>("[data-convergence-status]");
+    const ledger = lab.querySelector<HTMLOListElement>("[data-convergence-ledger]");
+    const field = (name: string) => lab.querySelector<HTMLOutputElement>(`[data-field="${name}"]`);
+    let session = "A";
+    let cursor = 10;
+    let epoch = 0;
+    let page = "idle";
+    let pageEpoch: number | null = null;
+    let pageWatermark: number | null = null;
+    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+
+    const write = (node: Element | null, value: string) => { if (node) node.textContent = value; };
+    const note = (title: string, text: string) => {
+      if (ledger) {
+        const item = document.createElement("li");
+        item.innerHTML = `<strong>${title}</strong><span>${text}</span>`;
+        ledger.prepend(item);
+        if (!reducedMotion.matches) {
+          item.animate(
+            [{ opacity: .55, transform: "translateY(-5px)" }, { opacity: 1, transform: "translateY(0)" }],
+            { duration: 170, easing: "ease-out" },
+          );
+        }
+      }
+      write(status, text);
+    };
+    const paint = () => {
+      write(field("session"), session);
+      write(field("cursor"), String(cursor));
+      write(field("epoch"), String(epoch));
+      write(field("page"), page);
+    };
+    const reset = () => {
+      session = "A"; cursor = 10; epoch = 0; page = "idle"; pageEpoch = null; pageWatermark = null;
+      if (ledger) ledger.innerHTML = "<li><strong>Snapshot</strong><span>authoritative window: turns 8–10</span></li>";
+      write(status, "Snapshot at sequence 10 is loaded. No page request is in flight.");
+      paint();
+    };
+
+    lab.querySelectorAll<HTMLButtonElement>("[data-race]").forEach((button) => {
+      button.addEventListener("click", () => {
+        switch (button.dataset.race) {
+          case "snapshot":
+            cursor = Math.max(cursor, 12); epoch += 1; page = "idle"; pageEpoch = null; pageWatermark = null;
+            note("Snapshot replaces", "Fresh snapshot at sequence 12 replaces the loaded window and advances history epoch."); break;
+          case "duplicate":
+            note("Duplicate ignored", `Event sequence ${cursor} is not newer than cursor ${cursor}; reducer leaves state unchanged.`); break;
+          case "gap":
+            cursor = 16; epoch += 1; page = "idle"; pageEpoch = null; pageWatermark = null;
+            note("Gap resets", "Cursor gap is invalid or too large; snapshot at sequence 16 replaces history instead of partial replay."); break;
+          case "reconnect":
+            session = session === "A" ? "B" : "A"; cursor += 1; epoch += 1; page = "idle"; pageEpoch = null; pageWatermark = null;
+            note("New session", `Session ${session} refreshes authoritative state at sequence ${cursor} before a cursor is reused.`); break;
+          case "revert":
+            epoch += 1; cursor += 1;
+            note("Revert", `Revert applies at sequence ${cursor} and epoch ${epoch}; any older-page response from an earlier epoch must be discarded.`); break;
+          case "older":
+            if (page === "idle") {
+              page = "parked"; pageEpoch = epoch; pageWatermark = cursor + 2;
+              note("Page parked", `Older page carries watermark ${pageWatermark}, ahead of live cursor ${cursor}; wait before merging.`);
+            } else if (pageEpoch !== epoch) {
+              page = "discarded"; pageEpoch = null; pageWatermark = null;
+              note("Page discarded", "Older page was captured before a snapshot or revert changed history epoch.");
+            } else if (pageWatermark !== null && cursor < pageWatermark) {
+              cursor = pageWatermark;
+              note("Live catches up", `Live cursor reached page watermark ${cursor}; choose Resolve older page again to merge the parked page.`);
+            } else {
+              page = "merged"; pageEpoch = null; pageWatermark = null;
+              note("Page merged", "Older page is in the current epoch and no longer ahead of live cursor; disjoint rows can merge with identity de-duplication.");
+            }
+            break;
+          case "reset": reset(); return;
+        }
+        paint();
+      });
+    });
+    paint();
+    lab.dataset.ready = "true";
+  });
+</script>
+
+<style>
+  .convergence-lab { margin: 2.5rem 0; overflow: clip; border: 1px solid var(--line-strong); border-radius: 1rem; background: var(--paper-raised); color: var(--ink); }
+  .convergence-lab__head { padding: 1.3rem 1.35rem 0; }
+  .convergence-lab__head > span { color: var(--signal-deep); font-size: .75rem; font-weight: 750; letter-spacing: .08em; text-transform: uppercase; }
+  .convergence-lab__head h3 { margin: .3rem 0 .45rem; font-size: 1.2rem; }
+  .convergence-lab__head p { max-width: 68ch; margin: 0; color: var(--ink-soft); }
+  .convergence-lab__controls { display: flex; flex-wrap: wrap; gap: .55rem; padding: 1.2rem 1.35rem .8rem; }
+  .convergence-lab[data-ready="pending"] .convergence-lab__controls { visibility: hidden; }
+  .convergence-lab button { border: 1px solid var(--line-strong); border-radius: .45rem; padding: .48rem .66rem; background: var(--paper); color: var(--ink); font: inherit; font-size: .84rem; cursor: pointer; }
+  .convergence-lab button:hover, .convergence-lab button:focus-visible { border-color: var(--signal); outline: 2px solid color-mix(in srgb, var(--signal) 30%, transparent); outline-offset: 2px; }
+  .convergence-lab__status { min-height: 2.8em; margin: 0 1.35rem .85rem; color: var(--ink-soft); font-size: .9rem; }
+  .convergence-lab__metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1px; border-block: 1px solid var(--line); background: var(--line); }
+  .convergence-lab__metrics div { padding: .72rem .9rem; background: var(--paper-raised); }
+  .convergence-lab__metrics span { display: block; color: var(--ink-faint); font-size: .73rem; }
+  .convergence-lab__metrics output { display: block; margin-top: .14rem; overflow-wrap: anywhere; color: var(--signal-deep); font-family: var(--font-mono, ui-monospace, monospace); font-weight: 800; }
+  .convergence-lab__ledger { display: grid; gap: .45rem; margin: 0; padding: 1rem 1.35rem 1.2rem; list-style: none; }
+  .convergence-lab__ledger li { display: grid; grid-template-columns: minmax(7.5rem, .34fr) 1fr; gap: .7rem; padding: .62rem .72rem; border-left: 3px solid var(--signal); background: color-mix(in srgb, var(--signal) 6%, var(--paper-raised)); font-size: .88rem; }
+  .convergence-lab__ledger span { color: var(--ink-soft); }
+  .convergence-lab__fallback { margin: 0 1.35rem 1.3rem; padding: .8rem .95rem; border: 1px solid var(--line); border-radius: .6rem; background: var(--paper); color: var(--ink-soft); font-size: .88rem; }
+  .convergence-lab__fallback summary { cursor: pointer; color: var(--ink); font-weight: 700; }
+  .convergence-lab__fallback ul { margin: .7rem 0 0; padding-left: 1.2rem; }
+  .convergence-lab__fallback li + li { margin-top: .35rem; }
+  .convergence-lab__noscript { margin: 0 1.35rem 1.2rem; color: var(--ink-soft); font-size: .88rem; }
+  @media (max-width: 42rem) { .convergence-lab__metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); } .convergence-lab__ledger li { grid-template-columns: 1fr; gap: .2rem; } }
+  @media (prefers-reduced-motion: reduce) { .convergence-lab *, .convergence-lab *::before, .convergence-lab *::after { scroll-behavior: auto; transition: none !important; animation: none !important; } }
+  @media print { .convergence-lab { break-inside: avoid; border-color: var(--line-strong); } .convergence-lab__controls, .convergence-lab__status, .convergence-lab__ledger { display: none; } .convergence-lab__fallback, .convergence-lab__fallback > * { display: block; } }
+</style>

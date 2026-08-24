@@ -1,0 +1,58 @@
+---
+interface Props { id: string; }
+const { id } = Astro.props;
+if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(id)) {
+  throw new Error("WorktreeTopologyLab requires a stable kebab-case id.");
+}
+const labId = `worktree-topology-${id}`;
+const modes = [
+  { label: "Local request: no new worktree", nodes: ["No Git worktree creation", "Stored thread path, if present", "Otherwise project root", "Thread runs there"], detail: "This mode creates no linked worktree. A newly local thread commonly runs at the project root, but a local request can retain an already-selected workspace path; runtime resolution uses that stored thread path before the project root.", recovery: "If the path is not a Git repository, this is the only effective thread workspace mode. “Local” describes creation, not a ban on an existing workspace path." },
+  { label: "New worktree from local base", nodes: ["Project root", "Chosen local base", "New branch + linked worktree", "Thread runs in linked tree"], detail: "The bootstrap asks Git to create a new branch at the selected base and checks it out in a separate path. The thread is then updated with that branch and worktree path.", recovery: "A Git creation failure aborts the bootstrap; the server cleans up a thread it created during that bootstrap, but does not promise to remove every filesystem side effect Git may already have made." },
+  { label: "New worktree from origin", nodes: ["Project root", "Fetch origin", "Resolve origin base commit", "New branch + linked worktree", "Thread runs in linked tree"], detail: "When the option is enabled and origin exists, T3 fetches origin and resolves the requested base to a remote-tracking commit before creating the local branch/worktree.", recovery: "If origin is absent, the bootstrap falls back to the local selected base instead of failing solely because origin is unavailable." },
+  { label: "Delete thread + optional orphan cleanup", nodes: ["Durably delete thread", "Stop provider + close terminal history", "Offer worktree cleanup when orphaned", "Forced Git removal only if confirmed"], detail: "Thread deletion is not a worktree deletion. The server stops the provider session and closes terminal history; the web client may then offer to force-remove a worktree only when this was its sole linked thread and a local API is available.", recovery: "If the optional Git removal or refresh fails, the thread remains deleted and the worktree can remain. The web client surfaces that partial failure for inspection or later cleanup." },
+  { label: "Remove linked worktree", nodes: ["Project root", "Target linked path", "git worktree remove", "Path no longer present"], detail: "Removal calls Git with the selected linked path. The optional force flag is forwarded only when requested.", recovery: "Git remains the authority: a dirty or otherwise protected worktree can make removal fail, so inspect its state before retrying or forcing cleanup." },
+];
+const payload = JSON.stringify(modes).replaceAll("<", "\\u003c");
+---
+
+<section class="worktree-topology-lab" data-worktree-topology-lab data-worktree-topology-ready="initializing" aria-labelledby={`${labId}-title`}>
+  <header><span>Animated topology lab</span><h3 id={`${labId}-title`}>Choose where a thread will run</h3><p>Each activation advances only once. There is no autonomous playback: you control the topology and the motion.</p></header>
+  <div class="worktree-topology-controls" role="group" aria-label="Choose a workspace topology">
+    {modes.map((mode, index) => <button type="button" data-worktree-mode={index} aria-pressed={index === 0 ? "true" : "false"}>{mode.label}</button>)}
+  </div>
+  <p class="sr-only" role="status" aria-live="polite" aria-atomic="true" data-worktree-status>Selected topology: {modes[0].label}</p>
+  <ol class="worktree-track" aria-label="Selected topology stages" data-worktree-track>{modes[0].nodes.map((node, index) => <li class:list={{ active: index === 0 }}>{node}</li>)}</ol>
+  <div class="worktree-topology-detail"><h4 data-worktree-label>{modes[0].label}</h4><p data-worktree-detail>{modes[0].detail}</p><p><strong>Recovery boundary:</strong> <span data-worktree-recovery>{modes[0].recovery}</span></p></div>
+  <details class="worktree-topology-fallback" open><summary>All topology outcomes</summary><ol>{modes.map((mode) => <li><strong>{mode.label}</strong><p>{mode.detail}</p><p><b>Recovery boundary:</b> {mode.recovery}</p></li>)}</ol></details>
+  <noscript><p class="worktree-topology-noscript">JavaScript is off; the complete topology ledger remains available.</p></noscript>
+  <script type="application/json" data-worktree-data set:html={payload}></script>
+</section>
+
+<script>
+  document.querySelectorAll<HTMLElement>("[data-worktree-topology-lab]").forEach((lab) => {
+    if (lab.dataset.worktreeTopologyReady === "true") return;
+    try {
+      const modes = JSON.parse(lab.querySelector("[data-worktree-data]")?.textContent ?? "[]");
+      const buttons = [...lab.querySelectorAll<HTMLButtonElement>("[data-worktree-mode]")];
+      const track = lab.querySelector<HTMLOListElement>("[data-worktree-track]");
+      const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+      const set = (selector: string, value: string) => { const node = lab.querySelector(selector); if (node) node.textContent = value; };
+      const paint = (index: number, transition = true) => {
+        const mode = modes[index]; if (!mode || !track) return;
+        buttons.forEach((button, buttonIndex) => button.setAttribute("aria-pressed", String(buttonIndex === index)));
+        const nextTrack = document.createDocumentFragment();
+        mode.nodes.forEach((node: string, nodeIndex: number) => { const item = document.createElement("li"); item.textContent = node; if (nodeIndex === 0) item.classList.add("active"); nextTrack.append(item); });
+        track.replaceChildren(nextTrack);
+        set("[data-worktree-status]", `Selected topology: ${mode.label}`); set("[data-worktree-label]", mode.label);
+        set("[data-worktree-detail]", mode.detail); set("[data-worktree-recovery]", mode.recovery);
+        if (transition && !reduceMotion.matches) lab.querySelector(".worktree-topology-detail")?.animate([{ opacity: .45, transform: "translateY(4px)" }, { opacity: 1, transform: "translateY(0)" }], { duration: 180, easing: "ease-out" });
+      };
+      buttons.forEach((button) => button.addEventListener("click", () => paint(Number(button.dataset.worktreeMode))));
+      paint(0, false); lab.dataset.worktreeTopologyReady = "true";
+    } catch { lab.dataset.worktreeTopologyReady = "error"; }
+  });
+</script>
+
+<style>
+  .worktree-topology-lab { margin:2rem 0; overflow:hidden; border:1px solid var(--line-strong); border-radius:14px; background:var(--paper-raised); font-family:var(--font-ui); } .worktree-topology-lab header { padding:1rem 1.2rem; border-bottom:1px solid var(--line); } .worktree-topology-lab header span { color:var(--signal-deep); font:750 .65rem/1 var(--font-ui); letter-spacing:.1em; text-transform:uppercase; } .worktree-topology-lab h3 { margin:.35rem 0; } .worktree-topology-lab header p { margin:0; color:var(--ink-soft); font-size:.82rem; } .worktree-topology-controls { display:flex; flex-wrap:wrap; gap:.45rem; padding:1rem 1.2rem .7rem; } .worktree-topology-controls button { min-height:2.35rem; border:1px solid var(--line); border-radius:999px; background:var(--paper); color:var(--ink-soft); padding:.35rem .65rem; font:700 .72rem/1.2 var(--font-ui); } .worktree-topology-controls button[aria-pressed="true"] { border-color:var(--signal); background:var(--signal-soft); color:var(--signal-deep); } .worktree-topology-controls button:focus-visible { outline:3px solid color-mix(in srgb,var(--signal) 50%,transparent); outline-offset:2px; } .worktree-topology-lab:not([data-worktree-topology-ready="true"]) .worktree-topology-controls, .worktree-topology-lab:not([data-worktree-topology-ready="true"]) .worktree-track, .worktree-topology-lab:not([data-worktree-topology-ready="true"]) .worktree-topology-detail { display:none; } .worktree-topology-lab[data-worktree-topology-ready="true"] .worktree-topology-fallback { display:none; } .worktree-track { display:flex; flex-wrap:wrap; gap:.45rem; margin:0; padding:.2rem 1.2rem 1rem; list-style:none; } .worktree-track li { position:relative; flex:1 1 8rem; min-width:0; border:1px solid var(--line); border-radius:8px; background:var(--paper-muted); padding:.6rem .65rem .6rem 1.55rem; color:var(--ink-soft); font-size:.73rem; line-height:1.3; } .worktree-track li::before { content:""; position:absolute; top:.72rem; left:.6rem; width:.45rem; height:.45rem; border-radius:50%; background:var(--ink-faint); } .worktree-track li.active::before { background:var(--signal); } .worktree-topology-detail { margin:0 1.2rem 1.2rem; border-left:4px solid var(--signal); background:var(--paper-muted); padding:.9rem; } .worktree-topology-detail h4 { margin:0 0 .45rem; } .worktree-topology-detail p { margin:.35rem 0; color:var(--ink-soft); font-size:.78rem; line-height:1.5; } .worktree-topology-detail strong { color:var(--ink); } .worktree-topology-fallback { margin:0 1.2rem 1.2rem; } .worktree-topology-fallback li { margin:.85rem 0; } .worktree-topology-fallback p { margin:.2rem 0; color:var(--ink-soft); font-size:.76rem; line-height:1.45; } .worktree-topology-noscript { margin:0 1.2rem 1rem; color:var(--ink-faint); } @media (prefers-reduced-motion:reduce) { .worktree-topology-lab *, .worktree-topology-lab *::before, .worktree-topology-lab *::after { animation:none !important; transition:none !important; scroll-behavior:auto !important; } } @media print { .worktree-topology-controls, .worktree-track, .worktree-topology-detail, .worktree-topology-noscript { display:none !important; } .worktree-topology-fallback { display:block !important; } .worktree-topology-fallback summary { display:none; } }
+</style>

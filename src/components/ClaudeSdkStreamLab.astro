@@ -1,0 +1,47 @@
+---
+interface Props { id: string; }
+const { id } = Astro.props;
+if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(id)) {
+  throw new Error("ClaudeSdkStreamLab requires a stable kebab-case id.");
+}
+const labId = `claude-sdk-${id}`;
+
+const messages = [
+  { label: "Query configured", native: "The SDK query receives cwd, model, effort, permission mode, and optional resume metadata.", product: "A ProviderSession records a live Claude binding and a resumable cursor shape.", caveat: "The SDK session and query stream are provider-owned runtime state; a stored cursor is not a replay of every transient message." },
+  { label: "Assistant + tool", native: "Assistant text and tool-use/result messages stream from the Agent SDK.", product: "Content and item lifecycle events are normalized for thread projections.", caveat: "The canonical item taxonomy is T3’s contract; it is not an assertion that all SDK message fields persist." },
+  { label: "Permission / question", native: "A tool request or structured input pauses on an SDK-side deferred response.", product: "request.opened or user-input.requested gives clients a canonical action.", caveat: "The deferred is volatile. The durable record appears only after runtime ingestion’s internal command commits." },
+  { label: "Todo / task", native: "TodoWrite and agent/task-shaped SDK messages provide planning and work signals.", product: "turn.plan.updated and task/activity events drive product work views.", caveat: "These are adapter normalizations, not a cross-provider task scheduler or durable execution queue." },
+  { label: "Result / error", native: "A terminal SDK result carries success, cancellation, error, and sometimes usage fields.", product: "turn completion plus optional thread token usage or runtime error reaches T3.", caveat: "Live context telemetry is not transcript accounting, and an SDK result still crosses a hot delivery bridge before durable projection." },
+];
+const payload = JSON.stringify(messages).replaceAll("<", "\\u003c");
+---
+
+<section class="claude-sdk-lab" data-claude-sdk-lab data-claude-ready="initializing" aria-labelledby={`${labId}-title`}>
+  <header><span>Interactive stream classifier</span><h3 id={`${labId}-title`}>Classify one Claude SDK observation</h3><p>Choose an event family to see the native message, its product projection, and the point where durable truth begins.</p></header>
+  <div class="claude-interactive">
+    <div class="tabs" role="tablist" aria-label="Claude SDK message families">{messages.map((message, index) => <button type="button" role="tab" id={`${labId}-tab-${index}`} aria-controls={`${labId}-panel`} data-claude-index={index} aria-selected={index === 0 ? "true" : "false"} tabindex={index === 0 ? 0 : -1}>{message.label}</button>)}</div>
+    <p class="sr-only" role="status" aria-live="polite" aria-atomic="true" data-claude-status>Selected {messages[0].label}</p>
+    <article id={`${labId}-panel`} role="tabpanel" aria-labelledby={`${labId}-tab-0`} data-claude-detail><h4 data-claude-label>{messages[0].label}</h4><dl><div><dt>Native SDK meaning</dt><dd data-claude-native>{messages[0].native}</dd></div><div><dt>Canonical product meaning</dt><dd data-claude-product>{messages[0].product}</dd></div><div><dt>Boundary to keep honest</dt><dd data-claude-caveat>{messages[0].caveat}</dd></div></dl></article>
+  </div>
+  <details class="fallback" open><summary>All message families</summary><ol>{messages.map((message) => <li><strong>{message.label}</strong><p>{message.native}</p><p>{message.product}</p><p>{message.caveat}</p></li>)}</ol></details>
+  <noscript><p class="noscript-note">JavaScript is off; all classifications remain in the expanded ledger.</p></noscript>
+  <script type="application/json" data-claude-data set:html={payload}></script>
+</section>
+
+<script>
+  document.querySelectorAll<HTMLElement>("[data-claude-sdk-lab]").forEach((lab) => {
+    if (lab.dataset.claudeReady === "true") return;
+    try {
+      const messages = JSON.parse(lab.querySelector("[data-claude-data]")?.textContent ?? "[]"); const tabs = [...lab.querySelectorAll<HTMLButtonElement>("[data-claude-index]")];
+      const panel = lab.querySelector<HTMLElement>("[data-claude-detail]");
+      const set = (selector: string, value: string) => { const node = lab.querySelector(selector); if (node) node.textContent = value; };
+      const paint = (index: number, focus = false) => { const message = messages[index]; if (!message) return; tabs.forEach((tab, tabIndex) => { tab.setAttribute("aria-selected", String(tabIndex === index)); tab.tabIndex = tabIndex === index ? 0 : -1; }); if (panel && tabs[index]?.id) panel.setAttribute("aria-labelledby", tabs[index].id); set("[data-claude-status]", `Selected ${message.label}`); set("[data-claude-label]", message.label); set("[data-claude-native]", message.native); set("[data-claude-product]", message.product); set("[data-claude-caveat]", message.caveat); if (focus) tabs[index]?.focus(); };
+      tabs.forEach((tab, index) => { tab.addEventListener("click", () => paint(index)); tab.addEventListener("keydown", (event) => { let next: number | undefined; if (event.key === "ArrowRight" || event.key === "ArrowDown") next = (index + 1) % tabs.length; if (event.key === "ArrowLeft" || event.key === "ArrowUp") next = (index - 1 + tabs.length) % tabs.length; if (event.key === "Home") next = 0; if (event.key === "End") next = tabs.length - 1; if (next === undefined) return; event.preventDefault(); paint(next, true); }); });
+      paint(0); lab.dataset.claudeReady = "true";
+    } catch { lab.dataset.claudeReady = "error"; }
+  });
+</script>
+
+<style>
+  .claude-sdk-lab { margin: 2rem 0; border: 1px solid var(--line-strong); border-radius: 14px; overflow: hidden; background: var(--paper-raised); font-family: var(--font-ui); } header { padding: 1rem 1.2rem; border-bottom: 1px solid var(--line); } header span { color: var(--signal-deep); font: 750 .65rem/1 var(--font-ui); letter-spacing: .1em; text-transform: uppercase; } h3 { margin: .35rem 0; } header p { margin: 0; color: var(--ink-soft); font-size: .82rem; } .claude-sdk-lab:not([data-claude-ready="true"]) .claude-interactive { display: none; } .claude-sdk-lab[data-claude-ready="true"] .fallback { display: none; } .tabs { display: flex; gap: .4rem; overflow-x: auto; padding: 1rem 1.2rem .5rem; } .tabs button { flex: 0 0 auto; min-height: 2.2rem; border: 1px solid var(--line); border-radius: 999px; background: var(--paper); color: var(--ink-soft); cursor: pointer; padding: .4rem .7rem; } .tabs button[aria-selected="true"] { border-color: var(--signal); background: var(--signal-soft); color: var(--ink); } article { margin: .5rem 1.2rem 1rem; padding: .9rem; border-left: 4px solid var(--blue); background: var(--paper-muted); } h4 { margin: 0 0 .6rem; } dl { display: grid; grid-template-columns: repeat(3, 1fr); gap: .55rem; margin: 0; } dl div { padding: .65rem; border: 1px solid var(--line); background: var(--paper-raised); } dt { color: var(--ink-faint); font-size: .62rem; font-weight: 750; letter-spacing: .08em; text-transform: uppercase; } dd { margin: .25rem 0 0; font-size: .77rem; line-height: 1.45; } .fallback { margin: 0 1.2rem 1.1rem; } .fallback li { margin: .7rem 0; } .fallback p { margin: .2rem 0; color: var(--ink-soft); font-size: .75rem; } .noscript-note { margin: 0 1.2rem 1rem; color: var(--ink-faint); } @media (max-width: 650px) { dl { grid-template-columns: 1fr; } } @media (prefers-reduced-motion: reduce) { .claude-sdk-lab *, .claude-sdk-lab *::before, .claude-sdk-lab *::after { scroll-behavior: auto !important; transition: none !important; animation: none !important; } } @media print { .claude-interactive, .noscript-note { display: none !important; } .fallback { display: block !important; } .fallback summary { display: none; } }
+</style>

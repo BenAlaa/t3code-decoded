@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Upstream T3 Code support
+    url: https://github.com/pingdotgg/t3code/issues
+    about: Report T3 Code product bugs to the upstream project, not this study guide.

@@ -1,0 +1,140 @@
+---
+interface Props { id: string; chart: string; label: string; }
+const { id, chart, label } = Astro.props;
+if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(id)) {
+  throw new Error(`Mermaid '${label}' requires a stable kebab-case id.`);
+}
+const explorerId = `diagram-${id}`;
+---
+
+<section class="diagram-explorer" data-diagram-explorer data-diagram-state="pending" aria-labelledby={`${explorerId}-label`}>
+  <div data-diagram-origin>
+    <div class="diagram-surface" data-diagram-surface>
+      <div class="diagram-toolbar">
+        <strong id={`${explorerId}-label`}>{label}</strong>
+        <div class="diagram-actions" role="toolbar" aria-label={`${label} view controls`}>
+          <button type="button" data-diagram-action="pan" aria-pressed="false" aria-label="Pan diagram" title="Toggle pan mode (Enter)"><span aria-hidden="true">✥</span><span>Pan</span></button>
+          <button type="button" data-diagram-action="zoom-out" aria-label="Zoom out" aria-keyshortcuts="-" title="Zoom out (-)"><span aria-hidden="true">−</span></button>
+          <button type="button" data-diagram-action="reset" aria-label="Reset diagram view" aria-keyshortcuts="0" title="Reset view (0)"><span aria-hidden="true">Fit</span></button>
+          <button type="button" data-diagram-action="zoom-in" aria-label="Zoom in" aria-keyshortcuts="+" title="Zoom in (+)"><span aria-hidden="true">+</span></button>
+          <button type="button" data-diagram-action="expand" aria-expanded="false" aria-controls={`${explorerId}-dialog`} aria-label="Expand diagram" title="Expand diagram"><span aria-hidden="true">⛶</span><span>Expand</span></button>
+        </div>
+        <output class="diagram-status" data-diagram-status aria-live="off" aria-atomic="true">Diagram loading</output>
+      </div>
+      <div
+        class="diagram-viewport"
+        data-diagram-viewport
+        data-pan-enabled="false"
+        data-dragging="false"
+        tabindex="0"
+        role="group"
+        aria-roledescription="interactive diagram"
+        aria-label={label}
+        aria-describedby={`${explorerId}-help`}
+      >
+        <pre class="mermaid" data-mermaid-pending data-diagram-content aria-hidden="true">{chart}</pre>
+      </div>
+      <p class="diagram-help" id={`${explorerId}-help`}>
+        Zoom with the controls, <kbd>+</kbd>/<kbd>−</kbd>, or <kbd>Ctrl</kbd>/<kbd>⌘</kbd> + trackpad scroll. Enable Pan to drag, use two-finger scrolling, or use the arrow keys. <kbd>0</kbd> fits the diagram; <kbd>Esc</kbd> leaves Pan or expanded view.
+      </p>
+    </div>
+  </div>
+
+  <dialog class="diagram-dialog" id={`${explorerId}-dialog`} data-diagram-dialog aria-labelledby={`${explorerId}-dialog-title`}>
+    <div class="diagram-dialog-shell">
+      <header>
+        <strong id={`${explorerId}-dialog-title`}>{label}</strong>
+        <button type="button" class="diagram-close" data-diagram-close aria-label="Close expanded diagram">Close <span aria-hidden="true">×</span></button>
+      </header>
+      <div class="diagram-dialog-host" data-diagram-dialog-host></div>
+    </div>
+  </dialog>
+</section>
+
+<script>
+  import { initDiagramExplorer } from "../lib/diagram-explorer";
+
+  let observer: IntersectionObserver | undefined;
+  let mermaidPromise: Promise<typeof import("mermaid").default> | undefined;
+
+  const loadMermaid = async () => {
+    if (mermaidPromise) return mermaidPromise;
+    mermaidPromise = import("mermaid").then(({ default: mermaid }) => {
+      mermaid.initialize({
+        startOnLoad: false,
+        securityLevel: "strict",
+        theme: "base",
+        fontFamily: "Inter, system-ui, sans-serif",
+        themeVariables: {
+          fontSize: "13px",
+          background: "#091222",
+          primaryColor: "#111d30",
+          primaryTextColor: "#f3f6fb",
+          primaryBorderColor: "#465774",
+          secondaryColor: "#221a2f",
+          secondaryTextColor: "#f3f6fb",
+          secondaryBorderColor: "#7652c6",
+          tertiaryColor: "#25191b",
+          tertiaryTextColor: "#f3f6fb",
+          tertiaryBorderColor: "#e31b23",
+          lineColor: "#8fa0b7",
+          textColor: "#f3f6fb",
+          noteBkgColor: "#25191b",
+          noteTextColor: "#f3f6fb",
+          noteBorderColor: "#e31b23",
+          actorBkg: "#111d30",
+          actorBorder: "#465774",
+          actorTextColor: "#f3f6fb",
+          actorLineColor: "#8fa0b7",
+          signalColor: "#8fa0b7",
+          signalTextColor: "#f3f6fb",
+        },
+        flowchart: { htmlLabels: false, curve: "basis" },
+      });
+      return mermaid;
+    });
+    return mermaidPromise;
+  };
+
+  const render = async (requested: HTMLElement[]) => {
+    const nodes = requested.filter((node) => node.dataset.mermaidPending !== "rendering" && node.dataset.mermaidPending !== "done");
+    if (nodes.length === 0) return;
+    for (const node of nodes) {
+      node.dataset.mermaidPending = "rendering";
+      observer?.unobserve(node);
+    }
+    try {
+      const mermaid = await loadMermaid();
+      await mermaid.run({ nodes });
+      for (const node of nodes) {
+        node.dataset.mermaidPending = "done";
+        const explorer = node.closest<HTMLElement>("[data-diagram-explorer]");
+        if (!explorer) continue;
+        explorer.dataset.diagramState = "ready";
+        initDiagramExplorer(explorer);
+      }
+    } catch (error) {
+      console.error("Diagram render failed", error);
+      for (const node of nodes) {
+        node.dataset.mermaidError = "true";
+        const explorer = node.closest<HTMLElement>("[data-diagram-explorer]");
+        if (explorer) explorer.dataset.diagramState = "error";
+      }
+    }
+  };
+
+  const pending = [...document.querySelectorAll<HTMLElement>("[data-mermaid-pending]")];
+  if (pending.length > 0 && "IntersectionObserver" in window) {
+    observer = new IntersectionObserver((entries) => {
+      void render(entries.filter((entry) => entry.isIntersecting).map((entry) => entry.target as HTMLElement));
+    }, { rootMargin: "320px 0px" });
+    pending.forEach((node) => observer?.observe(node));
+  } else {
+    void render(pending);
+  }
+
+  window.addEventListener("beforeprint", () => {
+    document.querySelectorAll<HTMLDialogElement>("[data-diagram-dialog][open]").forEach((dialog) => dialog.close());
+    void render([...document.querySelectorAll<HTMLElement>("[data-mermaid-pending]")]);
+  });
+</script>

@@ -1,0 +1,16 @@
+---
+interface Decision { label: string; title: string; text: string; }
+interface Props { items: Decision[]; }
+const { items } = Astro.props;
+---
+
+<div class="decision-grid">
+  {items.map((item) => (
+    <article class="decision">
+      <span class="decision-label">{item.label}</span>
+      <h3>{item.title}</h3>
+      <p>{item.text}</p>
+    </article>
+  ))}
+</div>
+

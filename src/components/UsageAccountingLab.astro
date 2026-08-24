@@ -1,0 +1,259 @@
+---
+interface Props { id: string; }
+const { id } = Astro.props;
+if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(id)) {
+  throw new Error("UsageAccountingLab requires a stable kebab-case id.");
+}
+
+const rows = [
+  { file: "claude/a.jsonl", record: "C-1a", provider: "Claude", key: "m-1:r-1", tokens: 160, state: "first copy" },
+  { file: "claude/a.jsonl", record: "C-1b", provider: "Claude", key: "m-1:r-1", tokens: 160, state: "within-file duplicate" },
+  { file: "claude/b.jsonl", record: "C-1c", provider: "Claude", key: "m-1:r-1", tokens: 160, state: "cross-file copy" },
+  { file: "codex/x.jsonl", record: "X-1", provider: "Codex", key: "none · parser-local suppression", tokens: 58, state: "distinct record" },
+];
+const labId = `usage-accounting-${id}`;
+---
+
+<section class="usage-accounting-lab" data-usage-accounting-lab data-usage-ready="initializing" aria-labelledby={`${labId}-title`}>
+  <header class="usage-lab-head">
+    <span>Interactive accounting laboratory</span>
+    <h3 id={`${labId}-title`}>A file-derived total is built in stages</h3>
+    <p>Move through the historical lane. The live context sample stays visible as a deliberately excluded operational signal.</p>
+  </header>
+
+  <div class="usage-lab-rule" role="note">
+    <strong>Live lane, not an input:</strong> thread <code>T-9</code> currently reports <code>88,000 / 200,000</code> context tokens. It changes the composer meter only; it contributes <strong>0</strong> tokens and <strong>$0</strong> to the historical total below.
+  </div>
+
+  <div class="usage-stage-tabs" role="tablist" aria-label="Historical usage accounting stages">
+    <button type="button" role="tab" aria-selected="true" aria-controls={`${labId}-panel`} id={`${labId}-raw`} data-usage-stage="raw">1. Parse</button>
+    <button type="button" role="tab" aria-selected="false" aria-controls={`${labId}-panel`} id={`${labId}-normalize`} data-usage-stage="normalize">2. Normalize</button>
+    <button type="button" role="tab" aria-selected="false" aria-controls={`${labId}-panel`} id={`${labId}-dedupe`} data-usage-stage="dedupe">3. Dedupe</button>
+    <button type="button" role="tab" aria-selected="false" aria-controls={`${labId}-panel`} id={`${labId}-bucket-tab`} data-usage-stage="bucket">4. Bucket</button>
+    <button type="button" role="tab" aria-selected="false" aria-controls={`${labId}-panel`} id={`${labId}-price-tab`} data-usage-stage="price">5. Price</button>
+    <button type="button" role="tab" aria-selected="false" aria-controls={`${labId}-panel`} id={`${labId}-merge-tab`} data-usage-stage="merge">6. Merge</button>
+  </div>
+
+  <noscript><p class="usage-noscript">The controls need JavaScript. The complete static walkthrough immediately below contains every stage and result.</p></noscript>
+
+  <article class="usage-stage-panel" id={`${labId}-panel`} role="tabpanel" aria-live="polite" aria-labelledby={`${labId}-raw`} tabindex="0" data-usage-panel>
+    <p class="usage-stage-kicker" data-usage-kicker>Stage 1 of 6 · parse records</p>
+    <h4 data-usage-title>Four candidate records arrive from three files</h4>
+    <p data-usage-copy>The scanner streams provider JSONL. These are candidate usage records, not yet a total.</p>
+    <div class="usage-table-wrap" tabindex="0" role="region" aria-label="Candidate transcript records">
+      <table>
+        <thead><tr><th scope="col">File</th><th scope="col">Record</th><th scope="col">Dedupe identity</th><th scope="col">Tokens</th><th scope="col">Status</th></tr></thead>
+        <tbody data-usage-rows>
+          {rows.map((row) => <tr><td><code>{row.file}</code></td><td>{row.record}</td><td><code>{row.key}</code></td><td>{row.tokens}</td><td>{row.state}</td></tr>)}
+        </tbody>
+      </table>
+    </div>
+    <dl class="usage-result-grid" data-usage-result-grid>
+      <div><dt>Candidate tokens</dt><dd>538</dd></div>
+      <div><dt>Historical total</dt><dd>not calculated</dd></div>
+      <div><dt>Live meter input</dt><dd>excluded</dd></div>
+    </dl>
+  </article>
+
+  <div class="usage-formulas" aria-label="Visible accounting formulas">
+    <h4>Formulas used by the lab</h4>
+    <p><code>processed = uncached input + cached input + cache creation + output</code></p>
+    <p><code>cost = uncached×inputRate + cached×cacheReadRate + creation×creationRate + output×outputRate</code></p>
+    <p><code>historical total = Σ kept, in-range records after source-fingerprint ownership</code></p>
+    <p><code>reasoning ⊆ output; do not add it a second time</code></p>
+  </div>
+
+  <details class="usage-static-walkthrough" open>
+    <summary>Static walkthrough and no-JavaScript reference</summary>
+    <ol>
+      <li><strong>Parse.</strong> Candidate rows total 538 tokens: three 160-token Claude copies and one 58-token Codex record.</li>
+      <li><strong>Normalize.</strong> Claude's usage maps to <code>100 uncached + 30 cached + 10 creation + 20 output = 160</code>. Codex's input includes cache, so it maps to <code>40 uncached + 10 cached + 0 creation + 8 output = 58</code>.</li>
+      <li><strong>Within-file dedupe.</strong> Keep <code>C-1a</code>; drop <code>C-1b</code>, which repeats the same Claude message/request key in <code>a.jsonl</code>.</li>
+      <li><strong>Cross-file dedupe.</strong> Keep the first surviving Claude key; drop <code>C-1c</code> from the copied/resumed file. Codex has no global key here: its parser-local delta/fork suppression has already accepted distinct record <code>X-1</code>. The subtotal is <strong>218 tokens</strong>.</li>
+      <li><strong>Bucket and price.</strong> Place the two retained records in their day/provider/model buckets. The displayed formula applies model rates only when no finite provider-reported cost exists; price provenance remains part of the result.</li>
+      <li><strong>Merge environments.</strong> Environment A owns the Claude source fingerprint. Environment B reports the identical fingerprint and is a shadow copy, so its Claude bucket is excluded. Environment C owns a different Codex fingerprint. The merged historical total remains <strong>218 tokens</strong>.</li>
+    </ol>
+    <p><strong>Still excluded:</strong> the live <code>88,000 / 200,000</code> thread context snapshot. It answers a capacity question, not this historical file-accounting question.</p>
+  </details>
+</section>
+
+<script>
+  type Stage = "raw" | "normalize" | "dedupe" | "bucket" | "price" | "merge";
+  interface StageView {
+    kicker: string;
+    title: string;
+    copy: string;
+    rows: Array<[string, string, string, string, string]>;
+    results: Array<[string, string]>;
+  }
+
+  const stageViews: Record<Stage, StageView> = {
+    raw: {
+      kicker: "Stage 1 of 6 · parse records",
+      title: "Four candidate records arrive from three files",
+      copy: "The scanner streams provider JSONL. These are candidate usage records, not yet a total.",
+      rows: [
+        ["claude/a.jsonl", "C-1a", "m-1:r-1", "160", "first copy"],
+        ["claude/a.jsonl", "C-1b", "m-1:r-1", "160", "within-file duplicate"],
+        ["claude/b.jsonl", "C-1c", "m-1:r-1", "160", "cross-file copy"],
+        ["codex/x.jsonl", "X-1", "none · parser-local suppression", "58", "distinct record"],
+      ],
+      results: [["Candidate tokens", "538"], ["Historical total", "not calculated"], ["Live meter input", "excluded"]],
+    },
+    normalize: {
+      kicker: "Stage 2 of 6 · normalize provider shapes",
+      title: "Provider-specific fields become disjoint token categories",
+      copy: "Claude already supplies cache categories. Codex input includes cache, so normalization subtracts it before total accounting.",
+      rows: [
+        ["Claude C-1", "100 + 30 + 10 + 20", "uncached + cached + creation + output", "160", "normalized"],
+        ["Codex X-1", "40 + 10 + 0 + 8", "uncached + cached + creation + output", "58", "normalized"],
+      ],
+      results: [["Claude candidate copies", "3 × 160"], ["Codex candidate", "58"], ["Reasoning treatment", "already within output"]],
+    },
+    dedupe: {
+      kicker: "Stage 3 of 6 · within-file then cross-file dedupe",
+      title: "One Claude record and one Codex record survive",
+      copy: "The same Claude message/request key is first removed within a file and then across copied files. The Codex record already survived parser-local delta/fork suppression.",
+      rows: [
+        ["claude/a.jsonl", "C-1a", "m-1:r-1", "160", "kept"],
+        ["claude/a.jsonl", "C-1b", "m-1:r-1", "160", "dropped within file"],
+        ["claude/b.jsonl", "C-1c", "m-1:r-1", "160", "dropped across files"],
+        ["codex/x.jsonl", "X-1", "none · parser-local suppression", "58", "kept"],
+      ],
+      results: [["Dropped duplicate tokens", "320"], ["Kept records", "2"], ["In-range subtotal", "218"]],
+    },
+    bucket: {
+      kicker: "Stage 4 of 6 · apply time bounds and bucket",
+      title: "The retained records become separate provider/model buckets",
+      copy: "Only kept records inside the requested range contribute. A daily request uses the selected IANA day; an hourly request uses exact instants.",
+      rows: [
+        ["2026-08-12", "Claude / model A", "C-1a", "160", "one day bucket"],
+        ["2026-08-12", "Codex / model B", "X-1", "58", "one day bucket"],
+      ],
+      results: [["Bucket count", "2"], ["Distinct source sessions", "2"], ["Historical subtotal", "218"]],
+    },
+    price: {
+      kicker: "Stage 5 of 6 · select cost provenance",
+      title: "Tokens can be priced without becoming an invoice",
+      copy: "A finite provider-reported cost wins. Otherwise the rate table applies the visible category formula; unavailable rates leave a bucket unpriced.",
+      rows: [
+        ["Claude / model A", "160", "rate-table categories", "API estimate", "modelPriced"],
+        ["Codex / model B", "58", "rate-table categories", "API estimate", "modelPriced"],
+      ],
+      results: [["Token total", "218"], ["Cost provenance", "modelPriced example"], ["Billing conclusion", "not established"]],
+    },
+    merge: {
+      kicker: "Stage 6 of 6 · merge connected environments",
+      title: "A shared physical source is counted once",
+      copy: "Host, provider, resolved home, and volume identify source ownership. A duplicate source is a shadow, while a distinct provider home contributes normally.",
+      rows: [
+        ["Environment A", "Claude fingerprint α", "owns C-1a", "160", "counted"],
+        ["Environment B", "Claude fingerprint α", "same physical source", "160", "shadowed"],
+        ["Environment C", "Codex fingerprint β", "owns X-1", "58", "counted"],
+      ],
+      results: [["Counted historical tokens", "218"], ["Shadow source tokens", "160 excluded"], ["Live context snapshot", "still excluded"]],
+    },
+  };
+
+  document.querySelectorAll<HTMLElement>("[data-usage-accounting-lab]").forEach((lab) => {
+    if (lab.dataset.usageReady === "true") return;
+    try {
+      const buttons = [...lab.querySelectorAll<HTMLButtonElement>("[data-usage-stage]")];
+      const panel = lab.querySelector<HTMLElement>("[data-usage-panel]");
+      const kicker = lab.querySelector<HTMLElement>("[data-usage-kicker]");
+      const title = lab.querySelector<HTMLElement>("[data-usage-title]");
+      const copy = lab.querySelector<HTMLElement>("[data-usage-copy]");
+      const body = lab.querySelector<HTMLTableSectionElement>("[data-usage-rows]");
+      const results = lab.querySelector<HTMLElement>("[data-usage-result-grid]");
+
+      const cell = (text: string, code = false) => {
+        const td = document.createElement("td");
+        if (code) {
+          const element = document.createElement("code");
+          element.textContent = text;
+          td.append(element);
+        } else td.textContent = text;
+        return td;
+      };
+      const render = (stage: Stage) => {
+        const view = stageViews[stage];
+        if (!view || !body || !results) return;
+        if (kicker) kicker.textContent = view.kicker;
+        if (title) title.textContent = view.title;
+        if (copy) copy.textContent = view.copy;
+        body.replaceChildren(...view.rows.map((row) => {
+          const tr = document.createElement("tr");
+          tr.append(cell(row[0], true), cell(row[1]), cell(row[2], true), cell(row[3]), cell(row[4]));
+          return tr;
+        }));
+        results.replaceChildren(...view.results.map(([term, description]) => {
+          const div = document.createElement("div");
+          const dt = document.createElement("dt");
+          const dd = document.createElement("dd");
+          dt.textContent = term;
+          dd.textContent = description;
+          div.append(dt, dd);
+          return div;
+        }));
+        buttons.forEach((button) => {
+          const selected = button.dataset.usageStage === stage;
+          button.setAttribute("aria-selected", String(selected));
+          button.tabIndex = selected ? 0 : -1;
+        });
+        const selected = buttons.find((button) => button.dataset.usageStage === stage);
+        if (panel && selected) panel.setAttribute("aria-labelledby", selected.id);
+      };
+      buttons.forEach((button, index) => {
+        button.addEventListener("click", () => render(button.dataset.usageStage as Stage));
+        button.addEventListener("keydown", (event) => {
+          if (!["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Home", "End"].includes(event.key)) return;
+          event.preventDefault();
+          const backwards = event.key === "ArrowLeft" || event.key === "ArrowUp";
+          const next = event.key === "Home" ? 0 : event.key === "End" ? buttons.length - 1 : (index + (backwards ? -1 : 1) + buttons.length) % buttons.length;
+          buttons[next].focus();
+          render(buttons[next].dataset.usageStage as Stage);
+        });
+      });
+      render("raw");
+      lab.dataset.usageReady = "true";
+    } catch { lab.dataset.usageReady = "error"; }
+  });
+</script>
+
+<style>
+  .usage-accounting-lab { margin: 2rem 0; border: 1px solid var(--line-strong); border-radius: 1rem; overflow: hidden; background: color-mix(in srgb, var(--paper-raised) 94%, var(--signal)); font-family: var(--font-ui); }
+  .usage-lab-head { padding: 1.35rem 1.35rem 1rem; background: color-mix(in srgb, var(--signal) 10%, transparent); }
+  .usage-lab-head > span, .usage-stage-kicker { color: var(--ink-soft); font-size: .82rem; font-weight: 700; letter-spacing: .055em; text-transform: uppercase; }
+  .usage-lab-head h3 { margin: .3rem 0; }
+  .usage-lab-head p { margin: 0; max-width: 72ch; }
+  .usage-lab-rule { margin: 1rem 1.35rem; padding: .85rem 1rem; border-left: 4px solid var(--signal); background: color-mix(in srgb, var(--signal) 9%, transparent); }
+  .usage-accounting-lab:not([data-usage-ready="true"]) .usage-stage-tabs, .usage-accounting-lab:not([data-usage-ready="true"]) .usage-stage-panel { display: none; }
+  .usage-accounting-lab[data-usage-ready="true"] .usage-static-walkthrough { display: none; }
+  .usage-stage-tabs { display: flex; gap: .45rem; overflow-x: auto; padding: 0 1.35rem .8rem; border-bottom: 1px solid var(--line); }
+  .usage-stage-tabs button { flex: 0 0 auto; border: 1px solid var(--line); border-radius: 99px; padding: .5rem .7rem; background: var(--paper); color: var(--ink); font: inherit; cursor: pointer; }
+  .usage-stage-tabs button[aria-selected="true"] { border-color: var(--signal); background: var(--signal); color: var(--paper-raised); }
+  .usage-stage-tabs button:focus-visible { outline: 3px solid color-mix(in srgb, var(--signal) 50%, transparent); outline-offset: 2px; }
+  .usage-stage-panel { padding: 1.2rem 1.35rem; }
+  .usage-stage-panel h4 { margin: .25rem 0 .35rem; }
+  .usage-stage-panel > p { margin-top: 0; }
+  .usage-table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: .65rem; }
+  .usage-table-wrap:focus-visible { outline: 3px solid color-mix(in srgb, var(--signal) 50%, transparent); outline-offset: 2px; }
+  .usage-table-wrap table { width: 100%; min-width: 42rem; border-collapse: collapse; font-size: .9rem; }
+  .usage-table-wrap th, .usage-table-wrap td { padding: .6rem .7rem; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+  .usage-table-wrap tbody tr:last-child td { border-bottom: 0; }
+  .usage-table-wrap th { background: color-mix(in srgb, var(--paper-raised) 85%, var(--ink-soft)); }
+  .usage-result-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .7rem; margin: 1rem 0 0; }
+  .usage-result-grid div { padding: .7rem; border-radius: .55rem; background: color-mix(in srgb, var(--signal) 8%, transparent); }
+  .usage-result-grid dt { font-size: .78rem; color: var(--ink-soft); }
+  .usage-result-grid dd { margin: .25rem 0 0; font-weight: 700; }
+  .usage-formulas { margin: 0 1.35rem 1.2rem; padding: .9rem 1rem; border: 1px dashed var(--line); border-radius: .65rem; }
+  .usage-formulas h4 { margin: 0 0 .5rem; }
+  .usage-formulas p { margin: .35rem 0; overflow-wrap: anywhere; }
+  .usage-static-walkthrough { margin: 0 1.35rem 1.35rem; padding: .8rem 1rem; border-radius: .65rem; background: color-mix(in srgb, var(--paper-raised) 82%, var(--ink-soft)); }
+  .usage-static-walkthrough summary { cursor: pointer; font-weight: 700; }
+  .usage-static-walkthrough li { margin: .55rem 0; }
+  .usage-noscript { margin: .5rem 1.35rem; padding: .65rem; border-radius: .4rem; background: color-mix(in srgb, var(--orange) 14%, var(--paper-raised)); }
+  @media (max-width: 42rem) { .usage-result-grid { grid-template-columns: 1fr; } .usage-lab-head, .usage-stage-panel { padding-left: 1rem; padding-right: 1rem; } .usage-lab-rule, .usage-formulas, .usage-static-walkthrough { margin-left: 1rem; margin-right: 1rem; } .usage-stage-tabs { padding-left: 1rem; padding-right: 1rem; } }
+  @media (prefers-reduced-motion: reduce) { .usage-accounting-lab *, .usage-accounting-lab *::before, .usage-accounting-lab *::after { scroll-behavior: auto !important; transition: none !important; animation: none !important; } }
+  @media print { .usage-stage-tabs, .usage-noscript { display: none !important; } .usage-accounting-lab { border-color: #777; break-inside: avoid; } .usage-stage-panel { display: none !important; } .usage-static-walkthrough { display: block !important; } .usage-static-walkthrough summary { display: none; } }
+</style>

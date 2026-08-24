@@ -1,0 +1,256 @@
+---
+import { getSourceReference, sourceReferenceHref, sourceReferenceLabel } from "../lib/sources";
+
+interface FlowStep {
+  label: string;
+  title: string;
+  detail: string;
+  actor?: string;
+  sourceIds: string[];
+  tone?: "client" | "transport" | "durable" | "runtime" | "side-effect" | "failure" | "neutral";
+}
+interface Props {
+  id: string;
+  title: string;
+  prompt: string;
+  steps: FlowStep[];
+}
+const { id, title, prompt, steps } = Astro.props;
+if (steps.length < 2) throw new Error(`FlowLab '${title}' requires at least two steps.`);
+if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(id)) throw new Error(`FlowLab '${title}' requires a stable kebab-case id.`);
+const labId = `flow-${id}`;
+const toneLabels = {
+  client: "Client state",
+  transport: "Transport boundary",
+  durable: "Durable state",
+  runtime: "Runtime work",
+  "side-effect": "External side effect",
+  failure: "Failure state",
+  neutral: "Flow state",
+} as const;
+const resolved = steps.map(({ sourceIds, ...step }) => ({
+  ...step,
+  toneLabel: toneLabels[step.tone ?? "neutral"],
+  sources: sourceIds.map((id) => {
+    const source = getSourceReference(id);
+    return { label: sourceReferenceLabel(source), href: sourceReferenceHref(source) };
+  }),
+}));
+const payload = JSON.stringify(resolved).replaceAll("<", "\\u003c");
+---
+
+<section class="flow-lab" data-flow-lab aria-labelledby={`${labId}-title`} style={`--flow-count: ${steps.length}`}>
+  <header class="flow-head">
+    <span>Interactive flow</span>
+    <h3 id={`${labId}-title`}>{title}</h3>
+    <p>{prompt}</p>
+  </header>
+  <div class="flow-controls">
+    <button type="button" data-flow-prev disabled>← Previous</button>
+    <button type="button" data-flow-play aria-pressed="false">Play flow</button>
+    <button type="button" data-flow-next>Next →</button>
+    <span class="flow-counter" data-flow-counter>1 / {steps.length}</span>
+  </div>
+  <div class="flow-viewport" data-flow-viewport>
+    <div class="flow-track-shell" data-flow-track>
+      <div class="flow-rail" data-flow-rail aria-hidden="true"><span data-flow-fill></span></div>
+      <span class="flow-token" data-flow-token aria-hidden="true"><i></i></span>
+      <ol class="flow-track" aria-label={`${title} stages`}>
+        {resolved.map((step, index) => (
+          <li>
+            <button
+              type="button"
+              class:list={["flow-node", `tone-${step.tone ?? "neutral"}`, { active: index === 0 }]}
+              data-flow-index={index}
+              aria-current={index === 0 ? "step" : undefined}
+              tabindex={index === 0 ? 0 : -1}
+              aria-label={`Step ${index + 1}: ${step.label}`}
+            >
+              <span>{index + 1}</span>
+              <strong>{step.label}</strong>
+            </button>
+          </li>
+        ))}
+      </ol>
+    </div>
+  </div>
+  <p class="sr-only" role="status" aria-live="polite" aria-atomic="true" data-flow-status>Step 1 of {steps.length}: {resolved[0].label}</p>
+  <div class:list={["flow-detail", `tone-${resolved[0].tone ?? "neutral"}`]} data-flow-detail>
+    <div class="flow-detail-meta"><span data-flow-actor>{resolved[0].actor ?? "Flow step"}</span><strong data-flow-tone>{resolved[0].toneLabel}</strong><code data-flow-label>{resolved[0].label}</code></div>
+    <h4 data-flow-title>{resolved[0].title}</h4>
+    <p data-flow-copy>{resolved[0].detail}</p>
+    <div class="flow-sources" data-flow-sources>
+      {resolved[0].sources.map((source) => <a href={source.href} rel="noreferrer"><code>{source.label}</code> ↗</a>)}
+    </div>
+  </div>
+  <script type="application/json" data-flow-data set:html={payload}></script>
+  <ol class="flow-print" aria-label={`${title}, all steps`}>
+    {resolved.map((step, index) => (
+      <li>
+        <strong>{index + 1}. {step.label} · {step.title}</strong> <span>({step.toneLabel})</span>
+        <p>{step.detail}</p>
+        {step.sources.map((source) => <a href={source.href} rel="noreferrer"><code>{source.label}</code> ↗</a>)}
+      </li>
+    ))}
+  </ol>
+</section>
+
+<script>
+  import { animateLabPanel, handleRovingKeys, LAB_MOTION, setPlaybackState } from "../lib/lab-motion";
+
+  document.querySelectorAll<HTMLElement>("[data-flow-lab]").forEach((lab) => {
+    if (lab.dataset.flowReady === "true") return;
+    lab.dataset.flowReady = "true";
+    const steps = JSON.parse(lab.querySelector("[data-flow-data]")?.textContent ?? "[]");
+    const nodes = [...lab.querySelectorAll<HTMLButtonElement>("[data-flow-index]")];
+    const viewport = lab.querySelector<HTMLElement>("[data-flow-viewport]");
+    const track = lab.querySelector<HTMLElement>("[data-flow-track]");
+    const rail = lab.querySelector<HTMLElement>("[data-flow-rail]");
+    const fill = lab.querySelector<HTMLElement>("[data-flow-fill]");
+    const token = lab.querySelector<HTMLElement>("[data-flow-token]");
+    const detail = lab.querySelector<HTMLElement>("[data-flow-detail]");
+    const previous = lab.querySelector<HTMLButtonElement>("[data-flow-prev]");
+    const next = lab.querySelector<HTMLButtonElement>("[data-flow-next]");
+    const play = lab.querySelector<HTMLButtonElement>("[data-flow-play]");
+    const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+    let index = 0;
+    let timer: number | undefined;
+    let playing = false;
+    let panelAnimation: Animation | undefined;
+    let resizeObserver: ResizeObserver | undefined;
+
+    const setText = (selector: string, value: string) => {
+      const node = lab.querySelector(selector);
+      if (node) node.textContent = value;
+    };
+    const position = (shouldScroll = false) => {
+      const current = nodes[index];
+      const first = nodes[0];
+      const last = nodes.at(-1);
+      if (!current || !first || !last || !track) return;
+      const trackRect = track.getBoundingClientRect();
+      const centerFor = (node: HTMLElement) => {
+        const rect = node.getBoundingClientRect();
+        return rect.left - trackRect.left + rect.width / 2;
+      };
+      const firstCenter = centerFor(first);
+      const lastCenter = centerFor(last);
+      const currentCenter = centerFor(current);
+      if (rail) {
+        rail.style.left = `${firstCenter}px`;
+        rail.style.width = `${Math.max(0, lastCenter - firstCenter)}px`;
+      }
+      if (fill) fill.style.width = `${Math.max(0, currentCenter - firstCenter)}px`;
+      if (token) token.style.transform = `translateX(${currentCenter}px)`;
+      if (shouldScroll && viewport) {
+        viewport.scrollTo({
+          left: Math.max(0, currentCenter - viewport.clientWidth / 2),
+          behavior: reduceMotion.matches ? "auto" : "smooth",
+        });
+      }
+    };
+    const renderSources = (sources: Array<{ label: string; href: string }>) => {
+      const container = lab.querySelector("[data-flow-sources]");
+      if (!container) return;
+      container.replaceChildren(...sources.map((source) => {
+        const link = document.createElement("a");
+        link.href = source.href;
+        link.rel = "noreferrer";
+        const code = document.createElement("code");
+        code.textContent = source.label;
+        link.append(code, " ↗");
+        return link;
+      }));
+    };
+    const paint = (nextIndex: number, shouldScroll = true) => {
+      const current = steps[nextIndex];
+      if (!current) return;
+      const direction = nextIndex >= index ? 1 : -1;
+      index = nextIndex;
+      nodes.forEach((node, nodeIndex) => {
+        node.classList.toggle("active", nodeIndex === index);
+        node.classList.toggle("passed", nodeIndex < index);
+        node.toggleAttribute("aria-current", nodeIndex === index);
+        if (nodeIndex === index) node.setAttribute("aria-current", "step");
+        node.tabIndex = nodeIndex === index ? 0 : -1;
+      });
+      if (detail) detail.className = `flow-detail tone-${current.tone ?? "neutral"}`;
+      setText("[data-flow-actor]", current.actor ?? "Flow step");
+      setText("[data-flow-tone]", current.toneLabel);
+      setText("[data-flow-label]", current.label);
+      setText("[data-flow-title]", current.title);
+      setText("[data-flow-copy]", current.detail);
+      setText("[data-flow-counter]", `${index + 1} / ${steps.length}`);
+      setText("[data-flow-status]", `Step ${index + 1} of ${steps.length}: ${current.label}`);
+      renderSources(current.sources);
+      if (previous) previous.disabled = index === 0;
+      if (next) next.disabled = index === steps.length - 1;
+      position(shouldScroll);
+      panelAnimation?.cancel();
+      panelAnimation = animateLabPanel(detail, direction, reduceMotion.matches);
+    };
+    const stop = () => {
+      if (timer !== undefined) window.clearTimeout(timer);
+      timer = undefined;
+      playing = false;
+      setPlaybackState(play, false, "flow");
+    };
+    const advance = () => {
+      if (!playing) return;
+      if (index >= steps.length - 1) {
+        stop();
+        return;
+      }
+      paint(index + 1);
+      timer = window.setTimeout(advance, LAB_MOTION.playbackStep);
+    };
+    previous?.addEventListener("click", () => { stop(); paint(Math.max(0, index - 1)); });
+    next?.addEventListener("click", () => { stop(); paint(Math.min(steps.length - 1, index + 1)); });
+    play?.addEventListener("click", () => {
+      if (playing) {
+        stop();
+        return;
+      }
+      if (reduceMotion.matches) return;
+      if (index === steps.length - 1) paint(0);
+      playing = true;
+      setPlaybackState(play, true, "flow");
+      timer = window.setTimeout(advance, LAB_MOTION.playbackLead);
+    });
+    nodes.forEach((node) => {
+      node.addEventListener("click", () => {
+        stop();
+        paint(Number(node.dataset.flowIndex));
+      });
+      node.addEventListener("keydown", (event) =>
+        handleRovingKeys(event, nodes, index, (requested) => {
+          stop();
+          paint(requested);
+        }),
+      );
+    });
+    const updateMotionPreference = () => {
+      if (reduceMotion.matches) {
+        stop();
+        panelAnimation?.cancel();
+      }
+      if (play) play.hidden = reduceMotion.matches;
+    };
+    reduceMotion.addEventListener("change", updateMotionPreference);
+    const stopWhenHidden = () => { if (document.hidden) stop(); };
+    document.addEventListener("visibilitychange", stopWhenHidden);
+    if ("ResizeObserver" in window) {
+      resizeObserver = new ResizeObserver(() => position());
+      resizeObserver.observe(track ?? lab);
+    }
+    window.addEventListener("pagehide", () => {
+      stop();
+      panelAnimation?.cancel();
+      resizeObserver?.disconnect();
+      reduceMotion.removeEventListener("change", updateMotionPreference);
+      document.removeEventListener("visibilitychange", stopWhenHidden);
+    }, { once: true });
+    updateMotionPreference();
+    requestAnimationFrame(() => position());
+  });
+</script>

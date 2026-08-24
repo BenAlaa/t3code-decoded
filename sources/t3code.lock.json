@@ -1,0 +1,14 @@
+{
+  "repository": "https://github.com/pingdotgg/t3code",
+  "commit": "fa219001dc2f14cfd9c7774c2c03c153359144be",
+  "shortCommit": "fa219001d",
+  "branch": "main",
+  "capturedAt": "2026-08-24T00:00:00+03:00",
+  "sourceDirHint": "../t3code",
+  "inventoryRulesVersion": 1,
+  "productionFiles": 1844,
+  "productionLines": 533213,
+  "testFiles": 881,
+  "testLines": 247766,
+  "notes": "Recomputed from pinned Git objects by scripts/inventory-source.mjs. Counts include tracked implementation/build source extensions, exclude assets and .repos, and classify test/spec/fixture paths separately; generated protocol source remains included."
+}

@@ -1,0 +1,3 @@
+# Repository-wide stewardship. Required review remains a branch rule rather than
+# a CODEOWNERS-only rule so knowledgeable contributors can review one another.
+* @BenAlaa

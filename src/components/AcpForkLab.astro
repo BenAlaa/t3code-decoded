@@ -1,0 +1,42 @@
+---
+interface Props { id: string; }
+const { id } = Astro.props;
+if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(id)) {
+  throw new Error("AcpForkLab requires a stable kebab-case id.");
+}
+const labId = `acp-fork-${id}`;
+
+const rows = [
+  { label: "Model & mode", cursor: "Sets a base model, then resolves a mode through returned configuration/mode aliases.", grok: "Uses the setup result’s current model and calls session/set_model only if the requested model differs.", boundary: "Both call into ACP, but their selection policies are adapter code—not a generic negotiated product feature." },
+  { label: "Question", cursor: "cursor/ask_question parks a Deferred and maps answers to canonical user-input events.", grok: "x.ai/ask_user_question (including an underscore variant) has its own response and cancellation mapping.", boundary: "Deferred callback waits are in-process. Durable requests exist only after later runtime ingestion." },
+  { label: "Interrupt race", cursor: "Cancels ACP and resolves pending waits; prompt-in-flight counting prevents a superseded prompt from settling too early.", grok: "Marks target id before a thread lock and suppresses late notifications for interrupted turns.", boundary: "A cancel notification crosses a process boundary; neither path is a durable stop proof." },
+  { label: "Rollback", cursor: "Truncates the adapter’s local read snapshot; no Cursor native revert call appears in this method.", grok: "Returns an explicit unsupported provider request error.", boundary: "Neither row is an orchestration-event rollback or a transaction with provider history." },
+];
+const payload = JSON.stringify(rows).replaceAll("<", "\\u003c");
+---
+
+<section class="acp-fork-lab" data-acp-fork-lab data-acp-ready="initializing" aria-labelledby={`${labId}-title`}>
+  <header><span>Interactive semantic fork</span><h3 id={`${labId}-title`}>One shared ACP rail, four distinct product decisions</h3><p>Select a concern to compare concrete adapter behavior and the boundary it does not cross.</p></header>
+  <div class="acp-interactive">
+    <div class="tabs" role="tablist" aria-label="ACP semantic concerns">{rows.map((row, index) => <button type="button" role="tab" id={`${labId}-tab-${index}`} aria-controls={`${labId}-panel`} data-acp-fork-index={index} aria-selected={index === 0 ? "true" : "false"} tabindex={index === 0 ? 0 : -1}>{row.label}</button>)}</div>
+    <p class="sr-only" role="status" aria-live="polite" aria-atomic="true" data-acp-fork-status>Selected {rows[0].label}</p>
+    <article id={`${labId}-panel`} role="tabpanel" aria-labelledby={`${labId}-tab-0`} data-acp-fork-panel><h4 data-acp-fork-label>{rows[0].label}</h4><dl><div><dt>Cursor</dt><dd data-acp-fork-cursor>{rows[0].cursor}</dd></div><div><dt>Grok</dt><dd data-acp-fork-grok>{rows[0].grok}</dd></div><div><dt>Boundary</dt><dd data-acp-fork-boundary>{rows[0].boundary}</dd></div></dl></article>
+  </div>
+  <details class="fallback" open><summary>All comparisons</summary><ol>{rows.map((row) => <li><strong>{row.label}</strong><p><b>Cursor:</b> {row.cursor}</p><p><b>Grok:</b> {row.grok}</p><p><b>Boundary:</b> {row.boundary}</p></li>)}</ol></details>
+  <noscript><p class="noscript-note">JavaScript is off; the expanded comparison remains available.</p></noscript><script type="application/json" data-acp-fork-data set:html={payload}></script>
+</section>
+<script>
+  document.querySelectorAll<HTMLElement>("[data-acp-fork-lab]").forEach((lab) => {
+    if (lab.dataset.acpReady === "true") return;
+    try {
+      const rows = JSON.parse(lab.querySelector("[data-acp-fork-data]")?.textContent ?? "[]"); const tabs = [...lab.querySelectorAll<HTMLButtonElement>("[data-acp-fork-index]")]; const panel = lab.querySelector<HTMLElement>("[data-acp-fork-panel]");
+      const set = (s: string, v: string) => { const n = lab.querySelector(s); if (n) n.textContent = v; };
+      const paint = (i: number, focus = false) => { const row = rows[i]; if (!row) return; tabs.forEach((t, x) => { t.setAttribute("aria-selected", String(i === x)); t.tabIndex = i === x ? 0 : -1; }); if (panel && tabs[i]?.id) panel.setAttribute("aria-labelledby", tabs[i].id); set("[data-acp-fork-status]", `Selected ${row.label}`); set("[data-acp-fork-label]", row.label); set("[data-acp-fork-cursor]", row.cursor); set("[data-acp-fork-grok]", row.grok); set("[data-acp-fork-boundary]", row.boundary); if (focus) tabs[i]?.focus(); };
+      tabs.forEach((tab, i) => { tab.addEventListener("click", () => paint(i)); tab.addEventListener("keydown", (e) => { let n: number | undefined; if (e.key === "ArrowRight" || e.key === "ArrowDown") n = (i + 1) % tabs.length; if (e.key === "ArrowLeft" || e.key === "ArrowUp") n = (i - 1 + tabs.length) % tabs.length; if (e.key === "Home") n = 0; if (e.key === "End") n = tabs.length - 1; if (n === undefined) return; e.preventDefault(); paint(n, true); }); });
+      paint(0); lab.dataset.acpReady = "true";
+    } catch { lab.dataset.acpReady = "error"; }
+  });
+</script>
+<style>
+  .acp-fork-lab { margin: 2rem 0; border: 1px solid var(--line-strong); border-radius: 14px; overflow: hidden; background: var(--paper-raised); font-family: var(--font-ui); } header { padding: 1rem 1.2rem; border-bottom: 1px solid var(--line); } header span { color: var(--signal-deep); font: 750 .65rem/1 var(--font-ui); letter-spacing: .1em; text-transform: uppercase; } h3 { margin: .35rem 0; } header p { margin: 0; color: var(--ink-soft); font-size: .82rem; } .acp-fork-lab:not([data-acp-ready="true"]) .acp-interactive { display: none; } .acp-fork-lab[data-acp-ready="true"] .fallback { display: none; } .tabs { display:flex; gap:.4rem; overflow-x:auto; padding:1rem 1.2rem .5rem; } button { flex:0 0 auto; min-height:2.2rem; border:1px solid var(--line); border-radius:999px; background:var(--paper); color:var(--ink-soft); cursor:pointer; padding:.4rem .7rem; } button[aria-selected="true"] { border-color:var(--signal); background:var(--signal-soft); color:var(--ink); } article { margin:.5rem 1.2rem 1rem; padding:.9rem; border-left:4px solid var(--blue); background:var(--paper-muted); } h4 { margin:0 0 .6rem; } dl { display:grid; grid-template-columns:repeat(3,1fr); gap:.55rem; margin:0; } dl div { padding:.65rem; border:1px solid var(--line); background:var(--paper-raised); } dt { color:var(--ink-faint); font-size:.62rem; font-weight:750; letter-spacing:.08em; text-transform:uppercase; } dd { margin:.25rem 0 0; font-size:.77rem; line-height:1.45; } .fallback { margin:0 1.2rem 1.1rem; } .fallback li { margin:.7rem 0; } .fallback p { margin:.2rem 0; color:var(--ink-soft); font-size:.75rem; } .noscript-note { margin:0 1.2rem 1rem; color:var(--ink-faint); } @media (max-width:650px) { dl { grid-template-columns:1fr; } } @media (prefers-reduced-motion:reduce) { .acp-fork-lab *, .acp-fork-lab *::before, .acp-fork-lab *::after { scroll-behavior:auto !important; transition:none !important; animation:none !important; } } @media print { .acp-interactive, .noscript-note { display:none !important; } .fallback { display:block !important; } .fallback summary { display:none; } }
+</style>

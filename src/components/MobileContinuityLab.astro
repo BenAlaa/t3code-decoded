@@ -1,0 +1,329 @@
+---
+interface Props { id: string; }
+
+const { id } = Astro.props;
+if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(id)) {
+  throw new Error("MobileContinuityLab requires a stable kebab-case id.");
+}
+const labId = `mobile-continuity-${id}`;
+---
+
+<section class="mobile-continuity" data-mobile-continuity data-mobile-continuity-ready="initializing" aria-labelledby={`${labId}-title`}>
+  <header class="mobile-continuity__head">
+    <span>Interactive continuity lab · Chapter 33</span>
+    <h3 id={`${labId}-title`}>Protect intent before crossing a lifecycle boundary</h3>
+    <p>Switch tracks and failure cases, then step through the exact guard that keeps an offline command or downloaded update from outrunning its durable state.</p>
+  </header>
+
+  <div class="mobile-continuity__interactive">
+    <div class="mobile-continuity__tabs" role="tablist" aria-label="Mobile continuity tracks">
+      <button type="button" role="tab" id={`${labId}-outbox`} aria-selected="true" aria-controls={`${labId}-panel`} tabindex="0" data-track="outbox">Offline command outbox</button>
+      <button type="button" role="tab" id={`${labId}-update`} aria-selected="false" aria-controls={`${labId}-panel`} tabindex="-1" data-track="update">OTA restart handoff</button>
+    </div>
+
+    <div class="mobile-continuity__controls">
+      <label for={`${labId}-scenario`}>Teaching case</label>
+      <select id={`${labId}-scenario`} data-scenario></select>
+      <div class="mobile-continuity__step-buttons" aria-label="Timeline controls">
+        <button type="button" data-previous>Previous</button>
+        <button type="button" data-next>Next</button>
+        <button type="button" data-reset>Reset</button>
+      </div>
+    </div>
+
+    <article class="mobile-continuity__panel" id={`${labId}-panel`} role="tabpanel" aria-labelledby={`${labId}-outbox`} tabindex="0">
+      <div class="mobile-continuity__summary">
+        <p class="mobile-continuity__kicker" data-kicker>Outbox · offline creation</p>
+        <h4 data-title>The local queue becomes visible before its file write settles</h4>
+        <p data-copy>The immediate queued row is optimistic. Delivery cannot begin until the serialized mutation queue confirms that the atomic file write survived.</p>
+      </div>
+
+      <ol class="mobile-continuity__timeline" data-timeline aria-label="Selected continuity timeline"></ol>
+
+      <div class="mobile-continuity__boundary">
+        <div><span>Guard in force</span><strong data-guard>Confirm the exact queued object after its durable write</strong></div>
+        <div><span>Authority after this step</span><strong data-authority>mobile outbox file; server has received nothing</strong></div>
+      </div>
+    </article>
+
+    <p class="sr-only" role="status" aria-live="polite" aria-atomic="true" data-status>Offline command outbox. Step 1 of 7.</p>
+  </div>
+
+  <noscript><p class="mobile-continuity__noscript">JavaScript is off. The static continuity ledger below preserves both paths.</p></noscript>
+  <details class="mobile-continuity__static" open>
+    <summary>Static mobile continuity ledger</summary>
+    <div class="mobile-continuity__table-wrap" tabindex="0" role="region" aria-label="Static mobile continuity cases">
+      <table>
+        <thead><tr><th scope="col">Boundary</th><th scope="col">Durable prerequisite</th><th scope="col">Safety decision</th><th scope="col">Recovery</th></tr></thead>
+        <tbody>
+          <tr><th scope="row">Offline turn dispatch</th><td>Exact queued message confirmed after atomic-file write</td><td>Wait for a connected environment; creations also wait for a live shell</td><td>Transient/interrupted failures back off while the file remains</td></tr>
+          <tr><th scope="row">Creation replay</th><td>Live shell establishes whether the deterministic thread id already exists</td><td>If it exists, remove the queued creation without sending it again</td><td>A failed cleanup can be retried without duplicating the thread</td></tr>
+          <tr><th scope="row">Automatic OTA restart</th><td>Composer drafts and outbox writes flush</td><td>Restart only while truly backgrounded and no foreground handoff is active</td><td>Failed flush or unsafe handoff keeps the runtime alive and rearms the next background</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </details>
+</section>
+
+<script>
+  type TrackKey = "outbox" | "update";
+  interface Step {
+    label: string;
+    detail: string;
+    guard: string;
+    authority: string;
+  }
+  interface Scenario {
+    label: string;
+    kicker: string;
+    title: string;
+    copy: string;
+    steps: Step[];
+  }
+
+  const tracks: Record<TrackKey, Record<string, Scenario>> = {
+    outbox: {
+      offline: {
+        label: "Offline creation reconnects",
+        kicker: "Outbox · offline creation",
+        title: "The local queue becomes visible before its file write settles",
+        copy: "The immediate queued row is optimistic. Delivery cannot begin until the serialized mutation queue confirms that the atomic file write survived.",
+        steps: [
+          { label: "Publish queued row", detail: "The kept Atom gives the composer immediate feedback.", guard: "Do not mistake optimistic visibility for durability", authority: "mobile memory; no server command" },
+          { label: "Write one atomic JSON file", detail: "The message id names a versioned outbox record under the app document directory.", guard: "Rollback the exact object if persistence fails", authority: "mobile outbox file" },
+          { label: "Wait for connection + live shell", detail: "A creation is not sent while the thread list may still be stale.", guard: "Connected is necessary; a live shell is also required", authority: "server shell snapshot establishes existence" },
+          { label: "Confirm the queued object", detail: "The drain serializes behind any in-flight write and rechecks that this object remains queued.", guard: "Never deliver a record whose durable write later rolled back", authority: "confirmed mobile outbox file" },
+          { label: "Build bootstrap command", detail: "The saved project/workspace/settings snapshot becomes one start-turn input.", guard: "Incomplete worktree selections remain queued", authority: "mobile delivery intent" },
+          { label: "Dispatch startTurn", detail: "The shared client runtime sends the command to the selected environment.", guard: "Server acceptance and domain invariants still decide the result", authority: "environment server after accepted receipt" },
+          { label: "Remove outbox file", detail: "Only completed or deliberately discarded delivery removes the local record.", guard: "A failed removal leaves a replay that shell existence checks can clean", authority: "server thread; local queue empty" },
+        ],
+      },
+      replay: {
+        label: "Creation already landed",
+        kicker: "Outbox · cleanup-after-acceptance race",
+        title: "A live shell turns a possible replay into cleanup",
+        copy: "The prior start-turn may have committed before the phone died or failed to remove its local file. The deterministic thread id lets synchronization distinguish missing work from stale outbox state.",
+        steps: [
+          { label: "Reload persisted creation", detail: "The same thread, message, and command ids survive app restart.", guard: "Group and deduplicate by stable message id", authority: "mobile outbox file" },
+          { label: "Reconnect", detail: "The environment transport returns before the shell necessarily catches up.", guard: "Do not resend from connection state alone", authority: "connection session, shell not yet authoritative" },
+          { label: "Receive live shell", detail: "The synchronized shell already contains the queued creation's thread id.", guard: "Existing creation means the command landed", authority: "environment shell projection" },
+          { label: "Remove without resend", detail: "The drain selects remove, not send.", guard: "Cleanup is safe because server existence resolved the ambiguity", authority: "server thread; local queue cleaned" },
+        ],
+      },
+      transient: {
+        label: "Transient delivery failure",
+        kicker: "Outbox · retry classification",
+        title: "Transport failures preserve the record and slow down retries",
+        copy: "Settings-sync failures, interruptions, connection-transient errors, and recognized transport failures retry. Other start-turn failures are discarded after their result is observed.",
+        steps: [
+          { label: "Confirm durable record", detail: "Delivery begins from the persisted queue.", guard: "One message dispatches at a time", authority: "mobile outbox file" },
+          { label: "Attempt delivery", detail: "Optional settings updates precede startTurn for an existing thread.", guard: "A settings-sync failure is always retryable", authority: "mobile intent crossing RPC" },
+          { label: "Classify failure", detail: "Interrupted, ConnectionTransientError, or recognized transport errors select retry.", guard: "A non-transient start-turn failure selects discard", authority: "client failure policy" },
+          { label: "Back off", detail: "Delay grows 1s, 2s, 4s, 8s, then caps at 16s.", guard: "Keep the durable file while retrying", authority: "mobile outbox file" },
+          { label: "Retry after state change", detail: "Connection, shell, queue, or timer updates cause the drain to reevaluate.", guard: "Re-run existence and editing guards", authority: "latest client + server observations" },
+        ],
+      },
+    },
+    update: {
+      background: {
+        label: "Normal background install",
+        kicker: "OTA · deferred install",
+        title: "A downloaded update waits for an invisible teardown window",
+        copy: "Automatic application is deferred to background so native surfaces are not torn down mid-render. A flush and a current lifecycle check still gate reload.",
+        steps: [
+          { label: "Check and fetch", detail: "Expo reports an available compatible update and downloads it.", guard: "Fingerprint runtime version keeps native-incompatible bundles out", authority: "Expo update cache" },
+          { label: "Arm pending install", detail: "Only one restart sequence may claim the deferral.", guard: "installInProgress prevents racing reloads", authority: "mobile update coordinator" },
+          { label: "Observe background", detail: "The next true background transition becomes a candidate window.", guard: "Inactive is not treated as background", authority: "React Native AppState" },
+          { label: "Flush drafts + outbox", detail: "Every pending persistence flush is attempted before choosing whether to reload.", guard: "Automatic restart aborts when a flush fails", authority: "mobile document storage" },
+          { label: "Recheck safety", detail: "The app must still be backgrounded and no foreground handoff may cover it.", guard: "Lifecycle state is checked after flush latency", authority: "AppState + handoff counter" },
+          { label: "Reload runtime", detail: "The JavaScript runtime enters the downloaded update.", guard: "Reload failure clears the deferral for a later check", authority: "Expo Updates" },
+        ],
+      },
+      handoff: {
+        label: "Image picker looks like background",
+        kicker: "OTA · foreground-handoff exception",
+        title: "An OS surface can cover the app without authorizing a restart",
+        copy: "Android can report background while an app-initiated picker, auth tab, or share surface is active. A reference-counted handoff marker blocks teardown until a later real background.",
+        steps: [
+          { label: "Update becomes ready", detail: "A deferred install is armed.", guard: "No immediate automatic reload", authority: "mobile update coordinator" },
+          { label: "Begin OS handoff", detail: "The caller increments the foreground-handoff counter before opening the native surface.", guard: "Returned end function is idempotent", authority: "mobile handoff counter" },
+          { label: "AppState says background", detail: "The update callback wakes while the picker still owns the screen.", guard: "Background state alone is insufficient", authority: "AppState observation" },
+          { label: "Safety check refuses", detail: "An active handoff prevents reload even if persistence flushed.", guard: "Keep the state-bearing runtime alive", authority: "current mobile runtime" },
+          { label: "Rearm future background", detail: "The current background attempt is not polled in a loop.", guard: "Require a fresh lifecycle transition", authority: "update deferral" },
+          { label: "Later background reloads", detail: "After the handoff ends, the next safe background can flush and apply.", guard: "Recheck both persistence and lifecycle", authority: "Expo Updates after mobile guards" },
+        ],
+      },
+      flush: {
+        label: "Persistence flush fails",
+        kicker: "OTA · failed durability prerequisite",
+        title: "Automatic update application yields to unsaved work",
+        copy: "A failed draft or outbox flush does not silently restart over memory-only state. The coordinator leaves the downloaded update pending and tries on a later background transition.",
+        steps: [
+          { label: "Pending update", detail: "The compatible bundle is already downloaded.", guard: "Only one install sequence may claim it", authority: "Expo cache + update deferral" },
+          { label: "Background candidate", detail: "The app reaches a potential teardown window.", guard: "Candidate is revalidated after async work", authority: "AppState" },
+          { label: "Attempt every flush", detail: "Draft and outbox flushes use Promise.allSettled so one failure does not skip the other.", guard: "Surface the first failure only after both settle", authority: "mobile persistence queues" },
+          { label: "Keep runtime alive", detail: "Automatic reload is skipped because one store failed.", guard: "Unsaved in-memory state wins over update eagerness", authority: "current mobile runtime" },
+          { label: "Rearm next background", detail: "No tight retry loop runs inside the same background session.", guard: "Wait for a fresh transition", authority: "update deferral" },
+        ],
+      },
+    },
+  };
+
+  document.querySelectorAll<HTMLElement>("[data-mobile-continuity]").forEach((lab) => {
+    if (lab.dataset.mobileContinuityReady === "true") return;
+    try {
+      const tabs = [...lab.querySelectorAll<HTMLButtonElement>("[data-track]")];
+      const scenarioSelect = lab.querySelector<HTMLSelectElement>("[data-scenario]");
+      const timeline = lab.querySelector<HTMLOListElement>("[data-timeline]");
+      const kicker = lab.querySelector<HTMLElement>("[data-kicker]");
+      const title = lab.querySelector<HTMLElement>("[data-title]");
+      const copy = lab.querySelector<HTMLElement>("[data-copy]");
+      const guard = lab.querySelector<HTMLElement>("[data-guard]");
+      const authority = lab.querySelector<HTMLElement>("[data-authority]");
+      const status = lab.querySelector<HTMLElement>("[data-status]");
+      const panel = lab.querySelector<HTMLElement>("[role=tabpanel]");
+      const previous = lab.querySelector<HTMLButtonElement>("[data-previous]");
+      const next = lab.querySelector<HTMLButtonElement>("[data-next]");
+      const reset = lab.querySelector<HTMLButtonElement>("[data-reset]");
+      const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+      let track: TrackKey = "outbox";
+      let scenarioKey = "offline";
+      let step = 0;
+      let initialized = false;
+
+      const scenario = () => tracks[track][scenarioKey] ?? Object.values(tracks[track])[0]!;
+      const rebuildScenarioOptions = () => {
+        if (!scenarioSelect) return;
+        scenarioSelect.replaceChildren(...Object.entries(tracks[track]).map(([key, value]) => {
+          const option = document.createElement("option");
+          option.value = key;
+          option.textContent = value.label;
+          return option;
+        }));
+        scenarioSelect.value = scenarioKey;
+      };
+      const render = (animate = true) => {
+        const view = scenario();
+        const selectedStep = view.steps[step] ?? view.steps[0]!;
+        if (kicker) kicker.textContent = view.kicker;
+        if (title) title.textContent = view.title;
+        if (copy) copy.textContent = view.copy;
+        if (guard) guard.textContent = selectedStep.guard;
+        if (authority) authority.textContent = selectedStep.authority;
+        if (timeline) {
+          timeline.replaceChildren(...view.steps.map((item, index) => {
+            const li = document.createElement("li");
+            li.dataset.state = index < step ? "complete" : index === step ? "active" : "pending";
+            li.setAttribute("aria-current", index === step ? "step" : "false");
+            const marker = document.createElement("span");
+            marker.textContent = String(index + 1);
+            marker.setAttribute("aria-hidden", "true");
+            const body = document.createElement("div");
+            const heading = document.createElement("strong");
+            heading.textContent = item.label;
+            const detail = document.createElement("p");
+            detail.textContent = item.detail;
+            body.append(heading, detail);
+            li.append(marker, body);
+            return li;
+          }));
+        }
+        if (previous) previous.disabled = step === 0;
+        if (next) next.disabled = step >= view.steps.length - 1;
+        if (status) status.textContent = `${track === "outbox" ? "Offline command outbox" : "OTA restart handoff"}. ${view.label}. Step ${step + 1} of ${view.steps.length}: ${selectedStep.label}.`;
+        if (initialized && animate && panel && !reducedMotion.matches) {
+          panel.animate(
+            [{ opacity: .66, transform: "translateY(4px)" }, { opacity: 1, transform: "translateY(0)" }],
+            { duration: 170, easing: "ease-out" },
+          );
+        }
+        initialized = true;
+      };
+      const selectTrack = (nextTrack: TrackKey) => {
+        track = nextTrack;
+        scenarioKey = nextTrack === "outbox" ? "offline" : "background";
+        step = 0;
+        tabs.forEach((tab) => {
+          const selected = tab.dataset.track === nextTrack;
+          tab.setAttribute("aria-selected", String(selected));
+          tab.tabIndex = selected ? 0 : -1;
+          if (selected && panel) panel.setAttribute("aria-labelledby", tab.id);
+        });
+        rebuildScenarioOptions();
+        render();
+      };
+
+      tabs.forEach((tab, index) => {
+        tab.addEventListener("click", () => selectTrack(tab.dataset.track as TrackKey));
+        tab.addEventListener("keydown", (event) => {
+          if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+          event.preventDefault();
+          const targetIndex = event.key === "Home" ? 0 : event.key === "End" ? tabs.length - 1 : (index + (event.key === "ArrowLeft" ? -1 : 1) + tabs.length) % tabs.length;
+          const target = tabs[targetIndex];
+          target?.focus();
+          if (target) selectTrack(target.dataset.track as TrackKey);
+        });
+      });
+      scenarioSelect?.addEventListener("change", () => {
+        scenarioKey = scenarioSelect.value;
+        step = 0;
+        render();
+      });
+      previous?.addEventListener("click", () => { step = Math.max(0, step - 1); render(); });
+      next?.addEventListener("click", () => { step = Math.min(scenario().steps.length - 1, step + 1); render(); });
+      reset?.addEventListener("click", () => { step = 0; render(); });
+
+      rebuildScenarioOptions();
+      render(false);
+      lab.dataset.mobileContinuityReady = "true";
+    } catch {
+      lab.dataset.mobileContinuityReady = "error";
+    }
+  });
+</script>
+
+<style>
+  .mobile-continuity { margin: 2.3rem 0; overflow: hidden; border: 1px solid var(--line-strong); border-radius: .95rem; background: var(--paper-raised); color: var(--ink); }
+  .mobile-continuity__head { padding: 1.25rem 1.3rem .95rem; }
+  .mobile-continuity__head > span, .mobile-continuity__kicker { color: var(--signal-deep); font: 800 .72rem/1.25 var(--font-ui); letter-spacing: .075em; text-transform: uppercase; }
+  .mobile-continuity h3 { margin: .32rem 0 .42rem; font-size: 1.25rem; }
+  .mobile-continuity__head p, .mobile-continuity__summary > p:last-child { margin: 0; color: var(--ink-soft); }
+  .mobile-continuity__interactive { display: none; }
+  .mobile-continuity[data-mobile-continuity-ready="true"] .mobile-continuity__interactive { display: block; }
+  .mobile-continuity[data-mobile-continuity-ready="true"] .mobile-continuity__static, .mobile-continuity[data-mobile-continuity-ready="true"] .mobile-continuity__noscript { display: none; }
+  .mobile-continuity__tabs { display: flex; gap: .4rem; overflow-x: auto; padding: 0 1.3rem; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+  .mobile-continuity__tabs button { flex: 0 0 auto; border: 0; border-bottom: 2px solid transparent; padding: .72rem .18rem .66rem; background: transparent; color: var(--ink-soft); font: 750 .84rem/1.2 var(--font-ui); cursor: pointer; }
+  .mobile-continuity__tabs button + button { margin-left: .65rem; }
+  .mobile-continuity__tabs button[aria-selected="true"] { border-bottom-color: var(--signal); color: var(--ink); }
+  .mobile-continuity button:focus-visible, .mobile-continuity select:focus-visible, .mobile-continuity__panel:focus-visible, .mobile-continuity__table-wrap:focus-visible { outline: 2px solid var(--signal); outline-offset: 2px; }
+  .mobile-continuity__controls { display: flex; align-items: center; flex-wrap: wrap; gap: .55rem; padding: .8rem 1.3rem; background: var(--paper); border-bottom: 1px solid var(--line); }
+  .mobile-continuity__controls label { color: var(--ink-soft); font: 700 .78rem/1.2 var(--font-ui); }
+  .mobile-continuity select, .mobile-continuity__step-buttons button { border: 1px solid var(--line-strong); border-radius: .42rem; padding: .43rem .6rem; background: var(--paper-raised); color: var(--ink); font: 650 .8rem/1.2 var(--font-ui); }
+  .mobile-continuity__step-buttons { display: flex; gap: .35rem; margin-left: auto; }
+  .mobile-continuity__step-buttons button { cursor: pointer; }
+  .mobile-continuity__step-buttons button:disabled { opacity: .42; cursor: default; }
+  .mobile-continuity__panel { padding: 1.05rem 1.3rem 1.25rem; }
+  .mobile-continuity__summary h4 { margin: .3rem 0 .36rem; font-size: 1.12rem; }
+  .mobile-continuity__timeline { display: grid; grid-template-columns: repeat(auto-fit, minmax(8.8rem, 1fr)); gap: .55rem; margin: 1rem 0; padding: 0; list-style: none; }
+  .mobile-continuity__timeline li { position: relative; display: grid; grid-template-columns: 1.65rem 1fr; gap: .45rem; min-width: 0; padding: .7rem; border: 1px solid var(--line); border-radius: .58rem; background: var(--paper); }
+  .mobile-continuity__timeline li[data-state="active"] { border-color: var(--signal); background: var(--signal-soft); box-shadow: 0 0 0 2px color-mix(in srgb, var(--signal) 12%, transparent); }
+  .mobile-continuity__timeline li[data-state="complete"] { border-color: color-mix(in srgb, var(--signal) 48%, var(--line)); }
+  .mobile-continuity__timeline li > span { display: grid; place-items: center; width: 1.45rem; height: 1.45rem; border: 1px solid var(--line-strong); border-radius: 999px; color: var(--ink-soft); font: 800 .7rem/1 var(--font-ui); }
+  .mobile-continuity__timeline li[data-state="active"] > span, .mobile-continuity__timeline li[data-state="complete"] > span { border-color: var(--signal); background: var(--signal); color: var(--paper-raised); }
+  .mobile-continuity__timeline strong { display: block; font-size: .8rem; line-height: 1.3; }
+  .mobile-continuity__timeline p { margin: .25rem 0 0; color: var(--ink-soft); font-size: .75rem; line-height: 1.4; }
+  .mobile-continuity__boundary { display: grid; grid-template-columns: 1fr 1fr; gap: .6rem; }
+  .mobile-continuity__boundary div { padding: .72rem .8rem; border-left: 3px solid var(--signal); background: var(--paper-muted); }
+  .mobile-continuity__boundary span { display: block; color: var(--ink-faint); font: 750 .68rem/1.2 var(--font-ui); letter-spacing: .05em; text-transform: uppercase; }
+  .mobile-continuity__boundary strong { display: block; margin-top: .25rem; font-size: .8rem; }
+  .mobile-continuity__static { margin: 0 1.3rem 1.2rem; }
+  .mobile-continuity__static summary { cursor: pointer; font-weight: 750; }
+  .mobile-continuity__table-wrap { margin-top: .65rem; overflow-x: auto; border: 1px solid var(--line); border-radius: .5rem; }
+  .mobile-continuity table { width: 100%; min-width: 42rem; border-collapse: collapse; font-size: .8rem; }
+  .mobile-continuity th, .mobile-continuity td { padding: .55rem; border: 1px solid var(--line); text-align: left; vertical-align: top; }
+  .mobile-continuity thead th { background: var(--paper-muted); }
+  .mobile-continuity__noscript { margin: .8rem 1.3rem; color: var(--ink-soft); }
+  @media (max-width: 44rem) { .mobile-continuity__head, .mobile-continuity__panel, .mobile-continuity__controls { padding-inline: .85rem; } .mobile-continuity__tabs { padding-inline: .85rem; } .mobile-continuity__step-buttons { width: 100%; margin-left: 0; } .mobile-continuity__boundary { grid-template-columns: 1fr; } .mobile-continuity__static { margin-inline: .85rem; } }
+  @media (prefers-reduced-motion: reduce) { .mobile-continuity *, .mobile-continuity *::before, .mobile-continuity *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; } }
+  @media print { .mobile-continuity { break-inside: avoid; border-color: #555; } .mobile-continuity__interactive, .mobile-continuity__noscript { display: none !important; } .mobile-continuity__static { display: block !important; } .mobile-continuity__table-wrap { overflow: visible; } .mobile-continuity table { min-width: 0; font-size: 8pt; } }
+</style>

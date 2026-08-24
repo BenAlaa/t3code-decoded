@@ -1,0 +1,17 @@
+---
+import { getSourceReference, sourceReferenceHref, sourceReferenceLabel } from "../lib/sources";
+
+interface Props { ids: string[]; title?: string; }
+const { ids, title = "Source trail" } = Astro.props;
+const refs = ids.map(getSourceReference);
+---
+
+<aside class="source-list">
+  <h3>{title}</h3>
+  {refs.map((ref) => (
+    <a href={sourceReferenceHref(ref)} rel="noreferrer">
+      <code>{sourceReferenceLabel(ref)}</code>
+      <span>{ref.label} ↗</span>
+    </a>
+  ))}
+</aside>

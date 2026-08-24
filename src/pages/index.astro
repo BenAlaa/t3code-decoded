@@ -1,0 +1,14 @@
+---
+import { getCollection, render } from "astro:content";
+import BookLayout from "../layouts/BookLayout.astro";
+
+const entries = await getCollection("book");
+const entry = entries.find((candidate) => candidate.data.slug === "cover");
+if (!entry) throw new Error("The book requires a cover entry.");
+const { Content, headings } = await render(entry);
+---
+
+<BookLayout {entry} {entries} {headings}>
+  <Content />
+</BookLayout>
+

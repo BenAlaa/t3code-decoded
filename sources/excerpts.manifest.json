@@ -1,0 +1,1474 @@
+[
+  {
+    "id": "architecture-boundary",
+    "path": "docs/internals/overview.md",
+    "start": 5,
+    "end": 28,
+    "language": "markdown",
+    "label": "The execution boundary"
+  },
+  {
+    "id": "orchestration-rpc-methods",
+    "path": "packages/contracts/src/orchestration.ts",
+    "start": 27,
+    "end": 36,
+    "language": "typescript",
+    "label": "Orchestration RPC surface"
+  },
+  {
+    "id": "turn-start-command",
+    "path": "packages/contracts/src/orchestration.ts",
+    "start": 847,
+    "end": 864,
+    "language": "typescript",
+    "label": "Client turn-start command"
+  },
+  {
+    "id": "provider-adapter-core",
+    "path": "apps/server/src/provider/Services/ProviderAdapter.ts",
+    "start": 47,
+    "end": 71,
+    "language": "typescript",
+    "label": "Provider adapter lifecycle contract"
+  },
+  {
+    "id": "provider-adapter-interactions",
+    "path": "apps/server/src/provider/Services/ProviderAdapter.ts",
+    "start": 73,
+    "end": 94,
+    "language": "typescript",
+    "label": "Provider approval and input contract"
+  },
+  {
+    "id": "provider-adapter-stream",
+    "path": "apps/server/src/provider/Services/ProviderAdapter.ts",
+    "start": 126,
+    "end": 134,
+    "language": "typescript",
+    "label": "Canonical provider event stream"
+  },
+  {
+    "id": "orchestration-transaction",
+    "path": "apps/server/src/orchestration/Layers/OrchestrationEngine.ts",
+    "start": 197,
+    "end": 259,
+    "language": "typescript",
+    "label": "Atomic command commit"
+  },
+  {
+    "id": "orchestration-dispatch",
+    "path": "apps/server/src/orchestration/Layers/OrchestrationEngine.ts",
+    "start": 331,
+    "end": 368,
+    "language": "typescript",
+    "label": "Serialized command dispatch and event fan-out"
+  },
+  {
+    "id": "server-runtime-core",
+    "path": "apps/server/src/server.ts",
+    "start": 353,
+    "end": 416,
+    "language": "typescript",
+    "label": "Authentication, remote endpoint, provider, and server dependency assembly"
+  },
+  {
+    "id": "dispatch-result",
+    "path": "packages/contracts/src/orchestration.ts",
+    "start": 1580,
+    "end": 1583,
+    "language": "typescript",
+    "label": "Successful client dispatch result"
+  },
+  {
+    "id": "rejected-receipt-best-effort",
+    "path": "apps/server/src/orchestration/Layers/OrchestrationEngine.ts",
+    "start": 287,
+    "end": 325,
+    "language": "typescript",
+    "label": "Best-effort invariant-rejection receipt"
+  },
+  {
+    "id": "hot-reactor-no-replay",
+    "path": "apps/server/src/orchestration/Layers/ProviderCommandReactor.ts",
+    "start": 1405,
+    "end": 1409,
+    "language": "typescript",
+    "label": "Hot post-commit stream has no pending-work replay"
+  },
+  {
+    "id": "cli-entry-command",
+    "path": "apps/server/src/bin.ts",
+    "start": 23,
+    "end": 71,
+    "language": "typescript",
+    "label": "Root CLI and subcommand dispatch"
+  },
+  {
+    "id": "cli-config-precedence",
+    "path": "apps/server/src/cli/config.ts",
+    "start": 244,
+    "end": 280,
+    "language": "typescript",
+    "label": "Mode, port, and base-directory precedence"
+  },
+  {
+    "id": "cli-serve-semantics",
+    "path": "apps/server/src/cli/server.ts",
+    "start": 21,
+    "end": 35,
+    "language": "typescript",
+    "label": "Start and headless serve semantics"
+  },
+  {
+    "id": "startup-readiness-order",
+    "path": "apps/server/src/serverRuntimeStartup.ts",
+    "start": 514,
+    "end": 548,
+    "language": "typescript",
+    "label": "Prepared, activated, command-ready, and ready order"
+  },
+  {
+    "id": "command-readiness-middleware",
+    "path": "apps/server/src/server.ts",
+    "start": 431,
+    "end": 437,
+    "language": "typescript",
+    "label": "Global route-execution readiness barrier"
+  },
+  {
+    "id": "rpc-stream-contracts",
+    "path": "packages/contracts/src/rpc.ts",
+    "start": 933,
+    "end": 948,
+    "language": "typescript",
+    "label": "Typed shell and thread streaming RPC contracts"
+  },
+  {
+    "id": "thread-resume-race",
+    "path": "apps/server/src/ws.ts",
+    "start": 1394,
+    "end": 1521,
+    "language": "typescript",
+    "label": "Attach-before-read and bounded thread replay"
+  },
+  {
+    "id": "auth-credential-precedence",
+    "path": "apps/server/src/auth/EnvironmentAuth.ts",
+    "start": 592,
+    "end": 632,
+    "language": "typescript",
+    "label": "Cookie, Bearer, and DPoP authentication precedence"
+  },
+  {
+    "id": "websocket-ticket-verification",
+    "path": "apps/server/src/auth/SessionStore.ts",
+    "start": 785,
+    "end": 851,
+    "language": "typescript",
+    "label": "WebSocket ticket verification reloads session state"
+  },
+  {
+    "id": "command-union-boundary",
+    "path": "packages/contracts/src/orchestration.ts",
+    "start": 913,
+    "end": 1057,
+    "language": "typescript",
+    "label": "Client-dispatchable, normalized, and trusted internal command unions"
+  },
+  {
+    "id": "normalizer-staging-boundary",
+    "path": "apps/server/src/orchestration/Normalizer.ts",
+    "start": 18,
+    "end": 179,
+    "language": "typescript",
+    "label": "Pre-transaction timestamp, workspace, and attachment staging"
+  },
+  {
+    "id": "turn-atomic-batch",
+    "path": "apps/server/src/orchestration/decider.ts",
+    "start": 926,
+    "end": 1036,
+    "language": "typescript",
+    "label": "Existing-thread turn plans a two-to-four-event batch"
+  },
+  {
+    "id": "engine-commit-publication",
+    "path": "apps/server/src/orchestration/Layers/OrchestrationEngine.ts",
+    "start": 197,
+    "end": 259,
+    "language": "typescript",
+    "label": "SQL commit followed by in-memory fold and hot publication"
+  },
+  {
+    "id": "command-receipt-schema",
+    "path": "apps/server/src/persistence/Services/OrchestrationCommandReceipts.ts",
+    "start": 25,
+    "end": 33,
+    "language": "typescript",
+    "label": "Durable command receipt fields"
+  },
+  {
+    "id": "projection-transaction-cursor",
+    "path": "apps/server/src/orchestration/Layers/ProjectionPipeline.ts",
+    "start": 1609,
+    "end": 1678,
+    "language": "typescript",
+    "label": "Ordered projectors, transactional cursor updates, and attachment side effects"
+  },
+  {
+    "id": "snapshot-safe-watermark",
+    "path": "apps/server/src/orchestration/Layers/ProjectionSnapshotQuery.ts",
+    "start": 195,
+    "end": 258,
+    "language": "typescript",
+    "label": "Snapshot watermark is the minimum required projector cursor"
+  },
+  {
+    "id": "provider-reactor-forked-send",
+    "path": "apps/server/src/orchestration/Layers/ProviderCommandReactor.ts",
+    "start": 1060,
+    "end": 1174,
+    "language": "typescript",
+    "label": "Volatile turn dedupe and forked provider send"
+  },
+  {
+    "id": "sqlite-runtime-pragmas",
+    "path": "apps/server/src/persistence/Layers/Sqlite.ts",
+    "start": 24,
+    "end": 66,
+    "language": "typescript",
+    "label": "SQLite runtime selection, pragmas, migrations, and scoped layers"
+  },
+  {
+    "id": "provider-instance-identity-contract",
+    "path": "packages/contracts/src/providerInstance.ts",
+    "start": 4,
+    "end": 32,
+    "language": "typescript",
+    "label": "Driver kind and configured instance identity"
+  },
+  {
+    "id": "provider-driver-instance-spi",
+    "path": "apps/server/src/provider/ProviderDriver.ts",
+    "start": 55,
+    "end": 117,
+    "language": "typescript",
+    "label": "Scoped provider driver and instance records"
+  },
+  {
+    "id": "provider-driver-instance-records",
+    "path": "apps/server/src/provider/ProviderDriver.ts",
+    "start": 4,
+    "end": 20,
+    "language": "typescript",
+    "label": "Plain provider driver and instance record contracts"
+  },
+  {
+    "id": "codex-app-server-client-typed-stdio",
+    "path": "packages/effect-codex-app-server/src/client.ts",
+    "start": 140,
+    "end": 211,
+    "language": "typescript",
+    "label": "Typed Codex notifications, requests, and transport calls"
+  },
+  {
+    "id": "codex-adapter-session-runtime",
+    "path": "apps/server/src/provider/Layers/CodexAdapter.ts",
+    "start": 1642,
+    "end": 1693,
+    "language": "typescript",
+    "label": "Codex session replacement and runtime configuration"
+  },
+  {
+    "id": "codex-adapter-runtime-events",
+    "path": "apps/server/src/provider/Layers/CodexAdapter.ts",
+    "start": 1000,
+    "end": 1084,
+    "language": "typescript",
+    "label": "Codex usage, turn, and plan event normalization"
+  },
+  {
+    "id": "claude-adapter-query-config",
+    "path": "apps/server/src/provider/Layers/ClaudeAdapter.ts",
+    "start": 4138,
+    "end": 4196,
+    "language": "typescript",
+    "label": "Claude permission mapping and query option assembly"
+  },
+  {
+    "id": "claude-query-invocation",
+    "path": "apps/server/src/provider/Layers/ClaudeAdapter.ts",
+    "start": 4223,
+    "end": 4235,
+    "language": "typescript",
+    "label": "Claude SDK query invocation"
+  },
+  {
+    "id": "claude-adapter-interaction-handlers",
+    "path": "apps/server/src/provider/Layers/ClaudeAdapter.ts",
+    "start": 4497,
+    "end": 4529,
+    "language": "typescript",
+    "label": "Claude approval and structured-input deferreds"
+  },
+  {
+    "id": "acp-client-typed-surface",
+    "path": "packages/effect-acp/src/client.ts",
+    "start": 40,
+    "end": 134,
+    "language": "typescript",
+    "label": "Typed ACP session command surface"
+  },
+  {
+    "id": "cursor-session-mode-selection",
+    "path": "apps/server/src/provider/Layers/CursorAdapter.ts",
+    "start": 217,
+    "end": 294,
+    "language": "typescript",
+    "label": "Cursor negotiated mode and model selection"
+  },
+  {
+    "id": "grok-acp-runtime-support",
+    "path": "apps/server/src/provider/acp/GrokAcpSupport.ts",
+    "start": 31,
+    "end": 108,
+    "language": "typescript",
+    "label": "Grok ACP launch, authentication, and model selection"
+  },
+  {
+    "id": "opencode-runtime-ownership",
+    "path": "apps/server/src/provider/opencodeRuntime.ts",
+    "start": 140,
+    "end": 177,
+    "language": "typescript",
+    "label": "Local and external OpenCode server ownership"
+  },
+  {
+    "id": "opencode-turn-and-revert",
+    "path": "apps/server/src/provider/Layers/OpenCodeAdapter.ts",
+    "start": 1430,
+    "end": 1509,
+    "language": "typescript",
+    "label": "OpenCode prompt and steering path"
+  },
+  {
+    "id": "usage-live-contract",
+    "path": "packages/contracts/src/providerRuntime.ts",
+    "start": 309,
+    "end": 331,
+    "language": "typescript",
+    "label": "Live thread token-usage snapshot contract"
+  },
+  {
+    "id": "usage-codex-normalization",
+    "path": "apps/server/src/provider/Layers/CodexAdapter.ts",
+    "start": 159,
+    "end": 190,
+    "language": "typescript",
+    "label": "Codex live token-usage normalization"
+  },
+  {
+    "id": "usage-codex-emission",
+    "path": "apps/server/src/provider/Layers/CodexAdapter.ts",
+    "start": 1000,
+    "end": 1018,
+    "language": "typescript",
+    "label": "Codex live usage event emission"
+  },
+  {
+    "id": "usage-claude-emission",
+    "path": "apps/server/src/provider/Layers/ClaudeAdapter.ts",
+    "start": 2051,
+    "end": 2088,
+    "language": "typescript",
+    "label": "Claude live usage event emission"
+  },
+  {
+    "id": "usage-live-activity",
+    "path": "apps/server/src/orchestration/Layers/ProviderRuntimeIngestion.ts",
+    "start": 766,
+    "end": 784,
+    "language": "typescript",
+    "label": "Live usage becomes context-window activity"
+  },
+  {
+    "id": "usage-web-context-meter",
+    "path": "apps/web/src/lib/contextWindow.ts",
+    "start": 50,
+    "end": 96,
+    "language": "typescript",
+    "label": "Latest valid context-window snapshot derivation"
+  },
+  {
+    "id": "usage-summary-contract",
+    "path": "packages/contracts/src/usage.ts",
+    "start": 1,
+    "end": 101,
+    "language": "typescript",
+    "label": "Historical usage version, providers, tokens, and cost buckets"
+  },
+  {
+    "id": "usage-home-discovery",
+    "path": "apps/server/src/usage/UsageService.ts",
+    "start": 187,
+    "end": 225,
+    "language": "typescript",
+    "label": "Claude and Codex transcript home resolution"
+  },
+  {
+    "id": "usage-transcript-parsers",
+    "path": "apps/server/src/usage/usageTranscripts.ts",
+    "start": 78,
+    "end": 137,
+    "language": "typescript",
+    "label": "Claude transcript usage normalization"
+  },
+  {
+    "id": "usage-dedup-buckets",
+    "path": "apps/server/src/usage/usageAggregation.ts",
+    "start": 109,
+    "end": 178,
+    "language": "typescript",
+    "label": "Global deduplication, bounds, bucketing, and pricing fold"
+  },
+  {
+    "id": "usage-pricing-cache",
+    "path": "apps/server/src/usage/usagePricing.ts",
+    "start": 85,
+    "end": 148,
+    "language": "typescript",
+    "label": "Historical usage rate lookup and pricing arithmetic"
+  },
+  {
+    "id": "usage-rpc-contract",
+    "path": "packages/contracts/src/rpc.ts",
+    "start": 260,
+    "end": 284,
+    "language": "typescript",
+    "label": "Typed usage summary RPC"
+  },
+  {
+    "id": "usage-environment-merge",
+    "path": "packages/shared/src/usageMerge.ts",
+    "start": 102,
+    "end": 163,
+    "language": "typescript",
+    "label": "Deterministic physical-source ownership across environments"
+  },
+  {
+    "id": "usage-reader-failure-policy",
+    "path": "apps/server/src/usage/usageTranscriptReader.ts",
+    "start": 92,
+    "end": 140,
+    "language": "typescript",
+    "label": "Streaming transcript read and null-on-read-failure policy"
+  },
+  {
+    "id": "usage-source-status",
+    "path": "apps/server/src/usage/UsageService.ts",
+    "start": 352,
+    "end": 408,
+    "language": "typescript",
+    "label": "Current historical source status and session accounting"
+  },
+  {
+    "id": "project-root-normalization",
+    "path": "apps/server/src/workspace/WorkspacePaths.ts",
+    "start": 161,
+    "end": 200,
+    "language": "typescript",
+    "label": "Workspace-root resolution, validation, and opt-in creation"
+  },
+  {
+    "id": "project-create-normalization",
+    "path": "apps/server/src/orchestration/Normalizer.ts",
+    "start": 55,
+    "end": 90,
+    "language": "typescript",
+    "label": "Project creation normalization before dispatch"
+  },
+  {
+    "id": "project-root-uniqueness",
+    "path": "apps/server/src/orchestration/commandInvariants.ts",
+    "start": 75,
+    "end": 97,
+    "language": "typescript",
+    "label": "Active project workspace-root uniqueness invariant"
+  },
+  {
+    "id": "project-t3-file-schema",
+    "path": "packages/contracts/src/t3ProjectFile.ts",
+    "start": 7,
+    "end": 94,
+    "language": "typescript",
+    "label": "Checked-in t3.json project configuration contract"
+  },
+  {
+    "id": "project-t3-file-loader",
+    "path": "apps/server/src/project/T3ProjectFileLoader.ts",
+    "start": 42,
+    "end": 105,
+    "language": "typescript",
+    "label": "Best-effort t3.json loading and validation"
+  },
+  {
+    "id": "project-t3-file-loader-tests",
+    "path": "apps/server/src/project/T3ProjectFileLoader.test.ts",
+    "start": 29,
+    "end": 88,
+    "language": "typescript",
+    "label": "t3.json JSONC, missing-file, and invalid-input tests"
+  },
+  {
+    "id": "project-thread-env-precedence",
+    "path": "packages/shared/src/threadEnvMode.ts",
+    "start": 3,
+    "end": 35,
+    "language": "typescript",
+    "label": "Project, t3.json, and global thread-environment precedence"
+  },
+  {
+    "id": "project-settings-inherited-default",
+    "path": "apps/web/src/components/settings/ProjectSettingsPanel.tsx",
+    "start": 475,
+    "end": 482,
+    "language": "tsx",
+    "label": "Inherited project environment default in web settings"
+  },
+  {
+    "id": "project-settings-project-override",
+    "path": "apps/web/src/components/settings/ProjectSettingsPanel.tsx",
+    "start": 866,
+    "end": 905,
+    "language": "tsx",
+    "label": "Project environment override controls"
+  },
+  {
+    "id": "project-repository-identity",
+    "path": "apps/server/src/project/RepositoryIdentityResolver.ts",
+    "start": 48,
+    "end": 166,
+    "language": "typescript",
+    "label": "Best-effort Git remote repository identity resolution"
+  },
+  {
+    "id": "project-identity-read-projection",
+    "path": "apps/server/src/orchestration/Layers/ProjectionSnapshotQuery.ts",
+    "start": 313,
+    "end": 388,
+    "language": "typescript",
+    "label": "Snapshot-time repository identity enrichment"
+  },
+  {
+    "id": "project-durable-projection",
+    "path": "apps/server/src/orchestration/decider.ts",
+    "start": 227,
+    "end": 298,
+    "language": "typescript",
+    "label": "Project creation and metadata event decisions"
+  },
+  {
+    "id": "project-projector",
+    "path": "apps/server/src/orchestration/projector.ts",
+    "start": 207,
+    "end": 263,
+    "language": "typescript",
+    "label": "Durable project read-model projection"
+  },
+  {
+    "id": "project-logical-grouping",
+    "path": "packages/client-runtime/src/state/projectGrouping.ts",
+    "start": 67,
+    "end": 140,
+    "language": "typescript",
+    "label": "Client-side physical and logical project grouping"
+  },
+  {
+    "id": "project-environment-label",
+    "path": "apps/web/src/sidebarProjectGrouping.ts",
+    "start": 53,
+    "end": 115,
+    "language": "typescript",
+    "label": "Environment labels retained in grouped sidebar projects"
+  },
+  {
+    "id": "project-setup-script-selection",
+    "path": "packages/shared/src/projectScripts.ts",
+    "start": 11,
+    "end": 37,
+    "language": "typescript",
+    "label": "Worktree setup-script selection and environment construction"
+  },
+  {
+    "id": "project-setup-script-runner",
+    "path": "apps/server/src/project/ProjectSetupScriptRunner.ts",
+    "start": 123,
+    "end": 183,
+    "language": "typescript",
+    "label": "Setup script launched in the linked worktree terminal"
+  },
+  {
+    "id": "worktree-non-git-fallback",
+    "path": "apps/web/src/components/ChatView.logic.ts",
+    "start": 322,
+    "end": 327,
+    "language": "typescript",
+    "label": "Non-Git projects fall back from worktree to local mode"
+  },
+  {
+    "id": "worktree-ref-occupancy",
+    "path": "apps/server/src/vcs/GitVcsDriverCore.ts",
+    "start": 2463,
+    "end": 2559,
+    "language": "typescript",
+    "label": "Git worktree listing decorates occupied branch references"
+  },
+  {
+    "id": "worktree-create-remove-contract",
+    "path": "packages/contracts/src/git.ts",
+    "start": 124,
+    "end": 165,
+    "language": "typescript",
+    "label": "Worktree creation and removal RPC inputs"
+  },
+  {
+    "id": "worktree-result-contract",
+    "path": "packages/contracts/src/git.ts",
+    "start": 264,
+    "end": 294,
+    "language": "typescript",
+    "label": "Worktree and pull-request preparation results"
+  },
+  {
+    "id": "worktree-bootstrap-path",
+    "path": "apps/server/src/ws.ts",
+    "start": 979,
+    "end": 1022,
+    "language": "typescript",
+    "label": "Origin-aware worktree bootstrap saga"
+  },
+  {
+    "id": "worktree-origin-base-test",
+    "path": "apps/server/src/vcs/GitVcsDriverCore.test.ts",
+    "start": 1505,
+    "end": 1565,
+    "language": "typescript",
+    "label": "Remote base reference worktree creation test"
+  },
+  {
+    "id": "worktree-create-command",
+    "path": "apps/server/src/vcs/GitVcsDriverCore.ts",
+    "start": 2763,
+    "end": 2799,
+    "language": "typescript",
+    "label": "Git worktree add command and default linked path"
+  },
+  {
+    "id": "worktree-setup-runner",
+    "path": "apps/server/src/project/ProjectSetupScriptRunner.ts",
+    "start": 123,
+    "end": 183,
+    "language": "typescript",
+    "label": "Post-creation setup script runner"
+  },
+  {
+    "id": "worktree-setup-test",
+    "path": "apps/server/src/project/ProjectSetupScriptRunner.test.ts",
+    "start": 93,
+    "end": 152,
+    "language": "typescript",
+    "label": "Setup terminal cwd and environment test"
+  },
+  {
+    "id": "worktree-remove-command",
+    "path": "apps/server/src/vcs/GitVcsDriverCore.ts",
+    "start": 2982,
+    "end": 2994,
+    "language": "typescript",
+    "label": "Git worktree removal command"
+  },
+  {
+    "id": "worktree-create-remove-test",
+    "path": "apps/server/src/vcs/GitVcsDriverCore.test.ts",
+    "start": 1377,
+    "end": 1403,
+    "language": "typescript",
+    "label": "Worktree create and remove integration test"
+  },
+  {
+    "id": "worktree-bootstrap-failure-cleanup",
+    "path": "apps/server/src/ws.ts",
+    "start": 1025,
+    "end": 1053,
+    "language": "typescript",
+    "label": "Bootstrap failure compensation for a newly created thread"
+  },
+  {
+    "id": "turn-lifecycle-start-decider",
+    "path": "apps/server/src/orchestration/decider.ts",
+    "start": 926,
+    "end": 1036,
+    "language": "typescript",
+    "label": "Turn start intent and atomic lifecycle-reset event batch"
+  },
+  {
+    "id": "turn-lifecycle-command-reactor",
+    "path": "apps/server/src/orchestration/Layers/ProviderCommandReactor.ts",
+    "start": 1060,
+    "end": 1174,
+    "language": "typescript",
+    "label": "Committed turn intent forwarded to the provider"
+  },
+  {
+    "id": "turn-lifecycle-runtime-correlation",
+    "path": "apps/server/src/provider/Layers/ProviderService.ts",
+    "start": 195,
+    "end": 213,
+    "language": "typescript",
+    "label": "Provider runtime event identity validation"
+  },
+  {
+    "id": "turn-lifecycle-runtime-guards",
+    "path": "apps/server/src/orchestration/Layers/ProviderRuntimeIngestion.ts",
+    "start": 1505,
+    "end": 1656,
+    "language": "typescript",
+    "label": "Runtime lifecycle correlation and durable session folding"
+  },
+  {
+    "id": "turn-lifecycle-buffering",
+    "path": "apps/server/src/orchestration/Layers/ProviderRuntimeIngestion.ts",
+    "start": 1659,
+    "end": 1750,
+    "language": "typescript",
+    "label": "Buffered assistant delivery and pause-boundary flush"
+  },
+  {
+    "id": "turn-lifecycle-interrupt",
+    "path": "apps/server/src/orchestration/decider.ts",
+    "start": 1039,
+    "end": 1058,
+    "language": "typescript",
+    "label": "Durable turn interrupt intent"
+  },
+  {
+    "id": "turn-lifecycle-checkpoint-completion",
+    "path": "apps/server/src/orchestration/Layers/CheckpointReactor.ts",
+    "start": 356,
+    "end": 458,
+    "language": "typescript",
+    "label": "Post-turn checkpoint capture and placeholder replacement"
+  },
+  {
+    "id": "permission-runtime-mode-contract",
+    "path": "packages/contracts/src/orchestration.ts",
+    "start": 120,
+    "end": 143,
+    "language": "typescript",
+    "label": "Canonical runtime modes and approval decisions"
+  },
+  {
+    "id": "permission-codex-mode-map",
+    "path": "apps/server/src/provider/Layers/CodexSessionRuntime.ts",
+    "start": 268,
+    "end": 340,
+    "language": "typescript",
+    "label": "T3 runtime modes mapped into Codex approval and sandbox settings"
+  },
+  {
+    "id": "permission-request-contract",
+    "path": "packages/contracts/src/providerRuntime.ts",
+    "start": 430,
+    "end": 469,
+    "language": "typescript",
+    "label": "Canonical approval and structured-input request payloads"
+  },
+  {
+    "id": "work-task-usage-contract",
+    "path": "packages/contracts/src/providerRuntime.ts",
+    "start": 471,
+    "end": 543,
+    "language": "typescript",
+    "label": "Typed per-task usage and agent-versus-background classification"
+  },
+  {
+    "id": "work-task-latest-activities",
+    "path": "apps/server/src/orchestration/Layers/ProviderRuntimeIngestion.ts",
+    "start": 569,
+    "end": 646,
+    "language": "typescript",
+    "label": "Separate stable task progress and usage activity snapshots"
+  },
+  {
+    "id": "work-subagent-usage-merge",
+    "path": "packages/client-runtime/src/state/subagentRuntime.ts",
+    "start": 149,
+    "end": 225,
+    "language": "typescript",
+    "label": "Tolerant field-wise task usage parsing and max merge"
+  },
+  {
+    "id": "context-provider-binding-shape",
+    "path": "apps/server/src/persistence/ProviderSessionRuntime.ts",
+    "start": 35,
+    "end": 110,
+    "language": "typescript",
+    "label": "Persisted provider-instance binding and opaque continuation state"
+  },
+  {
+    "id": "context-memory-compaction-ingestion",
+    "path": "apps/server/src/orchestration/Layers/ProviderRuntimeIngestion.ts",
+    "start": 744,
+    "end": 763,
+    "language": "typescript",
+    "label": "Provider compaction observation becomes durable thread activity"
+  },
+  {
+    "id": "context-window-reducer-retention",
+    "path": "packages/client-runtime/src/state/threadReducer.ts",
+    "start": 562,
+    "end": 592,
+    "language": "typescript",
+    "label": "Latest resolvable context-window snapshot retained per turn id"
+  },
+  {
+    "id": "workbench-terminal-attach-order",
+    "path": "apps/server/src/terminal/Manager.ts",
+    "start": 2351,
+    "end": 2402,
+    "language": "typescript",
+    "label": "Terminal attach buffers races, emits a snapshot, then delivers live events"
+  },
+  {
+    "id": "workbench-asset-token-verification",
+    "path": "apps/server/src/assets/AssetAccess.ts",
+    "start": 410,
+    "end": 451,
+    "language": "typescript",
+    "label": "Asset URL signing followed by signature and expiry verification"
+  },
+  {
+    "id": "workbench-mcp-credential-issue",
+    "path": "apps/server/src/mcp/McpSessionRegistry.ts",
+    "start": 112,
+    "end": 168,
+    "language": "typescript",
+    "label": "Random MCP bearer credential and registry-generated scoped session identity"
+  },
+  {
+    "id": "workbench-pr-write-gates",
+    "path": "apps/server/src/pullRequest/PullRequestService.ts",
+    "start": 1300,
+    "end": 1367,
+    "language": "typescript",
+    "label": "Pull-request host capability checks followed by fresh viewer authorization"
+  },
+  {
+    "id": "project-script-import-flow",
+    "path": "apps/web/src/components/ProjectScriptsControl.tsx",
+    "start": 80,
+    "end": 150,
+    "language": "tsx",
+    "label": "Checked-in t3.json actions are deduplicated import suggestions"
+  },
+  {
+    "id": "web-main-runtime-entry",
+    "path": "apps/web/src/main.tsx",
+    "start": 1,
+    "end": 61,
+    "language": "tsx",
+    "label": "Electron-aware history and authenticated React entry"
+  },
+  {
+    "id": "web-app-root-providers",
+    "path": "apps/web/src/AppRoot.tsx",
+    "start": 1,
+    "end": 23,
+    "language": "tsx",
+    "label": "Shared atom registry and route-persistent renderer hosts"
+  },
+  {
+    "id": "web-router-composition",
+    "path": "apps/web/src/router.ts",
+    "start": 1,
+    "end": 20,
+    "language": "typescript",
+    "label": "Generated route-tree router construction"
+  },
+  {
+    "id": "web-environment-atom-catalog",
+    "path": "apps/web/src/connection/catalog.ts",
+    "start": 1,
+    "end": 5,
+    "language": "typescript",
+    "label": "Web environment catalog uses the shared atom runtime"
+  },
+  {
+    "id": "web-environment-session-atoms",
+    "path": "apps/web/src/state/session.ts",
+    "start": 7,
+    "end": 41,
+    "language": "typescript",
+    "label": "Per-environment prepared connection and session atoms"
+  },
+  {
+    "id": "web-timeline-list-virtualization",
+    "path": "apps/web/src/components/chat/MessagesTimeline.tsx",
+    "start": 570,
+    "end": 648,
+    "language": "tsx",
+    "label": "Keyed virtualized message timeline configuration"
+  },
+  {
+    "id": "web-timeline-row-structural-sharing",
+    "path": "apps/web/src/components/chat/MessagesTimeline.tsx",
+    "start": 2095,
+    "end": 2113,
+    "language": "tsx",
+    "label": "Timeline row structural sharing for virtualized memo boundaries"
+  },
+  {
+    "id": "web-sidebar-row-locality",
+    "path": "apps/web/src/components/Sidebar.tsx",
+    "start": 2200,
+    "end": 2252,
+    "language": "tsx",
+    "label": "Sidebar streaming row locality and callback references"
+  },
+  {
+    "id": "web-client-tracing-export",
+    "path": "apps/web/src/observability/clientTracing.ts",
+    "start": 15,
+    "end": 96,
+    "language": "typescript",
+    "label": "Primary-environment OTLP client tracing lifecycle"
+  },
+  {
+    "id": "web-sidebar-optimistic-pinning",
+    "path": "apps/web/src/components/Sidebar.tsx",
+    "start": 2554,
+    "end": 2610,
+    "language": "tsx",
+    "label": "Optimistic pin-order override and canonical surrender rules"
+  },
+  {
+    "id": "mobile-app-root-composition",
+    "path": "apps/mobile/src/App.tsx",
+    "start": 61,
+    "end": 106,
+    "language": "tsx",
+    "label": "Mobile root Atom, provider, navigation, and native host composition"
+  },
+  {
+    "id": "mobile-connection-runtime-layer",
+    "path": "apps/mobile/src/connection/runtime.ts",
+    "start": 1,
+    "end": 45,
+    "language": "typescript",
+    "label": "Shared connection and snapshot layers with mobile platform services"
+  },
+  {
+    "id": "mobile-persistence-schema",
+    "path": "apps/mobile/src/persistence/mobile-database.ts",
+    "start": 242,
+    "end": 275,
+    "language": "typescript",
+    "label": "SQLite client cache and preference schema with versioned migration"
+  },
+  {
+    "id": "mobile-draft-update-flush",
+    "path": "apps/mobile/src/state/use-composer-drafts.ts",
+    "start": 212,
+    "end": 229,
+    "language": "typescript",
+    "label": "Draft persistence flush before JavaScript runtime teardown"
+  },
+  {
+    "id": "mobile-outbox-optimistic-durability",
+    "path": "apps/mobile/src/state/thread-outbox-manager.ts",
+    "start": 91,
+    "end": 124,
+    "language": "typescript",
+    "label": "Optimistic enqueue, durable rollback, and pre-delivery confirmation"
+  },
+  {
+    "id": "mobile-outbox-delivery-policy",
+    "path": "apps/mobile/src/state/thread-outbox-model.ts",
+    "start": 145,
+    "end": 226,
+    "language": "typescript",
+    "label": "Outbox existence guards, capped backoff, and failure classification"
+  },
+  {
+    "id": "mobile-share-commit-boundary",
+    "path": "apps/mobile/src/features/sharing/incoming-share-inbox.ts",
+    "start": 46,
+    "end": 124,
+    "language": "typescript",
+    "label": "Durable share inbox write before native handoff acknowledgement"
+  },
+  {
+    "id": "mobile-native-surface-probe",
+    "path": "apps/mobile/src/features/terminal/nativeTerminalModule.ts",
+    "start": 48,
+    "end": 100,
+    "language": "typescript",
+    "label": "Optional native terminal resolution and compiled revision probe"
+  },
+  {
+    "id": "mobile-update-restart-guard",
+    "path": "apps/mobile/src/features/updates/app-updates.ts",
+    "start": 417,
+    "end": 480,
+    "language": "typescript",
+    "label": "Deferred OTA flush and foreground-handoff safety gate"
+  },
+  {
+    "id": "desktop-preload-bridge",
+    "path": "apps/desktop/src/preload.ts",
+    "start": 30,
+    "end": 103,
+    "language": "typescript",
+    "label": "Curated renderer bridge for local, SSH, exposure, WSL, and file operations"
+  },
+  {
+    "id": "desktop-bootstrap-order",
+    "path": "apps/desktop/src/app/DesktopApp.ts",
+    "start": 142,
+    "end": 218,
+    "language": "typescript",
+    "label": "Endpoint selection, desktop protocol, IPC, primary start, and parallel WSL reconciliation"
+  },
+  {
+    "id": "desktop-primary-platform-choice",
+    "path": "apps/desktop/src/backend/DesktopBackendConfiguration.ts",
+    "start": 689,
+    "end": 728,
+    "language": "typescript",
+    "label": "Host-local primary label with the Windows-only WSL override"
+  },
+  {
+    "id": "desktop-pool-scope-lifecycle",
+    "path": "apps/desktop/src/backend/DesktopBackendPool.ts",
+    "start": 327,
+    "end": 419,
+    "language": "typescript",
+    "label": "Per-instance child scopes and primary-protected unregister lifecycle"
+  },
+  {
+    "id": "desktop-process-channels",
+    "path": "apps/desktop/src/backend/DesktopBackendManager.ts",
+    "start": 451,
+    "end": 526,
+    "language": "typescript",
+    "label": "Bootstrap, telemetry, diagnostics-control, and WSL stdin process channels"
+  },
+  {
+    "id": "desktop-http-readiness-loop",
+    "path": "apps/desktop/src/backend/DesktopBackendManager.ts",
+    "start": 566,
+    "end": 591,
+    "language": "typescript",
+    "label": "Repeated HTTP readiness budgets while the local child remains alive"
+  },
+  {
+    "id": "desktop-updater-quit-boundary",
+    "path": "apps/desktop/src/app/DesktopLifecycle.ts",
+    "start": 198,
+    "end": 227,
+    "language": "typescript",
+    "label": "Updater-controlled quit bypasses the ordinary before-quit hold"
+  },
+  {
+    "id": "desktop-all-instance-shutdown",
+    "path": "apps/desktop/src/app/DesktopApp.ts",
+    "start": 295,
+    "end": 315,
+    "language": "typescript",
+    "label": "Application finalizer gracefully stops every registered local backend"
+  },
+  {
+    "id": "distribution-cli-contract",
+    "path": "apps/server/package.json",
+    "start": 1,
+    "end": 22,
+    "language": "json",
+    "label": "The t3 npm executable and published dist payload"
+  },
+  {
+    "id": "distribution-cli-bundles-web",
+    "path": "apps/server/scripts/cli.ts",
+    "start": 143,
+    "end": 176,
+    "language": "typescript",
+    "label": "CLI build copies the web renderer into the server package"
+  },
+  {
+    "id": "distribution-desktop-artifact-contract",
+    "path": "scripts/build-desktop-artifact.ts",
+    "start": 2059,
+    "end": 2107,
+    "language": "typescript",
+    "label": "Desktop artifact naming, packed resources, update feed, and macOS target"
+  },
+  {
+    "id": "distribution-desktop-linux-windows-targets",
+    "path": "scripts/build-desktop-artifact.ts",
+    "start": 2133,
+    "end": 2174,
+    "language": "typescript",
+    "label": "Linux and Windows desktop target configuration"
+  },
+  {
+    "id": "distribution-release-matrix",
+    "path": ".github/workflows/release.yml",
+    "start": 342,
+    "end": 397,
+    "language": "yaml",
+    "label": "The four desktop artifacts actually shipped by release CI"
+  },
+  {
+    "id": "distribution-cli-before-release",
+    "path": ".github/workflows/release.yml",
+    "start": 709,
+    "end": 791,
+    "language": "yaml",
+    "label": "Exact CLI publication gates GitHub Release publication"
+  },
+  {
+    "id": "distribution-mobile-fingerprint-publish",
+    "path": ".github/workflows/mobile-eas-production.yml",
+    "start": 263,
+    "end": 286,
+    "language": "yaml",
+    "label": "Production OTA publication requires a matching native fingerprint"
+  },
+  {
+    "id": "distribution-download-resolution",
+    "path": "apps/marketing/src/pages/download.astro",
+    "start": 89,
+    "end": 132,
+    "language": "typescript",
+    "label": "Marketing download links resolve against latest GitHub Release assets"
+  },
+  {
+    "id": "distribution-aur-selection",
+    "path": "packaging/aur/scripts/release.sh",
+    "start": 9,
+    "end": 44,
+    "language": "bash",
+    "label": "Stable and nightly tags select separate checksum-pinned AUR packages"
+  },
+  {
+    "id": "release-channel-resolution",
+    "path": ".github/workflows/release.yml",
+    "start": 103,
+    "end": 155,
+    "language": "bash",
+    "label": "Stable and nightly releases derive different versions, tags, and latest policy"
+  },
+  {
+    "id": "release-exact-version-invariant",
+    "path": "docs/operations/release.md",
+    "start": 174,
+    "end": 187,
+    "language": "markdown",
+    "label": "npm exact-version publication precedes every released client"
+  },
+  {
+    "id": "desktop-update-check-download",
+    "path": "apps/desktop/src/updates/DesktopUpdates.ts",
+    "start": 334,
+    "end": 458,
+    "language": "typescript",
+    "label": "Desktop channel selection, update checks, and user-triggered download"
+  },
+  {
+    "id": "desktop-update-install-boundary",
+    "path": "apps/desktop/src/updates/DesktopUpdates.ts",
+    "start": 465,
+    "end": 575,
+    "language": "typescript",
+    "label": "Desktop install stops every backend before updater-controlled restart"
+  },
+  {
+    "id": "server-update-exact-preflight",
+    "path": "apps/server/src/cloud/selfUpdate.ts",
+    "start": 64,
+    "end": 169,
+    "language": "typescript",
+    "label": "Server self-update accepts only an exact version that passes staged preflight"
+  },
+  {
+    "id": "server-update-launcher-handoff",
+    "path": "apps/server/src/cloud/selfUpdate.ts",
+    "start": 171,
+    "end": 191,
+    "language": "typescript",
+    "label": "Prepared server runtime is handed to the stable launcher by update id"
+  },
+  {
+    "id": "mobile-ota-fingerprint-policy",
+    "path": "apps/mobile/app.config.ts",
+    "start": 159,
+    "end": 180,
+    "language": "typescript",
+    "label": "Mobile runtime compatibility is keyed by native fingerprint"
+  },
+  {
+    "id": "analytics-posthog-controls",
+    "path": "apps/server/src/telemetry/AnalyticsService.ts",
+    "start": 31,
+    "end": 44,
+    "language": "typescript",
+    "label": "PostHog destination, opt-out, and bounded buffer configuration"
+  },
+  {
+    "id": "analytics-posthog-boundary",
+    "path": "apps/server/src/telemetry/AnalyticsService.ts",
+    "start": 69,
+    "end": 134,
+    "language": "typescript",
+    "label": "Installation-scoped analytics payload and PostHog batch boundary"
+  },
+  {
+    "id": "analytics-identity-ladder",
+    "path": "apps/server/src/telemetry/Identify.ts",
+    "start": 248,
+    "end": 299,
+    "language": "typescript",
+    "label": "Hashed Codex, Claude, then anonymous analytics identity ladder"
+  },
+  {
+    "id": "observability-local-remote-lanes",
+    "path": "apps/server/src/observability/Layers/Observability.ts",
+    "start": 19,
+    "end": 93,
+    "language": "typescript",
+    "label": "Local trace sink remains active while OTLP traces and metrics are optional"
+  },
+  {
+    "id": "observability-browser-ingest",
+    "path": "apps/server/src/http.ts",
+    "start": 146,
+    "end": 199,
+    "language": "typescript",
+    "label": "Authenticated browser traces land locally before optional OTLP forwarding"
+  },
+  {
+    "id": "resource-telemetry-demand-history",
+    "path": "docs/internals/resource-telemetry.md",
+    "start": 129,
+    "end": 170,
+    "language": "markdown",
+    "label": "Bounded native history and diagnostics-driven telemetry streaming"
+  },
+  {
+    "id": "connect-oauth-hosted-handoff",
+    "path": "packages/shared/src/connectAuth.ts",
+    "start": 19,
+    "end": 104,
+    "language": "typescript",
+    "label": "Hosted OAuth handoff and loopback versus out-of-band callbacks"
+  },
+  {
+    "id": "connect-oauth-cli-pkce",
+    "path": "apps/server/src/cloud/CliTokenManager.ts",
+    "start": 266,
+    "end": 323,
+    "language": "typescript",
+    "label": "CLI PKCE, state validation, and authorization-code exchange"
+  },
+  {
+    "id": "connect-browser-dpop-key",
+    "path": "apps/web/src/cloud/dpop.ts",
+    "start": 24,
+    "end": 143,
+    "language": "typescript",
+    "label": "Browser P-256 DPoP key storage, generation, and thumbprint"
+  },
+  {
+    "id": "connect-environment-link-handshake",
+    "path": "apps/web/src/cloud/linkEnvironment.ts",
+    "start": 402,
+    "end": 493,
+    "language": "typescript",
+    "label": "Client-side relay challenge, environment proof, link, and runtime setup"
+  },
+  {
+    "id": "connect-relay-linker-provision",
+    "path": "infra/relay/src/environments/EnvironmentLinker.ts",
+    "start": 227,
+    "end": 341,
+    "language": "typescript",
+    "label": "Relay challenge verification, replay defense, link, and endpoint provisioning"
+  },
+  {
+    "id": "connect-managed-tunnel-provision",
+    "path": "infra/relay/src/environments/ManagedEndpointProvider.ts",
+    "start": 604,
+    "end": 855,
+    "language": "typescript",
+    "label": "Cloudflare tunnel allocation, ingress, DNS, and connector runtime"
+  },
+  {
+    "id": "connect-environment-runtime-tunnel",
+    "path": "apps/server/src/cloud/ManagedEndpointRuntime.ts",
+    "start": 187,
+    "end": 287,
+    "language": "typescript",
+    "label": "Environment-owned managed tunnel child supervision"
+  },
+  {
+    "id": "connect-relay-environment-mint",
+    "path": "infra/relay/src/environments/EnvironmentConnector.ts",
+    "start": 541,
+    "end": 670,
+    "language": "typescript",
+    "label": "Proof-key-bound relay mint request and environment bootstrap credential"
+  },
+  {
+    "id": "dpop-validation",
+    "path": "packages/shared/src/dpop.ts",
+    "start": 1,
+    "end": 175,
+    "language": "typescript",
+    "label": "DPoP signature, target, token hash, and time validation"
+  },
+  {
+    "id": "managed-relay-dpop-authorization",
+    "path": "packages/client-runtime/src/authorization/service.ts",
+    "start": 180,
+    "end": 299,
+    "language": "typescript",
+    "label": "Managed relay bootstrap becomes a distinct DPoP-bound environment session"
+  },
+  {
+    "id": "reconnect-environment-registry",
+    "path": "packages/client-runtime/src/connection/registry.ts",
+    "start": 156,
+    "end": 289,
+    "language": "typescript",
+    "label": "Environment-scoped runtime registry and lease replacement"
+  },
+  {
+    "id": "reconnect-scoped-environment-refs",
+    "path": "packages/contracts/src/environment.ts",
+    "start": 31,
+    "end": 130,
+    "language": "typescript",
+    "label": "Environment descriptors and scoped project and thread references"
+  },
+  {
+    "id": "reconnect-supervisor-active-lease",
+    "path": "packages/client-runtime/src/connection/supervisor.ts",
+    "start": 490,
+    "end": 615,
+    "language": "typescript",
+    "label": "Active prepared connection and RPC session lease lifecycle"
+  },
+  {
+    "id": "reconnect-supervisor-generation-loop",
+    "path": "packages/client-runtime/src/connection/supervisor.ts",
+    "start": 643,
+    "end": 755,
+    "language": "typescript",
+    "label": "Environment supervisor generation, offline, retry, and backoff loop"
+  },
+  {
+    "id": "reconnect-shell-authoritative-refresh",
+    "path": "packages/client-runtime/src/state/shell.ts",
+    "start": 138,
+    "end": 254,
+    "language": "typescript",
+    "label": "Shell cache, authoritative refresh, cursor, and synchronization boundary"
+  },
+  {
+    "id": "reconnect-thread-snapshot-epoch",
+    "path": "packages/client-runtime/src/state/threads.ts",
+    "start": 212,
+    "end": 338,
+    "language": "typescript",
+    "label": "Thread snapshot replacement and stale history epoch guard"
+  },
+  {
+    "id": "reconnect-mobile-background-demand",
+    "path": "apps/mobile/src/connection/background-activity.ts",
+    "start": 44,
+    "end": 115,
+    "language": "typescript",
+    "label": "Mobile background activity reports and retained environment demand"
+  },
+  {
+    "id": "reconnect-mobile-background-scopes",
+    "path": "apps/mobile/src/connection/background-activity-scopes.ts",
+    "start": 24,
+    "end": 84,
+    "language": "typescript",
+    "label": "Reference-counted environment background scopes"
+  },
+  {
+    "id": "awareness-relay-signal-filter",
+    "path": "apps/server/src/relay/AgentAwarenessRelay.ts",
+    "start": 69,
+    "end": 133,
+    "language": "typescript",
+    "label": "Awareness event filtering and projected-state sanitization"
+  },
+  {
+    "id": "awareness-relay-projected-publish",
+    "path": "apps/server/src/relay/AgentAwarenessRelay.ts",
+    "start": 345,
+    "end": 426,
+    "language": "typescript",
+    "label": "Signed awareness publish and unchanged-state suppression"
+  },
+  {
+    "id": "awareness-apns-delivery-policy",
+    "path": "infra/relay/src/agentActivity/ApnsDeliveries.ts",
+    "start": 143,
+    "end": 326,
+    "language": "typescript",
+    "label": "APNs alert gating and Live Activity delivery cadence"
+  },
+  {
+    "id": "awareness-mobile-registration-gate",
+    "path": "apps/mobile/src/features/agent-awareness/remoteRegistration.ts",
+    "start": 69,
+    "end": 90,
+    "language": "typescript",
+    "label": "Relay-accepted mobile registration and replay repair boundary"
+  },
+  {
+    "id": "awareness-notification-navigation",
+    "path": "apps/mobile/src/features/agent-awareness/notificationPayload.ts",
+    "start": 37,
+    "end": 105,
+    "language": "typescript",
+    "label": "Notification payload normalization, deduplication, and navigation"
+  },
+  {
+    "id": "reconnect-capability-descriptor",
+    "path": "packages/contracts/src/environment.ts",
+    "start": 31,
+    "end": 92,
+    "language": "typescript",
+    "label": "Environment version and optional capability descriptor"
+  },
+  {
+    "id": "reconnect-version-skew-guidance",
+    "path": "apps/web/src/versionSkew.ts",
+    "start": 21,
+    "end": 130,
+    "language": "typescript",
+    "label": "Exact client-server version comparison and update guidance"
+  },
+  {
+    "id": "reconnect-exact-version-update",
+    "path": "apps/server/src/cloud/selfUpdate.ts",
+    "start": 30,
+    "end": 190,
+    "language": "typescript",
+    "label": "Exact-version staging, preflight, and launcher activation handoff"
+  }
+]

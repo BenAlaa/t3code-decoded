@@ -1,0 +1,63 @@
+name: Book engine bug
+description: Report a reproducible problem in navigation, rendering, interaction, search, accessibility, or build behavior.
+title: "fix(engine): "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: Use the source-correction form for an inaccurate architectural claim and the upstream tracker for a T3 Code product bug.
+  - type: input
+    id: page
+    attributes:
+      label: Page or route
+      placeholder: /runtime-topologies/
+    validations:
+      required: true
+  - type: textarea
+    id: observed
+    attributes:
+      label: Observed behavior
+      description: Explain what happened and include the exact error when available.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Reproduction
+      description: Give the shortest reliable sequence, including diagram controls or keyboard input when relevant.
+      placeholder: |
+        1. Open …
+        2. Select …
+        3. Observe …
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      description: Browser and version, operating system, input method, and deployed or local build.
+      placeholder: Firefox 145, macOS, trackpad, GitHub Pages
+    validations:
+      required: true
+  - type: textarea
+    id: accessibility
+    attributes:
+      label: Accessibility or reduced-motion impact
+      description: Note keyboard, screen-reader, focus, contrast, motion, zoom, or print impact if relevant.
+    validations:
+      required: false
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Report checks
+      options:
+        - label: This is a T3 Code Decoded book/engine issue, not an upstream T3 Code product issue.
+          required: true
+        - label: I checked for an existing report.
+          required: true

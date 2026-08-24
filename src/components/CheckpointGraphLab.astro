@@ -1,0 +1,135 @@
+---
+interface Props { id: string; }
+const { id } = Astro.props;
+if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(id)) {
+  throw new Error("CheckpointGraphLab requires a stable kebab-case id.");
+}
+const labId = `checkpoint-graph-${id}`;
+const states = [
+  {
+    id: "before",
+    label: "Before turn",
+    eyebrow: "Baseline · turn 0",
+    detail: "The current workspace is captured as the baseline hidden ref. The branch still points at its ordinary commit; the checkpoint is a separate content snapshot.",
+    ref: "refs/t3/checkpoints/<base64url-thread-id>/turn/0",
+    files: ["README.md · unchanged", "src/app.ts · unchanged"],
+    consequence: "A later turn diff can compare this baseline to the next checkpoint.",
+  },
+  {
+    id: "after",
+    label: "After turn",
+    eyebrow: "Checkpoint · turn 1",
+    detail: "After the turn, T3 builds a tree with an isolated Git index, stores it under a hidden ref, then derives a changed-file summary before it records checkpoint metadata.",
+    ref: "refs/t3/checkpoints/<base64url-thread-id>/turn/1",
+    files: ["README.md · 3 additions, 1 deletion", "src/app.ts · 12 additions"],
+    consequence: "The visible summary is derived from the checkpoint diff; it is not an independent file watcher.",
+  },
+  {
+    id: "diff",
+    label: "Inspect a diff",
+    eyebrow: "Read-only comparison",
+    detail: "A turn view compares checkpoint 0 → 1. A full-thread view compares the baseline → a selected checkpoint. Working-tree and branch views are separate live Git comparisons.",
+    ref: "turn 0 → turn 1",
+    files: ["- const title = \"old\";", "+ const title = \"new\";", "+ export const ready = true;"],
+    consequence: "Inspecting a patch does not restore files or alter the provider conversation.",
+  },
+  {
+    id: "revert",
+    label: "Revert to turn 0",
+    eyebrow: "Ordered destructive saga",
+    detail: "The reactor restores worktree and index content, cleans untracked paths, refreshes workspace entries, asks the bound provider to roll back counted turns, attempts best-effort deletion of newer hidden refs, then records a completed revert.",
+    ref: "restore turn 0; prune turn 1",
+    files: ["README.md · baseline restored", "src/app.ts · baseline restored", "turn 1 hidden ref · delete attempted"],
+    consequence: "This is a content restore plus a provider-history operation, not a Git branch reset or an undo of a remote push.",
+  },
+  {
+    id: "failure",
+    label: "Provider rollback fails",
+    eyebrow: "Partial failure boundary",
+    detail: "Filesystem restore happens before provider rollback. If the live provider cannot roll back, the reactor appends a failure activity and does not dispatch thread.reverted; the working tree may already be restored while durable history and stale refs remain.",
+    ref: "filesystem restored; completion withheld",
+    files: ["README.md · baseline restored", "provider conversation · not rolled back", "turn 1 ref · still present"],
+    consequence: "The user must treat this as a mismatched partial state, not as a completed revert.",
+  },
+] as const;
+const payload = JSON.stringify(states).replaceAll("<", "\\u003c");
+---
+
+<section class="checkpoint-graph-lab" data-checkpoint-graph-lab data-checkpoint-graph-ready="initializing" aria-labelledby={`${labId}-title`}>
+  <header>
+    <span>Interactive checkpoint graph</span>
+    <h3 id={`${labId}-title`}>Walk one turn through capture, review, and a partial rollback failure</h3>
+    <p>Each button is a discrete state. Nothing plays by itself, and the full ledger stays available without JavaScript.</p>
+  </header>
+  <div class="checkpoint-controls" role="group" aria-label="Choose a checkpoint state">
+    {states.map((state, index) => <button type="button" data-checkpoint-state={index} aria-pressed={index === 0 ? "true" : "false"}>{state.label}</button>)}
+  </div>
+  <p class="sr-only" role="status" aria-live="polite" aria-atomic="true" data-checkpoint-status>State: {states[0].label}. {states[0].detail}</p>
+  <div class="checkpoint-board" data-checkpoint-board>
+    <div class="git-graph" role="img" aria-label="Illustrated ordinary branch, workspace, and hidden turn zero and turn one checkpoint refs">
+      <div class="branch-label">ordinary branch</div>
+      <div class="branch-line" aria-hidden="true"></div>
+      <div class="commit-node baseline" data-graph-node="baseline"><b>A</b><span>HEAD</span></div>
+      <div class="workspace-node after" data-graph-node="after"><b>Δ</b><span>workspace after turn</span></div>
+      <div class="checkpoint-rail" aria-hidden="true"></div>
+      <div class="checkpoint-node zero" data-graph-node="zero"><b>0</b><span>hidden baseline</span></div>
+      <div class="checkpoint-node one" data-graph-node="one"><b>1</b><span>hidden checkpoint</span></div>
+      <p class="graph-key"><span aria-hidden="true">●</span> circles are illustrative content snapshots; a checkpoint ref is not shown as a normal branch tip.</p>
+    </div>
+    <article class="checkpoint-detail">
+      <span class="detail-eyebrow" data-checkpoint-eyebrow>{states[0].eyebrow}</span>
+      <h4 data-checkpoint-label>{states[0].label}</h4>
+      <p data-checkpoint-detail>{states[0].detail}</p>
+      <dl>
+        <div><dt>Reference / operation</dt><dd data-checkpoint-ref><code>{states[0].ref}</code></dd></div>
+        <div><dt>Observed files</dt><dd><ul data-checkpoint-files>{states[0].files.map((file) => <li>{file}</li>)}</ul></dd></div>
+        <div><dt>Boundary</dt><dd data-checkpoint-consequence>{states[0].consequence}</dd></div>
+      </dl>
+    </article>
+  </div>
+  <details class="checkpoint-fallback" open>
+    <summary>Complete state ledger</summary>
+    <ol>
+      {states.map((state) => <li><strong>{state.label}</strong><p>{state.detail}</p><p><b>Boundary:</b> {state.consequence}</p></li>)}
+    </ol>
+  </details>
+  <noscript><p class="checkpoint-noscript">JavaScript is off; use the complete state ledger above.</p></noscript>
+  <script type="application/json" data-checkpoint-data set:html={payload}></script>
+</section>
+
+<script>
+  document.querySelectorAll<HTMLElement>("[data-checkpoint-graph-lab]").forEach((lab) => {
+    if (lab.dataset.checkpointGraphReady === "true") return;
+    try {
+      const states = JSON.parse(lab.querySelector("[data-checkpoint-data]")?.textContent ?? "[]");
+      const controls = [...lab.querySelectorAll<HTMLButtonElement>("[data-checkpoint-state]")];
+      const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+      const setText = (selector: string, value: string) => { const node = lab.querySelector(selector); if (node) node.textContent = value; };
+      const render = (index: number, transition = true) => {
+        const state = states[index]; if (!state) return;
+        controls.forEach((control, controlIndex) => control.setAttribute("aria-pressed", String(controlIndex === index)));
+        lab.dataset.checkpointCurrent = state.id;
+        setText("[data-checkpoint-status]", `State: ${state.label}. ${state.detail}`);
+        setText("[data-checkpoint-eyebrow]", state.eyebrow); setText("[data-checkpoint-label]", state.label);
+        setText("[data-checkpoint-detail]", state.detail); setText("[data-checkpoint-ref]", state.ref);
+        setText("[data-checkpoint-consequence]", state.consequence);
+        const files = lab.querySelector("[data-checkpoint-files]");
+        if (files) files.replaceChildren(...state.files.map((file: string) => { const item = document.createElement("li"); item.textContent = file; return item; }));
+        if (transition && !reducedMotion.matches) lab.querySelector<HTMLElement>("[data-checkpoint-board]")?.animate([{ opacity: .55, transform: "translateY(5px)" }, { opacity: 1, transform: "translateY(0)" }], { duration: 180, easing: "ease-out" });
+      };
+      controls.forEach((control) => control.addEventListener("click", () => render(Number(control.dataset.checkpointState))));
+      render(0, false); lab.dataset.checkpointGraphReady = "true";
+    } catch { lab.dataset.checkpointGraphReady = "error"; }
+  });
+</script>
+
+<style>
+  .checkpoint-graph-lab { margin:2rem 0; overflow:hidden; border:1px solid var(--line-strong); border-radius:14px; background:var(--paper-raised); font-family:var(--font-ui); }
+  .checkpoint-graph-lab header { padding:1rem 1.2rem; border-bottom:1px solid var(--line); } .checkpoint-graph-lab header span,.detail-eyebrow { color:var(--signal-deep); font:750 .65rem/1 var(--font-ui); letter-spacing:.1em; text-transform:uppercase; } .checkpoint-graph-lab h3 { margin:.35rem 0; } .checkpoint-graph-lab header p { margin:0; color:var(--ink-soft); font-size:.82rem; }
+  .checkpoint-controls { display:flex; flex-wrap:wrap; gap:.45rem; padding:1rem 1.2rem .7rem; } .checkpoint-controls button { min-height:2.35rem; border:1px solid var(--line); border-radius:999px; background:var(--paper); color:var(--ink-soft); padding:.35rem .65rem; font:700 .72rem/1.2 var(--font-ui); cursor:pointer; } .checkpoint-controls button[aria-pressed="true"] { border-color:var(--signal); background:var(--signal-soft); color:var(--signal-deep); } .checkpoint-controls button:focus-visible { outline:3px solid color-mix(in srgb,var(--signal) 45%,transparent); outline-offset:2px; }
+  .checkpoint-board { display:grid; grid-template-columns:minmax(17rem,.9fr) minmax(17rem,1.1fr); gap:1rem; padding:.4rem 1.2rem 1.2rem; } .git-graph { position:relative; min-height:15.5rem; overflow:hidden; border:1px solid var(--line); border-radius:10px; background:var(--paper-muted); padding:1rem; } .branch-label { color:var(--ink-faint); font:700 .67rem/1 var(--font-ui); letter-spacing:.07em; text-transform:uppercase; } .branch-line { position:absolute; top:5rem; left:2.45rem; right:54%; height:2px; background:var(--ink-faint); opacity:.6; } .commit-node,.checkpoint-node { position:absolute; z-index:1; display:grid; place-items:center; width:3.25rem; height:3.25rem; border:2px solid var(--line-strong); border-radius:50%; background:var(--paper); color:var(--ink-soft); text-align:center; box-shadow:0 1px 0 color-mix(in srgb,var(--ink) 10%,transparent); } .commit-node b,.checkpoint-node b { font-size:.86rem; } .commit-node span,.checkpoint-node span,.workspace-node span { position:absolute; top:3.65rem; width:6.8rem; color:var(--ink-soft); font:650 .66rem/1.25 var(--font-ui); } .baseline { top:3.35rem; left:1.4rem; } .commit-node span { top:-1.65rem; } .workspace-node { position:absolute; top:3.55rem; right:1.4rem; z-index:1; display:grid; place-items:center; width:3rem; height:2.75rem; border:2px dashed var(--line-strong); border-radius:.45rem; background:var(--paper); color:var(--ink-soft); text-align:center; } .workspace-node b { font-size:1.1rem; } .workspace-node span { top:-2.15rem; } .after { opacity:.43; } .after span { right:-1.8rem; } .checkpoint-rail { position:absolute; top:8.9rem; left:2.45rem; right:2.45rem; height:2px; border-top:2px dashed var(--line-strong); } .checkpoint-node { top:7.3rem; border-color:var(--signal); background:var(--signal-soft); color:var(--signal-deep); } .zero { left:1.4rem; } .one { right:1.4rem; opacity:.43; } .one span { right:-1.8rem; } .graph-key { position:absolute; right:1rem; bottom:.7rem; left:1rem; margin:0; color:var(--ink-faint); font-size:.67rem; line-height:1.35; } .graph-key span { color:var(--signal); }
+  .checkpoint-graph-lab[data-checkpoint-current="after"] [data-graph-node="after"], .checkpoint-graph-lab[data-checkpoint-current="diff"] [data-graph-node="after"], .checkpoint-graph-lab[data-checkpoint-current="diff"] [data-graph-node="one"] { opacity:1; } .checkpoint-graph-lab[data-checkpoint-current="after"] [data-graph-node="one"] { opacity:1; } .checkpoint-graph-lab[data-checkpoint-current="revert"] [data-graph-node="after"], .checkpoint-graph-lab[data-checkpoint-current="revert"] [data-graph-node="one"] { opacity:.14; text-decoration:line-through; } .checkpoint-graph-lab[data-checkpoint-current="failure"] [data-graph-node="after"] { opacity:.14; text-decoration:line-through; } .checkpoint-graph-lab[data-checkpoint-current="failure"] [data-graph-node="one"] { border-color:var(--orange); background:color-mix(in srgb,var(--orange) 14%,var(--paper)); color:color-mix(in srgb,var(--orange) 72%,var(--ink)); opacity:1; }
+  .checkpoint-detail { border-left:4px solid var(--signal); background:var(--paper-muted); padding:.95rem; } .checkpoint-detail h4 { margin:.3rem 0 .45rem; } .checkpoint-detail > p { margin:0; color:var(--ink-soft); font-size:.82rem; line-height:1.55; } .checkpoint-detail dl { margin:1rem 0 0; display:grid; gap:.75rem; } .checkpoint-detail dl div { border-top:1px solid var(--line); padding-top:.55rem; } .checkpoint-detail dt { color:var(--ink-faint); font:750 .63rem/1 var(--font-ui); letter-spacing:.07em; text-transform:uppercase; } .checkpoint-detail dd { margin:.35rem 0 0; color:var(--ink-soft); font-size:.76rem; line-height:1.45; } .checkpoint-detail ul { margin:0; padding-left:1rem; } .checkpoint-detail code { font-size:.68rem; overflow-wrap:anywhere; }
+  .checkpoint-graph-lab:not([data-checkpoint-graph-ready="true"]) .checkpoint-controls,.checkpoint-graph-lab:not([data-checkpoint-graph-ready="true"]) .checkpoint-board { display:none; } .checkpoint-graph-lab[data-checkpoint-graph-ready="true"] .checkpoint-fallback { display:none; } .checkpoint-fallback { margin:0 1.2rem 1.2rem; } .checkpoint-fallback li { margin:.85rem 0; } .checkpoint-fallback p { margin:.25rem 0; color:var(--ink-soft); font-size:.76rem; line-height:1.45; } .checkpoint-noscript { margin:0 1.2rem 1rem; color:var(--ink-faint); }
+  @media (max-width:46rem) { .checkpoint-board { grid-template-columns:1fr; } } @media (prefers-reduced-motion:reduce) { .checkpoint-graph-lab *, .checkpoint-graph-lab *::before,.checkpoint-graph-lab *::after { animation:none !important; transition:none !important; scroll-behavior:auto !important; } } @media print { .checkpoint-controls,.checkpoint-board,.checkpoint-noscript { display:none !important; } .checkpoint-fallback { display:block !important; } .checkpoint-fallback summary { display:none; } }
+</style>

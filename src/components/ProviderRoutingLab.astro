@@ -1,0 +1,216 @@
+---
+import { getSourceReference, sourceReferenceHref, sourceReferenceLabel } from "../lib/sources";
+
+interface Props { id: string; }
+const { id } = Astro.props;
+if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(id)) {
+  throw new Error("ProviderRoutingLab requires a stable kebab-case id.");
+}
+
+const stages = [
+  { label: "Settings", short: "settings", question: "What was authored?" },
+  { label: "Hydration", short: "merge", question: "Does explicit or legacy config win?" },
+  { label: "Construction", short: "scope", question: "Can the driver decode and create it?" },
+  { label: "Discovery", short: "view", question: "Is it live or only a shadow snapshot?" },
+  { label: "Binding", short: "route", question: "Which exact instance does the thread name?" },
+  { label: "Operation", short: "recover", question: "Can the current adapter adopt or resume?" },
+] as const;
+
+const scenarios = {
+  legacy: {
+    label: "Legacy Codex default",
+    authored: "providers.codex exists; providerInstances.codex is absent.",
+    hydration: "Synthesize the default instance id `codex` from the legacy typed blob.",
+    construction: "Registered Codex driver decodes config and creates one scoped live instance.",
+    discovery: "UI snapshot and routable adapter both use instanceId `codex`.",
+    binding: "Thread binding names `codex`; driver kind verifies `codex`.",
+    operation: "Exact adapter lookup succeeds; an active session routes immediately.",
+    outcome: "Routable default instance",
+    secret: "Only marked sensitive environment values are split/redacted.",
+    tone: "success",
+    sourceIds: ["provider-instance-hydration", "provider-driver-instance-spi", "provider-adapter-registry-live"],
+  },
+  explicit: {
+    label: "Explicit work account",
+    authored: "providerInstances.codex_work uses driver `codex`; a legacy default may coexist.",
+    hydration: "Keep `codex_work` exactly as authored. It does not overwrite the default `codex` key.",
+    construction: "The same driver factory creates independent adapter, snapshot, and text-generation closures.",
+    discovery: "Both instances can expose different health, model, and auth observations.",
+    binding: "A work thread persists `providerInstanceId: codex_work`.",
+    operation: "Lookup cannot fall back to `codex`; it routes the work instance only.",
+    outcome: "Two same-driver instances stay isolated",
+    secret: "Sensitive per-instance environment can point each process at different homes or credentials.",
+    tone: "success",
+    sourceIds: ["provider-instance-identity-contract", "provider-instance-registry-tests", "provider-service-start-session"],
+  },
+  override: {
+    label: "Explicit default overrides legacy",
+    authored: "Both providers.codex and providerInstances.codex are present.",
+    hydration: "The explicit `providerInstances.codex` envelope wins; no legacy copy is synthesized for that id.",
+    construction: "Decode the explicit opaque config and compute enabled state; nested false dominates.",
+    discovery: "Exactly one default-id snapshot is produced from the explicit entry.",
+    binding: "Existing default bindings still name `codex`, now resolving the replacement configuration.",
+    operation: "If the object changed, the old scope closes first; later work may need cursor recovery.",
+    outcome: "Explicit configuration wins, without live-session handoff",
+    secret: "A redacted sensitive patch preserves the prior secret rather than writing an empty value.",
+    tone: "warning",
+    sourceIds: ["provider-instance-hydration", "provider-instance-enabled-precedence", "provider-instance-registry-reconcile"],
+  },
+  shadow: {
+    label: "Unknown fork driver",
+    authored: "providerInstances.research names valid slug `forkAgent`, absent from this build.",
+    hydration: "The open driver slug parses successfully and remains in the effective map.",
+    construction: "No registered driver exists, so construction yields an unavailable shadow.",
+    discovery: "The UI sees disabled/error/unavailable with its exact reason.",
+    binding: "A persisted binding can still name `research`, but no live adapter is listed.",
+    operation: "getByInstance fails; the service does not silently choose another account or driver.",
+    outcome: "Visible configuration, intentionally unroutable",
+    secret: "Unknown opaque config is preserved; the contracts layer does not attempt driver-specific decoding.",
+    tone: "failure",
+    sourceIds: ["provider-instance-identity-contract", "provider-instance-build-shadow", "provider-unavailable-shadow"],
+  },
+  rebuilt: {
+    label: "Changed instance with cursor",
+    authored: "codex_work config changes while a thread binding and resume cursor remain persisted.",
+    hydration: "The same instance id now carries a different entry.",
+    construction: "Close the old child scope before creating the replacement instance and stream.",
+    discovery: "Registries re-pull the replacement object after the change tick.",
+    binding: "SQLite still maps the thread to codex_work and retains opaque resume data.",
+    operation: "No active replacement session: an eligible operation calls startSession with saved cursor/mode/cwd/model.",
+    outcome: "Lazy resume attempt; not zero-downtime migration",
+    secret: "Changed sensitive values are materialized before the new driver scope is created.",
+    tone: "warning",
+    sourceIds: ["provider-instance-registry-reconcile", "provider-registry-live-sync", "provider-service-session-recovery"],
+  },
+  stranded: {
+    label: "Removed instance binding",
+    authored: "The thread still names codex_work, but settings removed that instance.",
+    hydration: "codex_work disappears from the effective map.",
+    construction: "The old child scope closes and no replacement is created.",
+    discovery: "The snapshot is pruned and live adapter lookup excludes the id.",
+    binding: "The durable thread binding is not automatically reassigned or deleted.",
+    operation: "Exact route lookup fails; another Codex instance cannot claim the thread implicitly.",
+    outcome: "Durable binding stranded until explicit repair/configuration",
+    secret: "Removing a sensitive environment entry also removes its named secret through settings logic.",
+    tone: "failure",
+    sourceIds: ["provider-instance-registry-reconcile", "provider-adapter-registry-live", "provider-service-session-recovery"],
+  },
+  nocursor: {
+    label: "Live instance, no resume state",
+    authored: "The configured instance is healthy; the thread binding exists after its live session was lost.",
+    hydration: "No settings change is required.",
+    construction: "The current instance and adapter are live.",
+    discovery: "Health does not imply ownership of this thread's native session.",
+    binding: "The route is exact but its resume cursor is null/absent.",
+    operation: "Recovery-capable operations return validation failure instead of starting an unrelated fresh conversation.",
+    outcome: "Routable instance, unrecoverable conversation",
+    secret: "Credentials may be healthy and still cannot reconstruct missing provider continuation state.",
+    tone: "failure",
+    sourceIds: ["provider-service-session-recovery", "provider-session-directory"],
+  },
+  opencode: {
+    label: "External OpenCode password",
+    authored: "An external serverUrl and serverPassword live in the OpenCode config blob.",
+    hydration: "The explicit config is decoded by the OpenCode driver.",
+    construction: "No local server scope is owned for an external URL; the client uses supplied Basic auth.",
+    discovery: "Connection/auth health belongs to this instance snapshot.",
+    binding: "Threads still route by instance id, never by server URL or password.",
+    operation: "The adapter calls the external server for that configured instance.",
+    outcome: "Routable external instance with a plaintext-settings exception",
+    secret: "serverPassword is documented and tested as plaintext in settings; password UI styling is not encryption.",
+    tone: "warning",
+    sourceIds: ["opencode-password-settings", "opencode-password-persistence-test", "opencode-external-basic-auth"],
+  },
+} as const;
+
+const resolved = Object.fromEntries(Object.entries(scenarios).map(([key, scenario]) => [key, {
+  ...scenario,
+  sources: scenario.sourceIds.map((sourceId) => { const source = getSourceReference(sourceId); return { href: sourceReferenceHref(source), label: sourceReferenceLabel(source) }; }),
+}]));
+const initial = resolved.legacy;
+const labId = `provider-routing-${id}`;
+const payload = JSON.stringify({ stages, scenarios: resolved }).replaceAll("<", "\\u003c");
+---
+
+<section class="provider-routing-lab" data-provider-routing-lab data-routing-ready="initializing" aria-labelledby={`${labId}-title`}>
+  <header class="routing-head"><span>Interactive fleet router</span><h3 id={`${labId}-title`}>Which configured runtime receives the thread?</h3><p>Walk from authored settings to one exact route. Discovery visibility, live behavior, and resume eligibility are different checks.</p></header>
+
+  <div class="routing-interactive">
+    <div class="routing-controls">
+      <label for={`${labId}-scenario`}>Fleet scenario
+        <select id={`${labId}-scenario`} data-routing-scenario>{Object.entries(resolved).map(([key, scenario]) => <option value={key}>{scenario.label}</option>)}</select>
+      </label>
+      <label for={`${labId}-step`}>Inspection stage <strong data-routing-count>1 / {stages.length}</strong>
+        <input id={`${labId}-step`} type="range" min="0" max={stages.length - 1} value="0" step="1" data-routing-step aria-valuetext={stages[0].label} />
+      </label>
+      <div class="routing-actions" aria-label="Move through route resolution"><button type="button" data-routing-prev disabled>← Earlier</button><button type="button" data-routing-next>Later →</button></div>
+    </div>
+
+    <div class="routing-track" style="--routing-token-left: 7%" aria-hidden="true"><div class="routing-rail"></div><span class="routing-token"></span><ol>{stages.map((stage, index) => <li class:list={{ current: index === 0 }}><b>{index + 1}</b><span>{stage.short}</span></li>)}</ol></div>
+    <p class="sr-only" role="status" aria-live="polite" aria-atomic="true" data-routing-status>{initial.label}; stage 1 of {stages.length}: {stages[0].label}. {initial.outcome}.</p>
+
+    <article class:list={["routing-result", `tone-${initial.tone}`]} data-routing-result>
+      <div class="routing-result-head"><div><span data-routing-question>{stages[0].question}</span><h4 data-routing-stage>{stages[0].label}</h4></div><strong data-routing-outcome>{initial.outcome}</strong></div>
+      <p data-routing-detail>{initial.authored}</p>
+      <div class="routing-ledger">
+        <div><span>Authored</span><p data-routing-authored>{initial.authored}</p></div><div><span>Effective map</span><p data-routing-hydration>{initial.hydration}</p></div>
+        <div><span>Live construction</span><p data-routing-construction>{initial.construction}</p></div><div><span>Discovery</span><p data-routing-discovery>{initial.discovery}</p></div>
+        <div><span>Durable binding</span><p data-routing-binding>{initial.binding}</p></div><div><span>Operation result</span><p data-routing-operation>{initial.operation}</p></div>
+      </div>
+      <aside><strong>Configuration / secret boundary</strong><p data-routing-secret>{initial.secret}</p></aside>
+      <div class="routing-sources" data-routing-sources>{initial.sources.map((source) => <a href={source.href} rel="noreferrer"><code>{source.label}</code> ↗</a>)}</div>
+    </article>
+  </div>
+
+  <details class="routing-fallback" open><summary>Static fleet-routing matrix</summary><div class="routing-table-scroll" tabindex="0" role="region" aria-label="All provider routing scenarios"><table><thead><tr><th scope="col">Scenario</th><th scope="col">Hydration / construction</th><th scope="col">Binding / operation</th><th scope="col">Outcome and secret boundary</th></tr></thead><tbody>{Object.values(resolved).map((scenario) => <tr><th scope="row">{scenario.label}</th><td>{scenario.hydration} {scenario.construction}</td><td>{scenario.binding} {scenario.operation}</td><td><strong>{scenario.outcome}</strong> {scenario.secret}</td></tr>)}</tbody></table></div></details>
+  <noscript><p class="routing-noscript">JavaScript is off; the complete fleet-routing matrix remains open above.</p></noscript>
+  <script type="application/json" data-routing-data set:html={payload}></script>
+</section>
+
+<script>
+  interface RoutingSource { href: string; label: string }
+  interface RoutingStage { label: string; short: string; question: string }
+  interface RoutingScenario { label: string; authored: string; hydration: string; construction: string; discovery: string; binding: string; operation: string; outcome: string; secret: string; tone: string; sources: RoutingSource[] }
+  document.querySelectorAll<HTMLElement>("[data-provider-routing-lab]").forEach((lab) => {
+    if (lab.dataset.routingReady === "true") return;
+    try {
+      const data = JSON.parse(lab.querySelector<HTMLScriptElement>("[data-routing-data]")?.textContent ?? "") as { stages: RoutingStage[]; scenarios: Record<string, RoutingScenario> };
+      const select = lab.querySelector<HTMLSelectElement>("[data-routing-scenario]"); const range = lab.querySelector<HTMLInputElement>("[data-routing-step]");
+      const previous = lab.querySelector<HTMLButtonElement>("[data-routing-prev]"); const next = lab.querySelector<HTMLButtonElement>("[data-routing-next]");
+      const track = lab.querySelector<HTMLElement>(".routing-track"); const result = lab.querySelector<HTMLElement>("[data-routing-result]"); const markers = [...lab.querySelectorAll<HTMLElement>(".routing-track li")];
+      let step = 0; const setText = (selector: string, value: string) => { const node = lab.querySelector<HTMLElement>(selector); if (node) node.textContent = value; };
+      const scenario = () => data.scenarios[select?.value ?? "legacy"] ?? data.scenarios.legacy;
+      const details = (current: RoutingScenario) => [current.authored, current.hydration, current.construction, current.discovery, current.binding, current.operation];
+      const paint = (requested = step) => {
+        step = Math.max(0, Math.min(data.stages.length - 1, requested)); const current = scenario(); const stage = data.stages[step]; if (!current || !stage) return;
+        if (range) { range.value = String(step); range.setAttribute("aria-valuetext", stage.label); } if (previous) previous.disabled = step === 0; if (next) next.disabled = step === data.stages.length - 1;
+        track?.style.setProperty("--routing-token-left", `${7 + step * 17.2}%`); markers.forEach((marker, index) => marker.classList.toggle("current", index === step));
+        if (result) result.className = `routing-result tone-${current.tone}`; setText("[data-routing-count]", `${step + 1} / ${data.stages.length}`);
+        setText("[data-routing-status]", `${current.label}; stage ${step + 1} of ${data.stages.length}: ${stage.label}. ${current.outcome}.`); setText("[data-routing-question]", stage.question); setText("[data-routing-stage]", stage.label); setText("[data-routing-detail]", details(current)[step] ?? "");
+        setText("[data-routing-outcome]", current.outcome); setText("[data-routing-authored]", current.authored); setText("[data-routing-hydration]", current.hydration); setText("[data-routing-construction]", current.construction); setText("[data-routing-discovery]", current.discovery); setText("[data-routing-binding]", current.binding); setText("[data-routing-operation]", current.operation); setText("[data-routing-secret]", current.secret);
+        const sourceHost = lab.querySelector<HTMLElement>("[data-routing-sources]"); if (sourceHost) sourceHost.replaceChildren(...current.sources.map((source) => { const link = document.createElement("a"); link.href = source.href; link.rel = "noreferrer"; const code = document.createElement("code"); code.textContent = source.label; link.append(code, " ↗"); return link; }));
+      };
+      select?.addEventListener("change", () => { step = 0; paint(); }); range?.addEventListener("input", () => paint(Number(range.value))); previous?.addEventListener("click", () => paint(step - 1)); next?.addEventListener("click", () => paint(step + 1));
+      paint(); lab.dataset.routingReady = "true";
+    } catch { lab.dataset.routingReady = "error"; }
+  });
+</script>
+
+<style>
+  .provider-routing-lab { margin: 34px 0; overflow: hidden; border: 1px solid var(--line-strong); border-radius: 14px; background: var(--paper-raised); font-family: var(--font-ui); }
+  .routing-head { padding: 18px 20px 14px; border-bottom: 1px solid var(--line); } .routing-head > span { color: var(--signal-deep); font: 800 9px/1 var(--font-ui); letter-spacing: .12em; text-transform: uppercase; } .routing-head h3 { margin: 8px 0 5px; } .routing-head p { margin: 0; color: var(--ink-soft); font-size: 13px; line-height: 1.5; }
+  .provider-routing-lab:not([data-routing-ready="true"]) .routing-interactive { display: none; } .provider-routing-lab[data-routing-ready="true"] .routing-fallback { display: none; }
+  .routing-controls { display: grid; grid-template-columns: minmax(205px, 1fr) minmax(220px, 1.2fr) auto; gap: 12px; align-items: end; padding: 15px 18px; border-bottom: 1px solid var(--line); background: var(--paper-muted); }
+  .routing-controls label { display: grid; gap: 6px; color: var(--ink-faint); font-size: 10px; font-weight: 750; letter-spacing: .06em; text-transform: uppercase; } .routing-controls select { min-height: 44px; padding: 0 10px; border: 1px solid var(--line-strong); border-radius: 7px; background: var(--paper); color: var(--ink); font: 650 12px/1 var(--font-ui); } .routing-controls input { width: 100%; accent-color: var(--signal); }
+  .routing-actions { display: flex; gap: 6px; } .routing-actions button { min-height: 44px; padding: 0 11px; border: 1px solid var(--line); border-radius: 7px; background: var(--paper); color: var(--ink); cursor: pointer; font: 700 10px/1 var(--font-ui); } .routing-actions button:disabled { cursor: not-allowed; opacity: .4; }
+  .routing-track { position: relative; padding: 20px 23px 14px; overflow: hidden; } .routing-track ol { position: relative; z-index: 2; display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 4px; margin: 0; padding: 0; list-style: none; } .routing-rail { position: absolute; z-index: 0; top: 33px; left: 7%; width: 86%; height: 2px; background: var(--line-strong); } .routing-token { position: absolute; z-index: 3; top: 26px; left: calc(var(--routing-token-left) - 8px); width: 16px; height: 16px; border: 3px solid var(--paper-raised); border-radius: 50%; background: var(--signal); box-shadow: 0 0 0 1px var(--signal); transition: left var(--motion-flow) var(--motion-ease); }
+  .routing-track li { display: grid; gap: 6px; justify-items: center; color: var(--ink-faint); font-size: 9px; text-transform: uppercase; } .routing-track li b { display: grid; width: 28px; height: 28px; place-items: center; border: 2px solid var(--line-strong); border-radius: 50%; background: var(--paper-raised); color: var(--ink-faint); } .routing-track li.current b { border-color: var(--signal); background: var(--signal-soft); color: var(--signal-deep); transform: scale(1.08); }
+  .routing-result { margin: 0 18px 18px; padding: 16px; border: 1px solid var(--line); border-left: 4px solid var(--blue); border-radius: 10px; background: var(--paper); } .routing-result.tone-warning { border-left-color: var(--orange); } .routing-result.tone-failure { border-left-color: var(--signal); } .routing-result.tone-success { border-left-color: var(--green); }
+  .routing-result-head { display: flex; gap: 14px; justify-content: space-between; align-items: start; } .routing-result-head span { color: var(--ink-faint); font-size: 9px; font-weight: 800; letter-spacing: .09em; text-transform: uppercase; } .routing-result h4 { margin: 5px 0 8px; } .routing-result-head strong { max-width: 44%; padding: 7px 9px; border: 1px solid var(--line); border-radius: 6px; background: var(--paper-muted); color: var(--ink); font-size: 10px; text-align: right; } .routing-result > p { margin: 0 0 13px; color: var(--ink-soft); font-size: 13px; }
+  .routing-ledger { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; } .routing-ledger > div { padding: 10px; border: 1px solid var(--line); border-radius: 7px; background: var(--paper-raised); } .routing-ledger span, .routing-result aside strong { color: var(--ink-faint); font-size: 8px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; } .routing-ledger p, .routing-result aside p { margin: 5px 0 0; color: var(--ink-soft); font-size: 11px; line-height: 1.45; }
+  .routing-result aside { margin-top: 8px; padding: 10px; border: 1px dashed var(--orange); border-radius: 7px; background: color-mix(in srgb, var(--orange) 6%, var(--paper-raised)); } .routing-sources { display: flex; flex-wrap: wrap; gap: 6px 13px; margin-top: 12px; font-size: 9px; } .routing-sources a { color: var(--signal-deep); text-decoration: none; }
+  .routing-fallback { margin: 14px 18px 18px; } .routing-fallback summary { cursor: pointer; color: var(--ink); font-weight: 750; } .routing-table-scroll { margin-top: 10px; overflow-x: auto; } .routing-fallback table { width: 100%; min-width: 780px; border-collapse: collapse; font-size: 11px; } .routing-fallback th, .routing-fallback td { padding: 9px; border: 1px solid var(--line); text-align: left; vertical-align: top; } .routing-fallback thead th { color: var(--ink-faint); font-size: 8px; letter-spacing: .07em; text-transform: uppercase; } .routing-noscript { margin: 0 18px 18px; color: var(--ink-faint); font-size: 11px; }
+  @media (max-width: 760px) { .routing-controls, .routing-ledger { grid-template-columns: 1fr; } .routing-actions button { flex: 1; } .routing-token { display: none; } .routing-track { overflow-x: auto; } .routing-track ol { min-width: 620px; } .routing-result-head { flex-direction: column; } .routing-result-head strong { max-width: 100%; text-align: left; } }
+  @media (prefers-reduced-motion: reduce) { .routing-token, .routing-track li b { transition: none; } }
+  @media print { .routing-interactive, .routing-noscript { display: none !important; } .routing-fallback { display: block !important; } .routing-fallback summary { display: none; } .routing-table-scroll { overflow: visible; } .routing-fallback table { min-width: 0; } }
+</style>

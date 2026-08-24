@@ -1,0 +1,61 @@
+---
+import excerpts from "../generated/excerpts.json";
+import lock from "../../sources/t3code.lock.json";
+
+interface SourceRecord {
+  id: string;
+  path: string;
+  start: number;
+  end: number;
+  language: string;
+  label?: string;
+  code: string;
+  checksum: string;
+}
+
+interface Props {
+  id: string;
+  focus?: number[];
+  note?: string;
+}
+
+const { id, focus = [], note } = Astro.props;
+const record = (excerpts as Record<string, SourceRecord>)[id];
+if (!record) throw new Error(`Unknown source excerpt '${id}'. Run npm run source:sync.`);
+const lines = record.code.replace(/\n$/, "").split("\n");
+const sourceUrl = `${lock.repository}/blob/${lock.commit}/${record.path}#L${record.start}-L${record.end}`;
+---
+
+<figure class="source-excerpt" data-source-excerpt>
+  <figcaption class="source-caption">
+    <span class="source-dots" aria-hidden="true"><i></i><i></i><i></i></span>
+    <a class="source-path" href={sourceUrl} rel="noreferrer" title={record.path}>
+      {record.path}:{record.start}–{record.end} ↗
+    </a>
+    <span class="source-kind" title={`SHA-256 ${record.checksum}`}>verbatim · {record.language} · {record.checksum.slice(0, 8)}</span>
+    <button class="source-copy" type="button" data-source-copy aria-live="polite">Copy</button>
+  </figcaption>
+  <div class="source-scroll">
+    <pre aria-label={`${record.label ?? record.path}, lines ${record.start} to ${record.end}`}><code>{lines.map((line, index) => {
+      const lineNumber = record.start + index;
+      return <span class:list={["source-line", { "is-focus": focus.includes(lineNumber) }]} data-line={lineNumber}>{line || "\u00a0"}{index < lines.length - 1 ? "\n" : ""}</span>;
+    })}</code></pre>
+  </div>
+  {note && <div class="source-note"><strong>Read this as: </strong>{note}</div>}
+</figure>
+
+<script>
+  document.querySelectorAll<HTMLElement>("[data-source-excerpt]").forEach((figure) => {
+    if (figure.dataset.copyReady === "true") return;
+    figure.dataset.copyReady = "true";
+    const button = figure.querySelector<HTMLButtonElement>("[data-source-copy]");
+    const code = figure.querySelector("code");
+    button?.addEventListener("click", async () => {
+      try {
+        await navigator.clipboard.writeText(code?.textContent ?? "");
+        button.textContent = "Copied";
+        setTimeout(() => { button.textContent = "Copy"; }, 1400);
+      } catch { button.textContent = "Copy failed"; }
+    });
+  });
+</script>

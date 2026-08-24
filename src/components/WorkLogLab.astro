@@ -1,0 +1,68 @@
+---
+interface Props { id: string; }
+const { id } = Astro.props;
+if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(id)) throw new Error("WorkLogLab requires a stable kebab-case id.");
+const views = {
+  web: { label: "Web · chat work log", lead: "Illustrative projection, not live data: a quiet parent narrative collapses agent lifecycle into a spawn-batch call to action.", rows: [["Parent", "thread.message-sent", "durable thread narrative"], ["Spawn batch", "direct agents", "grouped by spawn turn"], ["Spawn batch", "workflow members", "grouped under the coordinator; CTA opens Agents"]], note: "Web's separate Agents surface carries detailed per-agent state. Progress and usage use stable latest-state streams, but the parent log is not one row per task." },
+  agents: { label: "Web · Agents panel", lead: "Illustrative projection, not live data: a derived roster updates retained agent state in place.", rows: [["Agent", "task.progress", "working state when the payload identifies an agent"], ["Agent", "task.updated", "idle is resumable when reported"], ["Workflow", "task progress", "provider-derived members when present"]], note: "Token, tool, and duration fields are task-local rollups only when typed usage supplies them. They are not Chapter 20 totals." },
+  mobile: { label: "Mobile · thread work log", lead: "Illustrative projection, not live data: compact rows keep a terminal signal because this path has no matching Agents roster.", rows: [["Work log", "task.completed", "terminal agent signal"], ["Work log", "terminal task.updated", "Codex child terminal signal"], ["Work log", "retained activity", "only source-backed activity is shown"]], note: "A mobile work log derives from the same activities; it does not create a mobile-only task store." },
+} as const;
+const initial = views.web;
+const labId = `work-log-${id}`;
+const payload = JSON.stringify({ views }).replaceAll("<", "\\u003c");
+---
+
+<section class="work-log-lab" data-work-log-lab data-ready="pending" aria-labelledby={`${labId}-title`}>
+  <header><span>Interactive work-log projector</span><h3 id={`${labId}-title`}>One thread, three surface projections</h3><p>Switch views to see what a surface may derive from durable thread activity without inventing a scheduler record.</p></header>
+  <div class="work-log-controls" role="tablist" aria-label="Work-log surfaces">{Object.entries(views).map(([key, view], index) => <button type="button" role="tab" id={`${labId}-${key}`} aria-controls={`${labId}-panel`} aria-selected={index === 0 ? "true" : "false"} tabindex={index === 0 ? 0 : -1} data-view={key}>{view.label}</button>)}</div>
+  <p class="sr-only" role="status" aria-live="polite" aria-atomic="true" data-status>{initial.label}. {initial.lead}</p>
+  <div class="work-log-projector" id={`${labId}-panel`} role="tabpanel" aria-labelledby={`${labId}-web`} tabindex="0">
+    <div class="projector-head"><span data-label>{initial.label}</span><strong>thread: durable</strong></div><p data-lead>{initial.lead}</p>
+    <ol data-rows>{initial.rows.map(([kind, title, detail]) => <li><span>{kind}</span><div><strong>{title}</strong><small>{detail}</small></div></li>)}</ol>
+    <aside data-note>{initial.note}</aside>
+  </div>
+  <div class="work-log-state" aria-label="State ownership legend"><div><strong>Durable thread</strong><span>messages · activities · lifecycle overlays</span></div><div><strong>Derived roster</strong><span>task/subagent fold when evidence exists</span></div><div><strong>Ephemeral live state</strong><span>liveness clears on restart/session death; plan progress clears at settlement/session death</span></div></div>
+  <details class="work-log-static" open><summary>Static projection rules</summary><ul><li>Web chat groups agent lifecycle into spawn-batch CTAs that open Agents: direct agents by spawn turn, workflow members by coordinator.</li><li>Web Agents renders a derived roster, including task-local typed usage when supplied.</li><li>Mobile retains compact terminal/task signals because this path has no equivalent Agents roster.</li><li>Pin, snooze, and lifecycle organize the thread; they do not schedule provider tasks.</li></ul></details>
+  <noscript><p class="work-log-noscript">JavaScript is off; the static rules remain open above.</p></noscript>
+  <script type="application/json" data-work-log-data set:html={payload}></script>
+</section>
+
+<script>
+  type View = { label: string; lead: string; rows: string[][]; note: string };
+  document.querySelectorAll<HTMLElement>("[data-work-log-lab]").forEach((lab) => {
+    if (lab.dataset.ready === "true") return;
+    try {
+      const data = JSON.parse(lab.querySelector<HTMLScriptElement>("[data-work-log-data]")?.textContent ?? "") as { views: Record<string, View> };
+      const tabs = [...lab.querySelectorAll<HTMLButtonElement>("[data-view]")];
+      const panel = lab.querySelector<HTMLElement>("[role=tabpanel]");
+      const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      const text = (selector: string, value: string) => { const node = lab.querySelector<HTMLElement>(selector); if (node) node.textContent = value; };
+      const paint = (key: string, focus = false, transition = true) => {
+        const view = data.views[key] ?? data.views.web;
+        tabs.forEach((tab) => { const chosen = tab.dataset.view === key; tab.setAttribute("aria-selected", String(chosen)); tab.tabIndex = chosen ? 0 : -1; });
+        const selectedTab = tabs.find((tab) => tab.dataset.view === key);
+        if (panel && selectedTab) panel.setAttribute("aria-labelledby", selectedTab.id);
+        text("[data-label]", view.label); text("[data-lead]", view.lead); text("[data-note]", view.note); text("[data-status]", `${view.label}. ${view.lead}`);
+        const rows = lab.querySelector<HTMLOListElement>("[data-rows]");
+        if (rows) rows.replaceChildren(...view.rows.map(([kind, title, detail]) => { const item = document.createElement("li"); const badge = document.createElement("span"); badge.textContent = kind; const body = document.createElement("div"); const heading = document.createElement("strong"); heading.textContent = title; const small = document.createElement("small"); small.textContent = detail; body.append(heading, small); item.append(badge, body); return item; }));
+        if (transition && !reducedMotion) {
+          panel?.animate(
+            [{ opacity: .5, transform: "translateY(5px)" }, { opacity: 1, transform: "translateY(0)" }],
+            { duration: 180, easing: "ease-out" },
+          );
+        }
+        if (focus) tabs.find((tab) => tab.dataset.view === key)?.focus();
+      };
+      tabs.forEach((tab, index) => { tab.addEventListener("click", () => paint(tab.dataset.view ?? "web")); tab.addEventListener("keydown", (event) => { if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return; event.preventDefault(); const next = event.key === "Home" ? 0 : event.key === "End" ? tabs.length - 1 : (index + (event.key === "ArrowRight" ? 1 : -1) + tabs.length) % tabs.length; paint(tabs[next]?.dataset.view ?? "web", true); }); });
+      paint("web", false, false); lab.dataset.ready = "true";
+    } catch { lab.dataset.ready = "error"; }
+  });
+</script>
+
+<style>
+  .work-log-lab { margin: 2rem 0; overflow: hidden; border: 1px solid var(--line-strong); border-radius: .9rem; background: var(--paper-raised); font-family: var(--font-ui); } .work-log-lab > header { padding: 1.1rem 1.25rem .9rem; border-bottom: 1px solid var(--line); } .work-log-lab header > span { color: var(--signal-deep); font-size: .66rem; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; } .work-log-lab h3 { margin: .45rem 0; font-size: 1.05rem; } .work-log-lab header p { margin: 0; color: var(--ink-soft); font-size: .86rem; line-height: 1.5; }
+  .work-log-controls, .work-log-projector, .work-log-state { display: none; } .work-log-lab[data-ready="true"] .work-log-controls { display: flex; } .work-log-lab[data-ready="true"] .work-log-projector { display: block; } .work-log-lab[data-ready="true"] .work-log-state { display: grid; } .work-log-lab[data-ready="true"] .work-log-static, .work-log-lab[data-ready="true"] .work-log-noscript { display: none; } .work-log-controls { gap: .45rem; overflow-x: auto; padding: .75rem 1.25rem; border-bottom: 1px solid var(--line); background: var(--paper-muted); } .work-log-controls button { flex: 0 0 auto; min-height: 2.35rem; border: 1px solid var(--line-strong); border-radius: 999px; padding: 0 .7rem; color: var(--ink); background: var(--paper); cursor: pointer; font: 700 .74rem/1 var(--font-ui); } .work-log-controls button[aria-selected="true"] { border-color: var(--signal); background: var(--signal); color: var(--paper-raised); }
+  .work-log-projector { margin: 1rem 1.25rem; border: 1px solid var(--line); border-radius: .65rem; background: var(--paper); } .projector-head { display: flex; justify-content: space-between; gap: .75rem; padding: .7rem .85rem; border-bottom: 1px solid var(--line); } .projector-head span { font-size: .78rem; font-weight: 750; } .projector-head strong { color: var(--ink-soft); font: 700 .68rem/1 var(--font-mono); text-transform: uppercase; } .work-log-projector > p { margin: .75rem .85rem; color: var(--ink-soft); font-size: .84rem; line-height: 1.45; } .work-log-projector ol { display: grid; gap: .35rem; margin: 0; padding: .7rem .85rem; border-top: 1px solid var(--line); list-style: none; } .work-log-projector li { display: grid; grid-template-columns: 5.4rem 1fr; gap: .55rem; align-items: start; padding: .45rem; border-radius: .4rem; background: var(--paper-muted); } .work-log-projector li > span { color: var(--signal-deep); font: 700 .64rem/1.3 var(--font-mono); text-transform: uppercase; } .work-log-projector li div { display: grid; gap: .1rem; } .work-log-projector li strong { font-size: .81rem; } .work-log-projector li small { color: var(--ink-soft); font-size: .75rem; line-height: 1.35; } .work-log-projector aside { margin: 0 .85rem .85rem; padding: .65rem .7rem; border-left: 3px solid var(--blue); background: var(--paper-muted); color: var(--ink-soft); font-size: .78rem; line-height: 1.45; }
+  .work-log-state { grid-template-columns: repeat(3, 1fr); gap: .5rem; margin: 0 1.25rem 1rem; } .work-log-state div { display: grid; gap: .22rem; padding: .65rem; border: 1px solid var(--line); border-radius: .5rem; } .work-log-state strong { font-size: .75rem; } .work-log-state span { color: var(--ink-soft); font-size: .71rem; line-height: 1.35; } .work-log-static { margin: 0 1.25rem 1.25rem; } .work-log-static summary { cursor: pointer; font-size: .82rem; font-weight: 700; } .work-log-static ul { margin: .65rem 0 0; padding-left: 1.2rem; color: var(--ink-soft); font-size: .8rem; line-height: 1.45; } .work-log-static li + li { margin-top: .35rem; } .work-log-noscript { margin: 0 1.25rem 1rem; color: var(--ink-soft); font-size: .8rem; }
+  .work-log-controls button:focus-visible, .work-log-projector:focus-visible { outline: 3px solid color-mix(in srgb, var(--signal) 50%, transparent); outline-offset: 2px; } @media (max-width: 42rem) { .work-log-lab > header, .work-log-controls { padding-left: 1rem; padding-right: 1rem; } .work-log-projector, .work-log-state, .work-log-static { margin-left: 1rem; margin-right: 1rem; } .work-log-state { grid-template-columns: 1fr; } } @media (prefers-reduced-motion: reduce) { .work-log-lab *, .work-log-lab *::before, .work-log-lab *::after { scroll-behavior: auto !important; transition: none !important; animation: none !important; } } @media print { .work-log-lab { break-inside: avoid; border-color: #777; } .work-log-controls, .work-log-projector, .work-log-noscript { display: none !important; } .work-log-static { display: block !important; } .work-log-static summary { display: none; } }
+</style>

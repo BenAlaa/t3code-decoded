@@ -1,0 +1,158 @@
+---
+import { getSourceReference, sourceReferenceHref, sourceReferenceLabel } from "../lib/sources";
+
+interface Step { stage: string; title: string; detail: string; sourceId?: string; }
+interface Props { id: string; steps: Step[]; label?: string; prompt?: string; }
+const { id, steps, label = "End-to-end request trace", prompt = "Move through the ordered stages or play the trace once." } = Astro.props;
+if (steps.length === 0) throw new Error("TraceLab requires at least one step.");
+if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(id)) throw new Error(`TraceLab '${label}' requires a stable kebab-case id.`);
+const resolvedSteps = steps.map(({ sourceId, ...step }) => {
+  if (!sourceId) return step;
+  const reference = getSourceReference(sourceId);
+  return {
+    ...step,
+    source: sourceReferenceLabel(reference),
+    sourceHref: sourceReferenceHref(reference),
+  };
+});
+const payload = JSON.stringify(resolvedSteps).replaceAll("<", "\\u003c");
+---
+
+<section class="trace-lab" data-trace-lab aria-label={label}>
+  <header class="trace-head"><span>Interactive trace</span><h3>{label}</h3><p>{prompt}</p></header>
+  <div class="trace-controls">
+    <button type="button" data-trace-prev disabled>← Previous</button>
+    <button type="button" data-trace-play aria-pressed="false">Play trace</button>
+    <button type="button" data-trace-next>Next →</button>
+    <span class="trace-counter" data-trace-counter>1 / {steps.length}</span>
+  </div>
+  <div class="trace-progress" aria-hidden="true"><span data-trace-progress style={`--trace-progress: ${100 / steps.length}%`}></span></div>
+  <ol class="trace-track" aria-label="Trace stages">
+    {resolvedSteps.map((step, index) => <li><button type="button" class:list={["trace-node", { active: index === 0 }]} data-trace-node={index} aria-current={index === 0 ? "step" : undefined} tabindex={index === 0 ? 0 : -1} aria-label={`Jump to ${step.stage}: ${step.title}`}>{step.stage}</button></li>)}
+  </ol>
+  <p class="sr-only" role="status" aria-live="polite" aria-atomic="true" data-trace-status>Step 1 of {steps.length}: {resolvedSteps[0]?.stage}</p>
+  <div class="trace-detail">
+    <span class="step" data-trace-stage>{resolvedSteps[0]?.stage}</span>
+    <h3 data-trace-title>{resolvedSteps[0]?.title}</h3>
+    <p data-trace-detail>{resolvedSteps[0]?.detail}</p>
+    <a data-trace-source href={resolvedSteps[0]?.sourceHref ?? "#"} rel="noreferrer" hidden={!resolvedSteps[0]?.source}><code>{resolvedSteps[0]?.source ?? ""}</code> ↗</a>
+  </div>
+  <script type="application/json" data-trace-data set:html={payload}></script>
+  <ol class="trace-print" aria-label={`${label}, all steps`}>
+    {resolvedSteps.map((step) => (
+      <li>
+        <strong>{step.stage} · {step.title}</strong>
+        <p>{step.detail}</p>
+        {step.source && <a href={step.sourceHref} rel="noreferrer"><code>{step.source}</code> ↗</a>}
+      </li>
+    ))}
+  </ol>
+</section>
+
+<script>
+  import { animateLabPanel, handleRovingKeys, LAB_MOTION, setPlaybackState } from "../lib/lab-motion";
+
+  document.querySelectorAll<HTMLElement>("[data-trace-lab]").forEach((lab) => {
+    if (lab.dataset.traceReady === "true") return;
+    lab.dataset.traceReady = "true";
+    const steps = JSON.parse(lab.querySelector("[data-trace-data]")?.textContent ?? "[]");
+    let index = 0;
+    let timer: number | undefined;
+    let playing = false;
+    const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const previous = lab.querySelector<HTMLButtonElement>("[data-trace-prev]");
+    const next = lab.querySelector<HTMLButtonElement>("[data-trace-next]");
+    const play = lab.querySelector<HTMLButtonElement>("[data-trace-play]");
+    const detail = lab.querySelector<HTMLElement>(".trace-detail");
+    const nodes = [...lab.querySelectorAll<HTMLButtonElement>("[data-trace-node]")];
+    let panelAnimation: Animation | undefined;
+    const paint = (nextIndex: number) => {
+      const direction = nextIndex >= index ? 1 : -1;
+      index = nextIndex;
+      const current = steps[index];
+      nodes.forEach((node, nodeIndex) => {
+        node.classList.toggle("active", nodeIndex === index);
+        node.classList.toggle("passed", nodeIndex < index);
+        node.toggleAttribute("aria-current", nodeIndex === index);
+        if (nodeIndex === index) node.setAttribute("aria-current", "step");
+        node.tabIndex = nodeIndex === index ? 0 : -1;
+      });
+      const set = (selector: string, value = "") => { const node = lab.querySelector(selector); if (node) node.textContent = value; };
+      set("[data-trace-stage]", current.stage);
+      set("[data-trace-title]", current.title);
+      set("[data-trace-detail]", current.detail);
+      const source = lab.querySelector<HTMLAnchorElement>("[data-trace-source]");
+      if (source) {
+        source.hidden = !current.source;
+        source.href = current.sourceHref ?? "#";
+        const code = source.querySelector("code");
+        if (code) code.textContent = current.source ?? "";
+      }
+      set("[data-trace-counter]", `${index + 1} / ${steps.length}`);
+      set("[data-trace-status]", `Step ${index + 1} of ${steps.length}: ${current.stage}`);
+      const progress = lab.querySelector<HTMLElement>("[data-trace-progress]");
+      if (progress) progress.style.setProperty("--trace-progress", `${((index + 1) / steps.length) * 100}%`);
+      if (previous) previous.disabled = index === 0;
+      if (next) next.disabled = index === steps.length - 1;
+      panelAnimation?.cancel();
+      panelAnimation = animateLabPanel(detail, direction, reduceMotion.matches);
+    };
+    const stop = () => {
+      if (timer !== undefined) window.clearTimeout(timer);
+      timer = undefined;
+      playing = false;
+      setPlaybackState(play, false, "trace");
+    };
+    const advance = () => {
+      if (!playing) return;
+      if (index >= steps.length - 1) {
+        stop();
+        return;
+      }
+      paint(index + 1);
+      timer = window.setTimeout(advance, LAB_MOTION.playbackStep);
+    };
+    previous?.addEventListener("click", () => { stop(); paint(Math.max(0, index - 1)); });
+    next?.addEventListener("click", () => { stop(); paint(Math.min(steps.length - 1, index + 1)); });
+    play?.addEventListener("click", () => {
+      if (playing) {
+        stop();
+        return;
+      }
+      if (reduceMotion.matches) return;
+      if (index === steps.length - 1) paint(0);
+      playing = true;
+      setPlaybackState(play, true, "trace");
+      timer = window.setTimeout(advance, LAB_MOTION.playbackLead);
+    });
+    nodes.forEach((node) => {
+      node.addEventListener("click", () => {
+        stop();
+        paint(Number(node.dataset.traceNode));
+      });
+      node.addEventListener("keydown", (event) =>
+        handleRovingKeys(event, nodes, index, (requested) => {
+          stop();
+          paint(requested);
+        }),
+      );
+    });
+    const updateMotionPreference = () => {
+      if (reduceMotion.matches) {
+        stop();
+        panelAnimation?.cancel();
+      }
+      if (play) play.hidden = reduceMotion.matches;
+    };
+    const stopWhenHidden = () => { if (document.hidden) stop(); };
+    reduceMotion.addEventListener("change", updateMotionPreference);
+    document.addEventListener("visibilitychange", stopWhenHidden);
+    window.addEventListener("pagehide", () => {
+      stop();
+      panelAnimation?.cancel();
+      reduceMotion.removeEventListener("change", updateMotionPreference);
+      document.removeEventListener("visibilitychange", stopWhenHidden);
+    }, { once: true });
+    updateMotionPreference();
+  });
+</script>

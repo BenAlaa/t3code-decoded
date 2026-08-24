@@ -1,0 +1,13 @@
+---
+import BaseLayout from "../layouts/BaseLayout.astro";
+const base = import.meta.env.BASE_URL;
+---
+
+<BaseLayout title="Page not found" description="This chapter does not exist in T3 Code Decoded.">
+  <main class="not-found" id="main-content">
+    <p class="eyebrow">404 · Outside the map</p>
+    <h1>This chapter is not in the source tree.</h1>
+    <p>The book may have moved while its evidence was being updated.</p>
+    <a class="button primary" href={base}>Return to the cover</a>
+  </main>
+</BaseLayout>

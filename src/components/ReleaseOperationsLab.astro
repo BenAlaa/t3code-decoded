@@ -1,0 +1,286 @@
+---
+interface Props { id: string; }
+
+const { id } = Astro.props;
+if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(id)) {
+  throw new Error("ReleaseOperationsLab requires a stable kebab-case id.");
+}
+const labId = `release-operations-${id}`;
+---
+
+<section class="release-operations" data-release-operations data-ready="pending" aria-labelledby={`${labId}-title`}>
+  <header class="release-operations__head">
+    <span>Interactive operations lab · Chapter 38</span>
+    <h3 id={`${labId}-title`}>One release, three replacement boundaries, four signal lanes</h3>
+    <p>Choose a lens, select a teaching case, and move the marker yourself. The model shows the point at which each owner may proceed—and the boundary that keeps it from doing so.</p>
+  </header>
+
+  <div class="release-operations__interactive">
+    <div class="release-operations__tabs" role="tablist" aria-label="Release operations lenses">
+      <button type="button" role="tab" id={`${labId}-release`} aria-selected="true" aria-controls={`${labId}-panel`} tabindex="0" data-lens="release">Release graph</button>
+      <button type="button" role="tab" id={`${labId}-update`} aria-selected="false" aria-controls={`${labId}-panel`} tabindex="-1" data-lens="update">Update boundary</button>
+      <button type="button" role="tab" id={`${labId}-telemetry`} aria-selected="false" aria-controls={`${labId}-panel`} tabindex="-1" data-lens="telemetry">Signal lane</button>
+    </div>
+
+    <div class="release-operations__controls">
+      <label for={`${labId}-case`}>Teaching case</label>
+      <select id={`${labId}-case`} data-case></select>
+      <div class="release-operations__buttons" aria-label="Flow controls">
+        <button type="button" data-previous>Previous</button>
+        <button type="button" data-next>Next</button>
+        <button type="button" data-reset>Reset</button>
+      </div>
+    </div>
+
+    <article class="release-operations__panel" id={`${labId}-panel`} role="tabpanel" aria-labelledby={`${labId}-release`} tabindex="0">
+      <div class="release-operations__summary">
+        <p class="release-operations__eyebrow" data-eyebrow>Release graph · stable exact-version path</p>
+        <h4 data-title>Publishing the CLI unblocks every client that can request a server update</h4>
+        <p data-copy>The graph does not update a machine. It only makes a matching, exact runtime available before a client can advertise itself.</p>
+      </div>
+      <div class="release-operations__flow" data-flow aria-label="Selected release operations flow"></div>
+      <dl class="release-operations__facts">
+        <div><dt>Guard</dt><dd data-guard>publish `t3@V` before a client at V is exposed</dd></div>
+        <div><dt>Owner now</dt><dd data-owner>release workflow</dd></div>
+        <div><dt>Failure boundary</dt><dd data-boundary>a client cannot target a package that has not published</dd></div>
+      </dl>
+    </article>
+
+    <p class="sr-only" role="status" aria-live="polite" aria-atomic="true" data-status>Release graph. Step 1.</p>
+  </div>
+
+  <noscript><p class="release-operations__noscript">JavaScript is off. The static ledger below preserves the release, update, and telemetry boundaries.</p></noscript>
+  <details class="release-operations__static" open>
+    <summary>Static operations ledger</summary>
+    <div class="release-operations__table-wrap" tabindex="0" role="region" aria-label="Static release operations ledger">
+      <table>
+        <thead><tr><th scope="col">Flow</th><th scope="col">Proceed only after</th><th scope="col">Owner</th><th scope="col">If it cannot proceed</th></tr></thead>
+        <tbody>
+          <tr><th scope="row">Exact server update</th><td>`t3@&lt;version&gt;` publishes before client release</td><td>release workflow, then service launcher</td><td>client version cannot be offered before the matching runtime exists</td></tr>
+          <tr><th scope="row">Desktop application</th><td>user chooses download and then install; pooled backends stop</td><td>desktop updater</td><td>state records an error or remains downloaded for a later install</td></tr>
+          <tr><th scope="row">Boot-service server</th><td>exact runtime preflight, SQLite snapshot, target reports prepared</td><td>stable launcher</td><td>rollback restores snapshot and selects the old runtime</td></tr>
+          <tr><th scope="row">Mobile OTA</th><td>fingerprint-compatible bundle, flushed intent, safe true background</td><td>mobile update coordinator</td><td>defer to a later lifecycle transition</td></tr>
+          <tr><th scope="row">Diagnostics</th><td>destination and authorization vary by lane</td><td>analytics/tracer/resource services</td><td>local traces can remain local; resource history stays bounded in memory</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </details>
+</section>
+
+<script>
+  const models = {
+    release: {
+      stable: {
+        label: "Stable exact-version release", eyebrow: "Release graph · stable exact-version path",
+        title: "Publishing the CLI unblocks every client that can request a server update",
+        copy: "The graph does not update a machine. It only makes a matching, exact runtime available before a client can advertise itself.",
+        steps: [
+          ["Resolve V", "Validate the stable release version and select stable metadata.", "version/channel resolver", "invalid version stops before artifacts"],
+          ["Publish t3@V", "Publish the server/CLI package for the precise version V.", "npm publication", "no client should request an absent package"],
+          ["Expose desktop release", "Publish installers and stable updater metadata after the CLI package.", "GitHub release", "desktop discovery remains gated"],
+          ["Move hosted channel", "Deploy the hosted client after release availability.", "web deployment", "connected server target V already exists"],
+          ["Client requests V", "A compatible boot-service server may stage exactly t3@V.", "client + server updater", "a machine can still decline or defer its own update"],
+        ],
+      },
+      nightly: {
+        label: "Nightly channel", eyebrow: "Release graph · nightly prerelease lane",
+        title: "Nightly changes eligibility metadata, not the exact-version invariant",
+        copy: "The nightly base and prerelease suffix select an independent update track. The release still publishes its exact CLI package before it exposes clients that may request it.",
+        steps: [
+          ["Resolve nightly", "Scheduled or explicitly nightly dispatch creates the next-patch prerelease version.", "version/channel resolver", "nightly does not become latest stable"],
+          ["Publish t3@V-nightly", "The exact prerelease is published under npm's nightly tag.", "npm publication", "the eventual client still targets the exact version"],
+          ["Publish nightly metadata", "Desktop updater metadata goes to its nightly channel and GitHub prerelease.", "GitHub release", "stable channel remains independent"],
+          ["Opt into discovery", "A desktop configured for nightly may discover the prerelease.", "desktop updater channel", "stable users do not silently become nightly users"],
+        ],
+      },
+    },
+    update: {
+      desktop: {
+        label: "Desktop application", eyebrow: "Update boundary · Electron application",
+        title: "The user crosses both download and installation boundaries",
+        copy: "Checks can be automatic, but downloading and quit/install are explicit actions. The final action closes active application ownership before the updater takes over.",
+        steps: [
+          ["Check", "The updater checks configured channel metadata while no conflicting action is active.", "desktop update state", "check failure records state; it is not an install"],
+          ["Available", "A newer artifact is represented as available to the desktop UI.", "user-facing UI", "nothing downloads by itself"],
+          ["Download", "The user accepts download; one action reservation excludes competing update actions.", "electron-updater adapter", "download error keeps a recoverable error state"],
+          ["Stop pool", "Install marks quitting and stops every backend, including parallel pool instances.", "desktop main process", "children get grace rather than an OS hard-kill"],
+          ["Quit / install", "Windows close and the Electron updater replaces the application.", "electron-updater", "install failure resets quitting and reports error"],
+        ],
+      },
+      server: {
+        label: "Boot-service server", eyebrow: "Update boundary · immutable server trial",
+        title: "A stable launcher commits only a prepared exact runtime",
+        copy: "The active child prepares V; the independent launcher owns selection, snapshot, trial, rollback, and eventual commit.",
+        steps: [
+          ["Stage exact V", "Download an immutable t3@V runtime into a staging location.", "active server child", "non-exact target and concurrent update are rejected"],
+          ["Preflight", "Run the staged service preflight and verify it reports the requested V as ready.", "active server child", "bad runtime never becomes an installed version"],
+          ["Pending + snapshot", "Launcher records a pending trial, stops old V, and snapshots SQLite/WAL/SHM.", "stable service launcher", "snapshot provides trial-only rollback coverage"],
+          ["Trial prepared", "Target migrates, binds, and parks roots at its activation gate before reporting prepared.", "target server V", "timeout or exit restores the snapshot and old V"],
+          ["Commit + activate", "Launcher selects V durably, removes snapshot, then target opens its gate.", "stable service launcher", "post-commit later failures use ordinary restart policy"],
+        ],
+      },
+      mobile: {
+        label: "Mobile OTA", eyebrow: "Update boundary · compatible bundle plus safe teardown",
+        title: "A downloaded OTA bundle yields to unsaved intent and unsafe lifecycle state",
+        copy: "The fingerprint policy guards native compatibility. A deferred reload additionally waits for durable drafts/outbox and a true background transition without a foreground handoff.",
+        steps: [
+          ["Compatibility", "Expo accepts an update for the fingerprint runtime version.", "Expo update runtime", "a native-incompatible bundle is outside this eligible path"],
+          ["Download", "The compatible JavaScript bundle becomes ready in the update cache.", "mobile update coordinator", "download alone does not restart the app"],
+          ["Flush intent", "Draft and outbox persistence queues must settle successfully.", "mobile persistence", "failed flush preserves current runtime"],
+          ["Recheck background", "The app must still be backgrounded and not covered by app-initiated handoff.", "lifecycle + handoff guard", "unsafe state rearms a future transition"],
+          ["Reload", "Only the claimed, safe sequence reloads the JavaScript runtime.", "Expo Updates", "racing sequences cannot reload twice"],
+        ],
+      },
+    },
+    telemetry: {
+      analytics: {
+        label: "Anonymous analytics", eyebrow: "Signal lane · PostHog product analytics",
+        title: "Default-enabled, opt-out batch delivery uses a hashed identity ladder",
+        copy: "The analytics service keeps events in a bounded memory buffer. Delivery can be disabled; the first available Codex, Claude, or locally generated identifier is hashed before use.",
+        steps: [
+          ["Resolve identifier", "Try Codex account id, then Claude user id, then persist an anonymous UUID; hash the selected value.", "analytics identity service", "no identifier means batch delivery returns"],
+          ["Buffer event", "Record a bounded in-memory event with timestamp and supplied properties.", "analytics service", "oldest buffered events may be dropped at the cap"],
+          ["Check opt-out", "T3CODE_TELEMETRY_ENABLED controls whether batches leave the process.", "analytics configuration", "disabled means no batch send"],
+          ["Send batch", "PostHog payload disables person profiles and adds platform/version context.", "HTTP client", "this is not a local trace archive"],
+        ],
+      },
+      traces: {
+        label: "Server + browser traces", eyebrow: "Signal lane · local trace sink and optional OTLP",
+        title: "Server traces keep a local lane; browser ingest requires environment authority",
+        copy: "The server owns a bounded local trace sink with header redaction. OTLP delegation is optional. The browser route authenticates first, then attempts local recording and independently decides whether to forward the original JSON.",
+        steps: [
+          ["Create local sink", "Server traces append to a bounded local file with HTTP-header redaction.", "server observability layer", "no OTLP URL is required for local tracing"],
+          ["Optional exporter", "A configured OTLP traces URL adds a delegate; metrics require their own URL.", "OTLP configuration", "absence means no remote trace/metrics exporter"],
+          ["Authenticate browser", "Browser OTLP route verifies an environment credential with operate scope.", "environment HTTP auth", "an unauthenticated record cannot use the proxy"],
+          ["Attempt local; forward independently", "Decodable browser records enter local collection. A decode/record error is logged; configured OTLP forwarding can still send the original JSON body.", "browser trace route", "without a remote URL, the route returns no content after the best-effort local attempt"],
+        ],
+      },
+      resource: {
+        label: "Native resource diagnostics", eyebrow: "Signal lane · demand-driven native history",
+        title: "Resource history is bounded in memory and streams only while diagnostics is open",
+        copy: "The native sidecar samples process-tree counters into a capped ring. It is not syscall tracing, and periodic streaming is disabled until a diagnostics subscription is retained.",
+        steps: [
+          ["Sample counters", "Native monitor samples selected process trees; very short-lived processes can be missed.", "native resource monitor", "this is not eBPF, ETW, or syscall tracing"],
+          ["Retain bounded ring", "One-hour history is capped by snapshots, process rows, and bytes.", "native sidecar memory", "first reached bound shortens the effective window"],
+          ["Subscribe diagnostics", "Server enables periodic streaming only with a retained subscriber.", "resource telemetry server", "without demand, periodic streaming remains off"],
+          ["Read / refresh", "History is read in chunks; sampleNow can explicitly refresh or validate identity.", "diagnostics consumer", "history is not a durable event archive"],
+        ],
+      },
+    },
+  };
+
+  document.querySelectorAll("[data-release-operations]").forEach((lab) => {
+    if (lab.dataset.ready === "true") return;
+    try {
+      const tabs = Array.from(lab.querySelectorAll("[data-lens]"));
+      const select = lab.querySelector("[data-case]");
+      const flow = lab.querySelector("[data-flow]");
+      const eyebrow = lab.querySelector("[data-eyebrow]");
+      const title = lab.querySelector("[data-title]");
+      const copy = lab.querySelector("[data-copy]");
+      const guard = lab.querySelector("[data-guard]");
+      const owner = lab.querySelector("[data-owner]");
+      const boundary = lab.querySelector("[data-boundary]");
+      const status = lab.querySelector("[data-status]");
+      const panel = lab.querySelector("[role=tabpanel]");
+      const previous = lab.querySelector("[data-previous]");
+      const next = lab.querySelector("[data-next]");
+      const reset = lab.querySelector("[data-reset]");
+      let lens = "release";
+      let caseKey = "stable";
+      let step = 0;
+      const current = () => models[lens][caseKey] || Object.values(models[lens])[0];
+      const rebuildOptions = () => {
+        select.replaceChildren(...Object.entries(models[lens]).map(([key, item]) => {
+          const option = document.createElement("option"); option.value = key; option.textContent = item.label; return option;
+        }));
+        select.value = caseKey;
+      };
+      const render = (move) => {
+        const view = current(); const chosen = view.steps[step] || view.steps[0];
+        eyebrow.textContent = view.eyebrow; title.textContent = view.title; copy.textContent = view.copy;
+        guard.textContent = chosen[1]; owner.textContent = chosen[2]; boundary.textContent = chosen[3];
+        flow.replaceChildren(...view.steps.map((item, index) => {
+          const node = document.createElement("button"); node.type = "button"; node.className = "release-operations__node";
+          node.dataset.state = index < step ? "done" : index === step ? "active" : "next";
+          node.setAttribute("aria-current", index === step ? "step" : "false");
+          node.innerHTML = `<span>${index + 1}</span><strong>${item[0]}</strong><small>${item[1]}</small>`;
+          node.addEventListener("click", () => { step = index; render(true); }); return node;
+        }));
+        previous.disabled = step === 0; next.disabled = step === view.steps.length - 1;
+        status.textContent = `${view.label}. Step ${step + 1} of ${view.steps.length}: ${chosen[0]}. Guard: ${chosen[1]}`;
+        if (move && !window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+          panel.classList.remove("is-moving"); void panel.offsetWidth; panel.classList.add("is-moving");
+        }
+      };
+      const activateLens = (nextLens, focus) => {
+        lens = nextLens; caseKey = Object.keys(models[lens])[0]; step = 0;
+        tabs.forEach((tab) => { const active = tab.dataset.lens === lens; tab.setAttribute("aria-selected", String(active)); tab.tabIndex = active ? 0 : -1; });
+        panel.setAttribute("aria-labelledby", tabs.find((tab) => tab.dataset.lens === lens).id);
+        rebuildOptions(); render(true); if (focus) panel.focus();
+      };
+      tabs.forEach((tab, index) => {
+        tab.addEventListener("click", () => activateLens(tab.dataset.lens, true));
+        tab.addEventListener("keydown", (event) => {
+          if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+          event.preventDefault(); const target = event.key === "Home" ? 0 : event.key === "End" ? tabs.length - 1 : (index + (event.key === "ArrowRight" ? 1 : -1) + tabs.length) % tabs.length;
+          tabs[target].focus(); activateLens(tabs[target].dataset.lens, false);
+        });
+      });
+      select.addEventListener("change", () => { caseKey = select.value; step = 0; render(true); });
+      previous.addEventListener("click", () => { if (step) { step -= 1; render(true); } });
+      next.addEventListener("click", () => { if (step < current().steps.length - 1) { step += 1; render(true); } });
+      reset.addEventListener("click", () => { step = 0; render(true); });
+      panel.addEventListener("animationend", () => panel.classList.remove("is-moving"));
+      rebuildOptions(); render(false); lab.dataset.ready = "true";
+    } catch (error) { console.error("Release operations lab could not initialize", error); lab.dataset.ready = "failed"; }
+  });
+</script>
+
+<style>
+  .release-operations { overflow: hidden; margin: 2rem 0; border: 1px solid var(--line-strong); border-radius: .75rem; background: var(--paper); }
+  .release-operations__head { padding: 1.2rem 1.3rem 1rem; border-bottom: 1px solid var(--line); background: linear-gradient(135deg, color-mix(in srgb, var(--signal) 12%, var(--paper-muted)), var(--paper-muted)); }
+  .release-operations__head > span, .release-operations__eyebrow { color: var(--ink-soft); font: 800 .67rem var(--font-ui); letter-spacing: .08em; text-transform: uppercase; }
+  .release-operations__head h3 { margin: .35rem 0; font-size: 1.12rem; }
+  .release-operations__head p, .release-operations__summary p { margin: 0; color: var(--ink-soft); font-size: .86rem; line-height: 1.55; }
+  .release-operations__interactive { display: none; }
+  .release-operations[data-ready="true"] .release-operations__interactive { display: block; }
+  .release-operations[data-ready="true"] .release-operations__noscript { display: none; }
+  .release-operations__tabs { display: flex; gap: .35rem; overflow-x: auto; padding: .75rem 1.25rem 0; background: var(--paper-muted); }
+  .release-operations button, .release-operations select { min-height: 2.45rem; border: 1px solid var(--line-strong); border-radius: .4rem; color: var(--ink); background: var(--paper); font: 700 .76rem var(--font-ui); }
+  .release-operations button { padding: .45rem .65rem; cursor: pointer; }
+  .release-operations button[aria-selected="true"] { border-color: var(--signal); background: color-mix(in srgb, var(--signal) 15%, var(--paper)); }
+  .release-operations button:focus-visible, .release-operations select:focus-visible, .release-operations__panel:focus-visible, .release-operations__table-wrap:focus-visible { outline: 3px solid var(--signal); outline-offset: 2px; }
+  .release-operations button:disabled { opacity: .48; cursor: not-allowed; }
+  .release-operations__controls { display: grid; grid-template-columns: minmax(7rem, auto) minmax(12rem, 1fr) auto; gap: .65rem; align-items: end; padding: .8rem 1.25rem; background: var(--paper-muted); }
+  .release-operations__controls label { color: var(--ink-soft); font: 800 .68rem var(--font-ui); letter-spacing: .05em; text-transform: uppercase; }
+  .release-operations select { min-width: 0; padding: 0 .55rem; }
+  .release-operations__buttons { display: flex; gap: .4rem; }
+  .release-operations__panel { margin: 1rem 1.25rem; padding: 1rem; border: 1px solid var(--line); border-radius: .65rem; background: var(--paper); transition: border-color .22s ease, box-shadow .22s ease, transform .22s ease; }
+  .release-operations__panel.is-moving { border-color: var(--signal); box-shadow: 0 .4rem 1.1rem color-mix(in srgb, var(--signal) 15%, transparent); animation: release-operations-pulse .34s ease-out both; }
+  .release-operations__summary h4 { margin: .25rem 0 .45rem; font-size: 1.02rem; }
+  .release-operations__flow { display: grid; grid-template-columns: repeat(auto-fit, minmax(10.5rem, 1fr)); gap: .55rem; margin: 1rem 0; }
+  .release-operations__node { display: grid; grid-template-columns: 1.45rem 1fr; gap: .12rem .45rem; min-height: 7.5rem; text-align: left; vertical-align: top; transition: background .2s ease, border-color .2s ease, transform .2s ease; }
+  .release-operations__node > span { grid-row: span 2; display: grid; place-items: center; width: 1.45rem; height: 1.45rem; border-radius: 50%; background: var(--paper-muted); font-size: .68rem; }
+  .release-operations__node strong { align-self: end; font-size: .76rem; }
+  .release-operations__node small { grid-column: 2; align-self: start; color: var(--ink-soft); font: .7rem/1.38 var(--font-ui); }
+  .release-operations__node[data-state="active"] { border-color: var(--signal); background: color-mix(in srgb, var(--signal) 12%, var(--paper)); transform: translateY(-.1rem); }
+  .release-operations__node[data-state="active"] > span, .release-operations__node[data-state="done"] > span { background: var(--signal); color: var(--paper); }
+  .release-operations__node[data-state="done"] { border-color: color-mix(in srgb, var(--signal) 45%, var(--line)); }
+  .release-operations__facts { display: grid; grid-template-columns: repeat(3, 1fr); gap: .65rem; margin: 0; }
+  .release-operations__facts > div { padding: .7rem; border-radius: .45rem; background: var(--paper-muted); }
+  .release-operations dt { color: var(--ink-soft); font: 800 .65rem var(--font-ui); letter-spacing: .06em; text-transform: uppercase; }
+  .release-operations dd { margin: .35rem 0 0; font-size: .77rem; line-height: 1.45; }
+  .release-operations__static { margin: 0 1.25rem 1.25rem; }
+  .release-operations__static summary { cursor: pointer; font-size: .82rem; font-weight: 750; }
+  .release-operations__table-wrap { overflow-x: auto; margin-top: .65rem; border: 1px solid var(--line); border-radius: .5rem; }
+  .release-operations table { width: 100%; min-width: 51rem; border-collapse: collapse; font-size: .76rem; }
+  .release-operations th, .release-operations td { padding: .62rem; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; line-height: 1.42; }
+  .release-operations thead { background: var(--paper-muted); }
+  .release-operations tbody tr:last-child > * { border-bottom: 0; }
+  .release-operations__noscript { margin: .75rem 1.25rem; color: var(--ink-soft); font-size: .8rem; }
+  @media (max-width: 48rem) { .release-operations__head, .release-operations__controls { padding-left: 1rem; padding-right: 1rem; } .release-operations__controls { grid-template-columns: 1fr; align-items: stretch; } .release-operations__panel, .release-operations__static { margin-left: 1rem; margin-right: 1rem; } .release-operations__facts { grid-template-columns: 1fr; } .release-operations__flow { grid-template-columns: 1fr; } .release-operations__node { min-height: 0; } }
+  @keyframes release-operations-pulse { 0% { transform: translateY(0); } 45% { transform: translateY(-.12rem); } 100% { transform: translateY(0); } }
+  @media (prefers-reduced-motion: reduce) { .release-operations *, .release-operations *::before, .release-operations *::after { scroll-behavior: auto !important; transition: none !important; animation: none !important; } .release-operations__node[data-state="active"] { transform: none; } }
+  @media print { .release-operations { break-inside: avoid; border-color: #777; } .release-operations__interactive, .release-operations__noscript { display: none !important; } .release-operations__static { display: block; } }
+</style>

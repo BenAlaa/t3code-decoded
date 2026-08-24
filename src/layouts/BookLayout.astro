@@ -1,0 +1,365 @@
+---
+import type { MarkdownHeading } from "astro";
+import type { BookEntry } from "../lib/book";
+import { chapterLabel, entryHref, groupBookEntries, sortBookEntries } from "../lib/book";
+import lock from "../../sources/t3code.lock.json";
+import BaseLayout from "./BaseLayout.astro";
+
+interface Props {
+  entry: BookEntry;
+  entries: BookEntry[];
+  headings: MarkdownHeading[];
+}
+
+const { entry, entries, headings } = Astro.props;
+const sorted = sortBookEntries(entries);
+const groups = groupBookEntries(sorted);
+const index = sorted.findIndex((candidate) => candidate.id === entry.id);
+const previous = index > 0 ? sorted[index - 1] : undefined;
+const next = index >= 0 && index < sorted.length - 1 ? sorted[index + 1] : undefined;
+const sectionHeadings = headings.filter((heading) => heading.depth === 2 || heading.depth === 3);
+const base = import.meta.env.BASE_URL;
+const searchIndex = sorted.map((item) => ({
+  title: item.data.title,
+  summary: item.data.summary,
+  part: item.data.part,
+  number: item.data.number ?? "",
+  keywords: item.data.keywords,
+  sourceAreas: item.data.sourceAreas,
+  url: entryHref(item, base),
+}));
+const readProgress = sorted.length === 0 ? 0 : ((index + 1) / sorted.length) * 100;
+const snapshotDate = new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", year: "numeric" }).format(new Date(lock.capturedAt));
+const tocIcon = (item: BookEntry) => {
+  if (item.data.kind === "front") return "↗";
+  if (item.data.kind === "appendix") return "＋";
+  return "●";
+};
+const tocLabel = (item: BookEntry) => `${chapterLabel(item)}: ${item.data.title}`;
+---
+
+<BaseLayout title={entry.data.title} description={entry.data.summary} canonicalPath={entryHref(entry, base)}>
+  <div class="reading-progress" aria-hidden="true"><span style={`width:${readProgress}%`}></span></div>
+  <div class="book-shell" data-pagefind-ignore>
+    <aside class="book-sidebar" id="book-sidebar" aria-label="Book contents">
+      <div class="sidebar-head">
+        <div class="sidebar-head-row">
+          <div class="sidebar-identity">
+            <a class="imprint" href={base}>The Agents Press</a>
+            <a class="book-title" href={base}>
+              <img class="book-title-mark" src={`${base}favicon.svg`} alt="" width="40" height="40" />
+              <span class="book-title-copy">T3 Code <span>Decoded</span></span>
+            </a>
+            <div class="source-lock"><span aria-hidden="true"></span> source snapshot <code>{lock.shortCommit}</code></div>
+          </div>
+          <button class="sidebar-toggle" type="button" data-sidebar-toggle data-sidebar-tooltip="Collapse contents" aria-controls="book-sidebar" aria-expanded="true" aria-label="Collapse contents" title="Collapse contents">
+            <span data-sidebar-toggle-icon aria-hidden="true">‹</span>
+          </button>
+        </div>
+      </div>
+      <nav class="book-toc" aria-label="Chapters">
+        {groups.map((group) => (
+          <section class="toc-part">
+            <h2>{group.part}</h2>
+            {group.entries.map((item) => (
+              <a
+                href={entryHref(item, base)}
+                class:list={["toc-link", { active: item.id === entry.id }]}
+                aria-current={item.id === entry.id ? "page" : undefined}
+                aria-label={tocLabel(item)}
+                data-sidebar-tooltip={tocLabel(item)}
+                title={tocLabel(item)}
+              >
+                <span class="toc-marker" aria-hidden="true"><span class="toc-icon">{tocIcon(item)}</span><span class="toc-number">{item.data.number ?? "·"}</span></span>
+                <span class="toc-title">{item.data.shortTitle ?? item.data.title}</span>
+              </a>
+            ))}
+          </section>
+        ))}
+      </nav>
+      <div class="sidebar-foot">
+        <a href={`${lock.repository}/tree/${lock.commit}`} rel="noreferrer">Pinned source ↗</a>
+      </div>
+    </aside>
+
+    <div class="sidebar-scrim" data-sidebar-close></div>
+
+    <div class="book-main">
+      <header class="book-toolbar">
+        <button class="icon-button mobile-only" type="button" data-sidebar-open aria-controls="book-sidebar" aria-expanded="false">
+          <span aria-hidden="true">☰</span><span class="sr-only">Open contents</span>
+        </button>
+        <div class="toolbar-crumb"><span data-pagefind-meta="part">{entry.data.part}</span><strong>{entry.data.shortTitle ?? entry.data.title}</strong></div>
+        <div class="toolbar-actions">
+          <button class="search-trigger" type="button" data-search-open aria-haspopup="dialog">
+            <span aria-hidden="true">⌕</span><span>Search</span><kbd>⌘ K</kbd>
+          </button>
+          <button class="icon-button" type="button" data-theme-toggle aria-label="Change color theme">
+            <span data-theme-icon aria-hidden="true">◐</span>
+          </button>
+        </div>
+      </header>
+
+      <main class="reading-grid" id="main-content">
+        <article class="chapter" data-pagefind-body>
+          <header class="chapter-head">
+            <div class="chapter-kicker">
+              <span>{chapterLabel(entry)}</span>
+              <span class:list={["verification", `is-${entry.data.status}`]}>{entry.data.status.replace("-", " ")}</span>
+            </div>
+            <h1 data-pagefind-meta="title">{entry.data.title}</h1>
+            <p class="chapter-summary">{entry.data.summary}</p>
+            {entry.data.objectives.length > 0 && (
+              <details class="objectives">
+                <summary>What this chapter resolves</summary>
+                <ul>{entry.data.objectives.map((objective) => <li>{objective}</li>)}</ul>
+              </details>
+            )}
+          </header>
+
+          <div class="chapter-body">
+            <slot />
+          </div>
+
+          <footer class="chapter-footer">
+            <div class="evidence-stamp">
+              <span class="stamp-mark">T3</span>
+              <div><strong>Source-locked edition</strong><span>Read against <code>{lock.shortCommit}</code> · {snapshotDate}</span></div>
+            </div>
+          </footer>
+        </article>
+
+        {sectionHeadings.length > 0 && (
+          <aside class="page-outline" aria-label="On this page">
+            <strong>On this page</strong>
+            <nav>
+              {sectionHeadings.map((heading) => (
+                <a href={`#${heading.slug}`} class:list={[{ nested: heading.depth === 3 }]}>{heading.text}</a>
+              ))}
+            </nav>
+            <a class="outline-source" href={`${lock.repository}/tree/${lock.commit}`} rel="noreferrer">Browse pinned source ↗</a>
+          </aside>
+        )}
+      </main>
+    </div>
+  </div>
+
+  <nav class="chapter-dock" aria-label="Chapter navigation">
+    <div class="chapter-dock-inner">
+      {previous ? (
+        <a class="chapter-dock-link previous" href={entryHref(previous, base)}>
+          <span aria-hidden="true">←</span>
+          <span class="chapter-dock-link-copy"><small>Previous</small><strong>{previous.data.title}</strong></span>
+        </a>
+      ) : <span class="chapter-dock-spacer" aria-hidden="true"></span>}
+      <div class="chapter-dock-context" aria-label={`Reading ${chapterLabel(entry)}, item ${index + 1} of ${sorted.length}`}>
+        <span>{entry.data.part}</span>
+        <strong><b>{index + 1}</b> / {sorted.length}</strong>
+      </div>
+      {next ? (
+        <a class="chapter-dock-link next" href={entryHref(next, base)}>
+          <span class="chapter-dock-link-copy"><small>Next</small><strong>{next.data.title}</strong></span>
+          <span aria-hidden="true">→</span>
+        </a>
+      ) : <span class="chapter-dock-spacer" aria-hidden="true"></span>}
+    </div>
+  </nav>
+  <div class="sidebar-tooltip" data-sidebar-tooltip-popover role="tooltip" hidden></div>
+
+  <dialog class="search-dialog" data-search-dialog aria-labelledby="search-title">
+    <div class="search-head">
+      <div>
+        <span class="search-eyebrow">Book search</span>
+        <h2 id="search-title">Find a concept, module, or source path</h2>
+      </div>
+      <button class="icon-button" type="button" data-search-close aria-label="Close search">×</button>
+    </div>
+    <label class="search-field">
+      <span class="sr-only">Search the book</span>
+      <span aria-hidden="true">⌕</span>
+      <input type="search" autocomplete="off" placeholder="Try “checkpoint”, “ProviderAdapter”, or “relay”…" data-search-input />
+    </label>
+    <p class="search-status" aria-live="polite" data-search-status>Type two or more characters.</p>
+    <div class="search-results" data-search-results></div>
+  </dialog>
+  <script type="application/json" id="book-search-index" set:html={JSON.stringify(searchIndex)}></script>
+
+  <script define:vars={{ base }}>
+    const root = document.documentElement;
+    const sidebar = document.querySelector("#book-sidebar");
+    const bookMain = document.querySelector(".book-main");
+    const sidebarOpen = document.querySelector("[data-sidebar-open]");
+    const sidebarToggle = document.querySelector("[data-sidebar-toggle]");
+    const sidebarToggleIcon = document.querySelector("[data-sidebar-toggle-icon]");
+    const sidebarTooltip = document.querySelector("[data-sidebar-tooltip-popover]");
+    const scrim = document.querySelector("[data-sidebar-close]");
+    const dialog = document.querySelector("[data-search-dialog]");
+    const searchInput = document.querySelector("[data-search-input]");
+    const searchResults = document.querySelector("[data-search-results]");
+    const searchStatus = document.querySelector("[data-search-status]");
+    const fallbackIndex = JSON.parse(document.querySelector("#book-search-index")?.textContent || "[]");
+
+    const mobileLayout = window.matchMedia("(max-width: 900px)");
+    const setSidebar = (open, restoreFocus = true) => {
+      sidebar?.classList.toggle("open", open);
+      scrim?.classList.toggle("open", open);
+      sidebarOpen?.setAttribute("aria-expanded", String(open));
+      document.body.classList.toggle("drawer-open", open);
+      if (window.matchMedia("(max-width: 900px)").matches) {
+        sidebar?.toggleAttribute("inert", !open);
+        sidebar?.setAttribute("aria-hidden", String(!open));
+        bookMain?.toggleAttribute("inert", open);
+      }
+      if (open) sidebar?.querySelector("a")?.focus();
+      else if (restoreFocus) sidebarOpen?.focus();
+    };
+    sidebarOpen?.addEventListener("click", () => setSidebar(true));
+    scrim?.addEventListener("click", () => setSidebar(false));
+
+    const paintSidebarPreference = (collapsed) => {
+      root.dataset.sidebar = collapsed ? "collapsed" : "expanded";
+      sidebarToggle?.setAttribute("aria-expanded", String(!collapsed));
+      sidebarToggle?.setAttribute("aria-label", collapsed ? "Expand contents" : "Collapse contents");
+      sidebarToggle?.setAttribute("data-sidebar-tooltip", collapsed ? "Expand contents" : "Collapse contents");
+      sidebarToggle?.setAttribute("title", collapsed ? "Expand contents" : "Collapse contents");
+      if (sidebarToggleIcon) sidebarToggleIcon.textContent = collapsed ? "›" : "‹";
+    };
+    paintSidebarPreference(root.dataset.sidebar === "collapsed");
+    sidebarToggle?.addEventListener("click", () => {
+      if (mobileLayout.matches) return;
+      const collapsed = root.dataset.sidebar !== "collapsed";
+      paintSidebarPreference(collapsed);
+      try { localStorage.setItem("t3decoded-sidebar", collapsed ? "collapsed" : "expanded"); } catch {}
+      if (sidebarToggle) showSidebarTooltip(sidebarToggle);
+    });
+
+    let tooltipTarget;
+    const hideSidebarTooltip = () => {
+      tooltipTarget = undefined;
+      if (sidebarTooltip) sidebarTooltip.hidden = true;
+    };
+    const showSidebarTooltip = (target) => {
+      if (!sidebarTooltip || mobileLayout.matches || root.dataset.sidebar !== "collapsed") return;
+      const label = target.dataset.sidebarTooltip;
+      if (!label) return;
+      tooltipTarget = target;
+      sidebarTooltip.textContent = label;
+      sidebarTooltip.hidden = false;
+      const bounds = target.getBoundingClientRect();
+      const tooltipBounds = sidebarTooltip.getBoundingClientRect();
+      sidebarTooltip.style.left = `${Math.min(bounds.right + 10, window.innerWidth - tooltipBounds.width - 12)}px`;
+      sidebarTooltip.style.top = `${Math.max(12, Math.min(bounds.top + (bounds.height - tooltipBounds.height) / 2, window.innerHeight - tooltipBounds.height - 12))}px`;
+    };
+    sidebar?.querySelectorAll("[data-sidebar-tooltip]").forEach((link) => {
+      link.addEventListener("pointerenter", () => showSidebarTooltip(link));
+      link.addEventListener("pointerleave", hideSidebarTooltip);
+      link.addEventListener("focus", () => showSidebarTooltip(link));
+      link.addEventListener("blur", hideSidebarTooltip);
+    });
+    sidebar?.querySelector(".book-toc")?.addEventListener("scroll", hideSidebarTooltip, { passive: true });
+    window.addEventListener("resize", () => { if (tooltipTarget) showSidebarTooltip(tooltipTarget); });
+
+    const syncSidebarMode = () => {
+      if (mobileLayout.matches) {
+        hideSidebarTooltip();
+        setSidebar(false, false);
+      }
+      else {
+        sidebar?.removeAttribute("inert");
+        sidebar?.removeAttribute("aria-hidden");
+        bookMain?.removeAttribute("inert");
+      }
+    };
+    mobileLayout.addEventListener?.("change", syncSidebarMode);
+    syncSidebarMode();
+
+    const themes = ["system", "light", "dark"];
+    const themeButton = document.querySelector("[data-theme-toggle]");
+    const paintTheme = (theme) => {
+      const labels = { system: "Use light theme", light: "Use dark theme", dark: "Follow system theme" };
+      const icons = { system: "◐", light: "☀", dark: "☾" };
+      themeButton?.setAttribute("aria-label", labels[theme]);
+      document.querySelector("[data-theme-icon]").textContent = icons[theme];
+    };
+    paintTheme(root.dataset.theme || "system");
+    themeButton?.addEventListener("click", () => {
+      const current = root.dataset.theme || "system";
+      const next = themes[(themes.indexOf(current) + 1) % themes.length];
+      root.dataset.theme = next;
+      try { localStorage.setItem("t3decoded-theme", next); } catch {}
+      paintTheme(next);
+    });
+
+    let pagefind;
+    const loadPagefind = async () => {
+      if (pagefind !== undefined) return pagefind;
+      try {
+        pagefind = await import(/* @vite-ignore */ `${base}pagefind/pagefind.js`);
+        await pagefind.init();
+      } catch { pagefind = null; }
+      return pagefind;
+    };
+    const escapeHtml = (value) => value.replace(/[&<>"']/g, (char) => ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#039;"}[char]));
+    const renderFallback = (query) => fallbackIndex
+      .filter((item) => [item.title, item.summary, item.part, item.number, ...item.keywords, ...item.sourceAreas].join(" ").toLowerCase().includes(query))
+      .slice(0, 12)
+      .map((item) => `<a class="search-result" href="${item.url}"><span>${escapeHtml(item.part)}${item.number ? ` · ${escapeHtml(item.number)}` : ""}</span><strong>${escapeHtml(item.title)}</strong><p>${escapeHtml(item.summary)}</p></a>`);
+    const withBase = (url) => {
+      if (!url || /^(?:[a-z]+:|#)/i.test(url) || url.startsWith(base)) return url;
+      return `${base}${url.replace(/^\/+/, "")}`;
+    };
+    let searchGeneration = 0;
+    const performSearch = async () => {
+      const generation = ++searchGeneration;
+      const query = searchInput.value.trim();
+      if (query.length < 2) {
+        searchResults.innerHTML = "";
+        searchStatus.textContent = "Type two or more characters.";
+        return;
+      }
+      searchStatus.textContent = "Searching…";
+      const engine = await loadPagefind();
+      if (generation !== searchGeneration) return;
+      let rows = [];
+      if (engine) {
+        const found = await engine.search(query);
+        const data = await Promise.all(found.results.slice(0, 12).map((result) => result.data()));
+        if (generation !== searchGeneration) return;
+        rows = data.map((item) => `<a class="search-result" href="${withBase(item.url)}"><span>${escapeHtml(item.meta?.part || "Book")}</span><strong>${escapeHtml(item.meta?.title || item.url)}</strong><p>${item.excerpt || ""}</p></a>`);
+      } else rows = renderFallback(query.toLowerCase());
+      searchResults.innerHTML = rows.join("");
+      searchStatus.textContent = rows.length ? `${rows.length} result${rows.length === 1 ? "" : "s"}` : "No matches.";
+    };
+    let searchTimer;
+    searchInput?.addEventListener("input", () => {
+      clearTimeout(searchTimer);
+      searchTimer = setTimeout(performSearch, 120);
+    });
+    const openSearch = () => { if (dialog && !dialog.open) dialog.showModal(); requestAnimationFrame(() => searchInput?.focus()); };
+    document.querySelector("[data-search-open]")?.addEventListener("click", openSearch);
+    document.querySelector("[data-search-close]")?.addEventListener("click", () => dialog?.close());
+    dialog?.addEventListener("click", (event) => { if (event.target === dialog) dialog.close(); });
+
+    document.addEventListener("keydown", (event) => {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") { event.preventDefault(); openSearch(); }
+      if (event.key === "Escape" && sidebar?.classList.contains("open")) setSidebar(false);
+      if (event.key === "Tab" && sidebar?.classList.contains("open") && mobileLayout.matches) {
+        const focusable = [...sidebar.querySelectorAll("a, button, input, [tabindex]:not([tabindex='-1'])")].filter((node) => !node.hasAttribute("disabled"));
+        const first = focusable[0];
+        const last = focusable[focusable.length - 1];
+        if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
+        else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
+      }
+    });
+
+    document.querySelectorAll(".chapter-body h2[id], .chapter-body h3[id]").forEach((heading) => {
+      heading.classList.add("anchored-heading");
+      const anchor = document.createElement("a");
+      anchor.href = `#${heading.id}`;
+      anchor.className = "heading-anchor";
+      anchor.setAttribute("aria-label", `Link to ${heading.textContent}`);
+      anchor.textContent = "#";
+      heading.append(anchor);
+    });
+  </script>
+</BaseLayout>

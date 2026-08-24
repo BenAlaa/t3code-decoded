@@ -1,0 +1,664 @@
+---
+import { getSourceReference, sourceReferenceHref, sourceReferenceLabel } from "../lib/sources";
+
+interface Props {
+  id: string;
+}
+
+interface BoundaryStage {
+  label: string;
+  shortLabel: string;
+  position: string;
+  durable: string;
+  external: string;
+  client: string;
+  retry: string;
+  provider: string;
+  guarantee: string;
+  tone: "neutral" | "warning" | "failure" | "success";
+  sourceIds: string[];
+}
+
+interface BoundaryPath {
+  label: string;
+  description: string;
+  stages: BoundaryStage[];
+}
+
+const { id } = Astro.props;
+if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(id)) {
+  throw new Error("CommandBoundaryLab requires a stable kebab-case id.");
+}
+
+const paths: Record<"existing" | "bootstrap", BoundaryPath> = {
+  existing: {
+    label: "Turn on an existing thread",
+    description:
+      "One normalized command is decided, then its two-to-four-event batch, projections, and accepted receipt share one SQL transaction.",
+    stages: [
+      {
+        label: "Before normalization",
+        shortLabel: "wire",
+        position: "The client command has crossed schema and authorization checks, but normalization has not produced the dispatchable command.",
+        durable: "No orchestration event or command receipt exists.",
+        external: "No attachment staging or provider work has begun.",
+        client: "The request can fail without a durable orchestration result.",
+        retry: "The same command id enters the normal path again because there is no receipt to find.",
+        provider: "No provider intent exists.",
+        guarantee: "No durable intent",
+        tone: "neutral",
+        sourceIds: ["command-union-boundary", "normalizer-staging-boundary"],
+      },
+      {
+        label: "After normalization and staging",
+        shortLabel: "stage",
+        position: "The server has supplied timestamps and workspace context and may have created attachment directories or written attachment bytes.",
+        durable: "The event store and receipt table are still unchanged.",
+        external: "Filesystem staging can already exist outside the later SQL transaction.",
+        client: "A later failure returns an error even though staged files may remain.",
+        retry: "The command is normalized and staged again; receipt deduplication has not started yet.",
+        provider: "No provider intent exists.",
+        guarantee: "External work, no receipt",
+        tone: "warning",
+        sourceIds: ["normalizer-staging-boundary", "turn-normalizer"],
+      },
+      {
+        label: "Invariant rejection",
+        shortLabel: "reject",
+        position: "The serialized decider has read the authoritative in-memory model and refuses the command before opening the SQL transaction.",
+        durable: "No event is appended. A rejected receipt is attempted afterward on a best-effort path.",
+        external: "Any earlier normalization-time staging is outside that rejection bookkeeping.",
+        client: "The caller receives an invariant error.",
+        retry: "After client normalization runs again, a saved rejected receipt keeps the same id rejected without re-evaluation; if that receipt was not saved, the command can be decided again.",
+        provider: "No provider intent is published.",
+        guarantee: "Best-effort sticky rejection",
+        tone: "failure",
+        sourceIds: ["existing-turn-decider", "engine-rejected-receipt"],
+      },
+      {
+        label: "SQL transaction failure",
+        shortLabel: "rollback",
+        position: "Decision has already allocated event data, but an event append, projection, or receipt write fails inside the transaction.",
+        durable: "Events, transactional projections, and the accepted receipt roll back together.",
+        external: "Pre-transaction staged files are not part of the SQL rollback.",
+        client: "The caller receives a persistence failure; no sequence is acknowledged.",
+        retry: "With no accepted receipt, the same id is normalized and decided again; clock and UUID-derived values may differ.",
+        provider: "No committed event reaches the hot event bus.",
+        guarantee: "SQL all-or-none",
+        tone: "failure",
+        sourceIds: ["decider-effect-dependencies", "engine-commit-publication"],
+      },
+      {
+        label: "Hard crash after commit",
+        shortLabel: "gap",
+        position: "The SQL transaction committed, but the process dies before the in-memory fold and PubSub loop can publish the batch.",
+        durable: "The complete event batch, projections, and accepted receipt are durable.",
+        external: "The hot reactor saw none of this batch in the failed process.",
+        client: "No acknowledgement reaches the caller.",
+        retry: "After any client normalization work, a same-id retry returns the stored last sequence and does not republish the missing hot events.",
+        provider: "Durable turn intent can exist without the provider reactor receiving its trigger.",
+        guarantee: "Durable but not delivered",
+        tone: "failure",
+        sourceIds: ["engine-commit-publication", "command-receipt-handling", "engine-failure-reconciliation", "hot-reactor-no-replay"],
+      },
+      {
+        label: "Sequence acknowledged",
+        shortLabel: "ack",
+        position: "The engine committed the batch, updated its in-memory model, and offered every committed event to the hot PubSub before returning.",
+        durable: "Two to four events, their synchronous projections, and one accepted receipt are committed.",
+        external: "Publication wakes asynchronous reactors; provider execution is outside this transaction.",
+        client: "The RPC result contains the last committed event sequence.",
+        retry: "The same id and aggregate return that stored sequence without deciding or appending again.",
+        provider: "The acknowledgement proves durable intent, not that a harness accepted, ran, or completed the turn.",
+        guarantee: "Durable intent acknowledged",
+        tone: "success",
+        sourceIds: ["turn-atomic-batch", "command-commit-acknowledgement", "provider-turn-reactor"],
+      },
+    ],
+  },
+  bootstrap: {
+    label: "Full first-turn WebSocket bootstrap",
+    description:
+      "The full WebSocket path creates a thread, prepares a worktree, launches setup, and starts the turn through separate durability boundaries.",
+    stages: [
+      {
+        label: "After normalization, before the saga",
+        shortLabel: "stage",
+        position: "The WebSocket turn-start command still carries its bootstrap payload after normalization; the ordinary command engine has not received a subcommand.",
+        durable: "No bootstrap step has committed.",
+        external: "Attachment staging may already exist, but no worktree or setup process has been requested.",
+        client: "The WebSocket request can still fail without creating the thread.",
+        retry: "The same outer id has no saga-level receipt that can replay the whole result.",
+        provider: "No provider intent exists.",
+        guarantee: "No saga-level idempotency",
+        tone: "neutral",
+        sourceIds: ["command-union-boundary", "bootstrap-saga-full"],
+      },
+      {
+        label: "Thread creation committed",
+        shortLabel: "thread",
+        position: "A server-generated id dispatched thread.create through the ordinary engine as the first saga step.",
+        durable: "The thread event and that subcommand's receipt are committed independently of the final turn.",
+        external: "No worktree is guaranteed yet.",
+        client: "The outer request is still pending.",
+        retry: "Repeating the outer request tries the creation path again; it does not retrieve one receipt for the whole saga.",
+        provider: "The thread exists, but no turn-start request has been committed.",
+        guarantee: "First independent commit",
+        tone: "warning",
+        sourceIds: ["bootstrap-saga-full", "bootstrap-command-path"],
+      },
+      {
+        label: "Worktree prepared and metadata committed",
+        shortLabel: "Git + meta",
+        position: "Git remote/worktree operations run outside SQLite, then thread.meta.update commits with another server-generated id.",
+        durable: "Thread metadata can point at the newly prepared worktree in a separate event and receipt.",
+        external: "A branch and worktree now exist outside the event-store transaction.",
+        client: "The outer request remains pending and can still fail later.",
+        retry: "An identical outer retry can collide with already-created thread, branch, or worktree state.",
+        provider: "No final turn intent is guaranteed yet.",
+        guarantee: "Mixed durable and Git state",
+        tone: "warning",
+        sourceIds: ["bootstrap-saga-full"],
+      },
+      {
+        label: "Setup launch fails",
+        shortLabel: "setup",
+        position: "The setup runner rejects the launch. The handler attempts to append failure activity, logs a warning, and continues the saga.",
+        durable: "Failure activity is best effort; the earlier thread and metadata commits remain.",
+        external: "No setup process started, but the prepared worktree remains.",
+        client: "Setup-launch failure alone does not fail the outer turn-start request.",
+        retry: "The saga continues to the final turn; this is not a rollback boundary.",
+        provider: "The eventual provider turn may run against a worktree whose setup did not launch.",
+        guarantee: "Recorded warning, saga continues",
+        tone: "warning",
+        sourceIds: ["bootstrap-saga-full"],
+      },
+      {
+        label: "Final turn fails; compensate",
+        shortLabel: "delete",
+        position: "A non-interruption failure reaches compensation after the thread was created, so thread.delete is dispatched uninterruptibly.",
+        durable: "Successful compensation tombstones the thread in another independent commit; prior history is not erased.",
+        external: "The Git worktree and branch are not removed by this compensation.",
+        client: "The caller receives the original dispatch failure, annotated as deleted only when cleanup succeeds.",
+        retry: "Retrying the outer request is a new saga attempt, not a replay of an atomic transaction.",
+        provider: "No successful final turn acknowledgement exists.",
+        guarantee: "Domain compensation only",
+        tone: "failure",
+        sourceIds: ["bootstrap-saga-full", "bootstrap-command-path"],
+      },
+      {
+        label: "Final turn acknowledged",
+        shortLabel: "ack",
+        position: "The last saga step strips bootstrap data and dispatches the normalized turn-start through the ordinary engine.",
+        durable: "Earlier saga commits plus the final two-to-four-event turn transaction are durable, each with its own receipt boundary.",
+        external: "Git/setup effects remain outside SQL and provider work begins asynchronously from hot events.",
+        client: "The WebSocket RPC returns the final turn transaction's last sequence.",
+        retry: "The outer bootstrap is not end-to-end idempotent even though each dispatched subcommand has receipt semantics.",
+        provider: "The acknowledgement proves durable turn intent only.",
+        guarantee: "Successful saga, not one transaction",
+        tone: "success",
+        sourceIds: ["bootstrap-saga-full", "turn-atomic-batch", "provider-turn-reactor"],
+      },
+    ],
+  },
+};
+
+const resolvedPaths = Object.fromEntries(
+  Object.entries(paths).map(([key, path]) => [
+    key,
+    {
+      ...path,
+      stages: path.stages.map(({ sourceIds, ...stage }) => ({
+        ...stage,
+        sources: sourceIds.map((sourceId) => {
+          const source = getSourceReference(sourceId);
+          return {
+            label: sourceReferenceLabel(source),
+            href: sourceReferenceHref(source),
+          };
+        }),
+      })),
+    },
+  ]),
+);
+const initial = resolvedPaths.existing.stages[0];
+const payload = JSON.stringify(resolvedPaths).replaceAll("<", "\\u003c");
+const labId = `command-boundary-${id}`;
+---
+
+<section class="command-boundary-lab" data-command-boundary-lab aria-labelledby={`${labId}-title`}>
+  <header class="lab-head">
+    <span>Interactive boundary explorer</span>
+    <h3 id={`${labId}-title`}>Where can a command fail?</h3>
+    <p>Switch paths and move the failure position. Watch which state is durable, which state is external, and what an identical retry can actually recover.</p>
+  </header>
+
+  <div class="lab-controls">
+    <label for={`${labId}-path`}>
+      Command path
+      <select id={`${labId}-path`} data-command-path>
+        <option value="existing">Turn on an existing thread</option>
+        <option value="bootstrap">Full first-turn WebSocket bootstrap</option>
+      </select>
+    </label>
+    <label for={`${labId}-position`}>
+      Failure position
+      <input id={`${labId}-position`} data-command-position type="range" min="0" max="5" step="1" value="0" aria-describedby={`${labId}-position-help`} />
+    </label>
+    <div class="step-actions" aria-label="Move between failure positions">
+      <button type="button" data-command-prev disabled>← Previous</button>
+      <button type="button" data-command-next>Next →</button>
+    </div>
+  </div>
+
+  <p class="path-description" id={`${labId}-position-help`} data-path-description>{resolvedPaths.existing.description}</p>
+  <noscript><p class="noscript-note">Interactive controls require JavaScript. Open the static boundary ledger below for every state.</p></noscript>
+
+  <div class="boundary-track" aria-hidden="true">
+    <span data-boundary-progress></span>
+    <ol data-boundary-markers>
+      {resolvedPaths.existing.stages.map((stage, index) => <li class:list={{ current: index === 0 }}>{stage.shortLabel}</li>)}
+    </ol>
+  </div>
+
+  <p class="sr-only" role="status" aria-live="polite" aria-atomic="true" data-command-status>
+    Existing-thread path, position 1 of 6: {initial.label}. {initial.guarantee}.
+  </p>
+
+  <article class:list={["boundary-result", `tone-${initial.tone}`]} data-boundary-result>
+    <div class="result-head">
+      <div><span data-result-position>Position 1 of 6</span><h4 data-result-label>{initial.label}</h4></div>
+      <strong data-result-guarantee>{initial.guarantee}</strong>
+    </div>
+    <p class="position-copy" data-result-position-copy>{initial.position}</p>
+    <dl>
+      <div><dt>Durable state</dt><dd data-result-durable>{initial.durable}</dd></div>
+      <div><dt>External state</dt><dd data-result-external>{initial.external}</dd></div>
+      <div><dt>Client sees</dt><dd data-result-client>{initial.client}</dd></div>
+      <div><dt>Identical retry</dt><dd data-result-retry>{initial.retry}</dd></div>
+      <div><dt>Provider implication</dt><dd data-result-provider>{initial.provider}</dd></div>
+    </dl>
+    <div class="result-sources" data-result-sources aria-label="Sources for the selected boundary">
+      {initial.sources.map((source) => <a href={source.href} rel="noreferrer"><code>{source.label}</code> ↗</a>)}
+    </div>
+  </article>
+
+  <details class="static-fallback">
+    <summary>Static boundary ledger</summary>
+    {Object.entries(resolvedPaths).map(([, path]) => (
+      <div class="static-path">
+        <h4>{path.label}</h4>
+        <p>{path.description}</p>
+        <div class="static-scroll" tabindex="0" role="region" aria-label={`${path.label} boundary ledger`}>
+          <table>
+            <thead><tr><th>Position</th><th>Durable / external state</th><th>Retry and provider meaning</th></tr></thead>
+            <tbody>
+              {path.stages.map((stage, index) => (
+                <tr>
+                  <th scope="row">{index + 1}. {stage.label}</th>
+                  <td>{stage.durable} {stage.external}</td>
+                  <td>{stage.retry} {stage.provider}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    ))}
+  </details>
+
+  <script type="application/json" data-command-boundary-data set:html={payload}></script>
+</section>
+
+<script>
+  interface SourceLink { label: string; href: string }
+  interface StageState {
+    label: string;
+    shortLabel: string;
+    position: string;
+    durable: string;
+    external: string;
+    client: string;
+    retry: string;
+    provider: string;
+    guarantee: string;
+    tone: "neutral" | "warning" | "failure" | "success";
+    sources: SourceLink[];
+  }
+  interface PathState { label: string; description: string; stages: StageState[] }
+
+  document.querySelectorAll<HTMLElement>("[data-command-boundary-lab]").forEach((lab) => {
+    if (lab.dataset.commandBoundaryReady === "true") return;
+    lab.dataset.commandBoundaryReady = "true";
+    const data = JSON.parse(lab.querySelector("[data-command-boundary-data]")?.textContent ?? "{}") as Record<string, PathState>;
+    const pathSelect = lab.querySelector<HTMLSelectElement>("[data-command-path]");
+    const position = lab.querySelector<HTMLInputElement>("[data-command-position]");
+    const previous = lab.querySelector<HTMLButtonElement>("[data-command-prev]");
+    const next = lab.querySelector<HTMLButtonElement>("[data-command-next]");
+    const result = lab.querySelector<HTMLElement>("[data-boundary-result]");
+    const progress = lab.querySelector<HTMLElement>("[data-boundary-progress]");
+    const markers = lab.querySelector<HTMLOListElement>("[data-boundary-markers]");
+    let index = 0;
+
+    const setText = (selector: string, value: string) => {
+      const node = lab.querySelector(selector);
+      if (node) node.textContent = value;
+    };
+    const renderSources = (sources: SourceLink[]) => {
+      const container = lab.querySelector("[data-result-sources]");
+      if (!container) return;
+      container.replaceChildren(...sources.map((source) => {
+        const link = document.createElement("a");
+        link.href = source.href;
+        link.rel = "noreferrer";
+        const code = document.createElement("code");
+        code.textContent = source.label;
+        link.append(code, " ↗");
+        return link;
+      }));
+    };
+    const renderMarkers = (stages: StageState[]) => {
+      if (!markers) return;
+      [...markers.querySelectorAll("li")].forEach((item, markerIndex) => {
+        const stage = stages[markerIndex];
+        item.textContent = stage?.shortLabel ?? "";
+        item.classList.toggle("current", markerIndex === index);
+        item.hidden = stage === undefined;
+      });
+    };
+    const paint = () => {
+      const pathKey = pathSelect?.value ?? "existing";
+      const path = data[pathKey] ?? data.existing;
+      if (!path) return;
+      index = Math.max(0, Math.min(index, path.stages.length - 1));
+      const stage = path.stages[index];
+      if (!stage) return;
+      if (position) {
+        position.max = String(path.stages.length - 1);
+        position.value = String(index);
+        position.setAttribute("aria-valuetext", `${stage.label}: ${stage.guarantee}`);
+      }
+      if (previous) previous.disabled = index === 0;
+      if (next) next.disabled = index === path.stages.length - 1;
+      if (progress) progress.style.width = `${path.stages.length === 1 ? 100 : (index / (path.stages.length - 1)) * 100}%`;
+      if (result) result.className = `boundary-result tone-${stage.tone}`;
+      setText("[data-path-description]", path.description);
+      setText("[data-result-position]", `Position ${index + 1} of ${path.stages.length}`);
+      setText("[data-result-label]", stage.label);
+      setText("[data-result-guarantee]", stage.guarantee);
+      setText("[data-result-position-copy]", stage.position);
+      setText("[data-result-durable]", stage.durable);
+      setText("[data-result-external]", stage.external);
+      setText("[data-result-client]", stage.client);
+      setText("[data-result-retry]", stage.retry);
+      setText("[data-result-provider]", stage.provider);
+      setText("[data-command-status]", `${path.label}, position ${index + 1} of ${path.stages.length}: ${stage.label}. ${stage.guarantee}.`);
+      renderMarkers(path.stages);
+      renderSources(stage.sources);
+    };
+
+    pathSelect?.addEventListener("change", () => { index = 0; paint(); });
+    position?.addEventListener("input", () => { index = position.valueAsNumber; paint(); });
+    previous?.addEventListener("click", () => { index -= 1; paint(); position?.focus(); });
+    next?.addEventListener("click", () => { index += 1; paint(); position?.focus(); });
+    paint();
+  });
+</script>
+
+<style>
+  .command-boundary-lab {
+    margin: 2rem 0;
+    border: 1px solid var(--line-strong);
+    border-radius: 1.1rem;
+    background: var(--paper-raised);
+    box-shadow: var(--shadow);
+    overflow: hidden;
+  }
+
+  .lab-head {
+    padding: 1.2rem 1.35rem 1rem;
+    color: var(--navy-text);
+    background: var(--navy);
+    border-bottom: 1px solid var(--navy-line);
+  }
+
+  .lab-head > span {
+    display: block;
+    margin-bottom: 0.32rem;
+    color: var(--orange);
+    font: 700 0.72rem/1 var(--font-sans);
+    letter-spacing: 0.11em;
+    text-transform: uppercase;
+  }
+
+  .lab-head h3,
+  .lab-head p { margin: 0; }
+  .lab-head h3 { color: inherit; }
+  .lab-head p { margin-top: 0.45rem; color: var(--navy-muted); max-width: 72ch; }
+
+  .lab-controls {
+    display: grid;
+    grid-template-columns: minmax(14rem, 1fr) minmax(15rem, 1.2fr) auto;
+    gap: 0.9rem;
+    align-items: end;
+    padding: 1.15rem 1.25rem 0.8rem;
+  }
+
+  .lab-controls label {
+    display: grid;
+    gap: 0.38rem;
+    color: var(--ink-soft);
+    font: 700 0.75rem/1.25 var(--font-sans);
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+
+  .lab-controls select,
+  .lab-controls input,
+  .lab-controls button {
+    font: 600 0.88rem/1.2 var(--font-sans);
+  }
+
+  .lab-controls select {
+    width: 100%;
+    min-height: 2.55rem;
+    border: 1px solid var(--line-strong);
+    border-radius: 0.55rem;
+    padding: 0.5rem 2rem 0.5rem 0.65rem;
+    color: var(--ink);
+    background: var(--paper);
+  }
+
+  .lab-controls input[type="range"] {
+    width: 100%;
+    min-height: 2.55rem;
+    accent-color: var(--signal);
+  }
+
+  .step-actions { display: flex; gap: 0.42rem; }
+  .step-actions button {
+    min-height: 2.55rem;
+    border: 1px solid var(--line-strong);
+    border-radius: 0.55rem;
+    padding: 0.55rem 0.7rem;
+    color: var(--ink);
+    background: var(--paper);
+    cursor: pointer;
+  }
+  .step-actions button:disabled { color: var(--ink-faint); cursor: not-allowed; }
+
+  .lab-controls select:focus-visible,
+  .lab-controls input:focus-visible,
+  .step-actions button:focus-visible,
+  .static-fallback summary:focus-visible,
+  .static-scroll:focus-visible {
+    outline: 3px solid var(--blue);
+    outline-offset: 3px;
+  }
+
+  .path-description {
+    margin: 0;
+    padding: 0 1.25rem 0.75rem;
+    color: var(--ink-soft);
+    font-size: 0.92rem;
+  }
+
+  .noscript-note {
+    margin: 0 1.25rem 0.8rem;
+    border-left: 3px solid var(--orange);
+    padding-left: 0.7rem;
+    color: var(--ink-soft);
+    font-size: 0.88rem;
+  }
+
+  .boundary-track {
+    position: relative;
+    margin: 0 1.25rem 1rem;
+    height: 2.55rem;
+    border-top: 3px solid var(--line);
+  }
+
+  .boundary-track > span {
+    position: absolute;
+    top: -3px;
+    left: 0;
+    width: 0;
+    height: 3px;
+    background: var(--signal);
+    transition: width var(--motion-detail) var(--motion-ease);
+  }
+
+  .boundary-track ol {
+    display: grid;
+    grid-template-columns: repeat(6, 1fr);
+    gap: 0.3rem;
+    margin: 0;
+    padding: 0.55rem 0 0;
+    list-style: none;
+  }
+
+  .boundary-track li {
+    overflow: hidden;
+    color: var(--ink-faint);
+    font: 650 0.68rem/1 var(--font-mono);
+    text-align: center;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .boundary-track li.current { color: var(--signal-deep); font-weight: 800; }
+
+  .boundary-result {
+    margin: 0 1.25rem 1.15rem;
+    border: 1px solid var(--line);
+    border-left: 4px solid var(--blue);
+    border-radius: 0.8rem;
+    padding: 1rem;
+    background: var(--paper);
+  }
+
+  .boundary-result.tone-warning { border-left-color: var(--orange); }
+  .boundary-result.tone-failure { border-left-color: var(--signal); }
+  .boundary-result.tone-success { border-left-color: var(--green); }
+
+  .result-head {
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+    align-items: start;
+  }
+
+  .result-head span {
+    display: block;
+    color: var(--ink-faint);
+    font: 700 0.7rem/1.2 var(--font-sans);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+  .result-head h4 { margin: 0.18rem 0 0; color: var(--ink); }
+  .result-head > strong {
+    flex: 0 0 auto;
+    border-radius: 999px;
+    padding: 0.35rem 0.58rem;
+    color: var(--signal-deep);
+    background: var(--signal-soft);
+    font: 750 0.72rem/1.1 var(--font-sans);
+  }
+  .tone-success .result-head > strong { color: var(--green); background: color-mix(in srgb, var(--green) 13%, transparent); }
+  .tone-warning .result-head > strong { color: var(--orange); background: color-mix(in srgb, var(--orange) 13%, transparent); }
+
+  .position-copy { margin: 0.7rem 0 0.9rem; color: var(--ink-soft); }
+  .boundary-result dl {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.55rem;
+    margin: 0;
+  }
+  .boundary-result dl > div {
+    border: 1px solid var(--line);
+    border-radius: 0.58rem;
+    padding: 0.65rem 0.72rem;
+    background: var(--paper-muted);
+  }
+  .boundary-result dl > div:last-child { grid-column: 1 / -1; }
+  .boundary-result dt {
+    color: var(--ink-faint);
+    font: 750 0.68rem/1.2 var(--font-sans);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+  .boundary-result dd { margin: 0.25rem 0 0; color: var(--ink); font-size: 0.9rem; }
+
+  .result-sources {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    margin-top: 0.8rem;
+  }
+  .result-sources :global(a) {
+    max-width: 100%;
+    color: var(--signal-deep);
+    font-size: 0.7rem;
+    overflow-wrap: anywhere;
+  }
+
+  .static-fallback {
+    margin: 0 1.25rem 1.25rem;
+    border-top: 1px solid var(--line);
+    padding-top: 0.75rem;
+  }
+  .static-fallback summary { cursor: pointer; color: var(--signal-deep); font-weight: 750; }
+  .static-path { margin-top: 1rem; }
+  .static-path h4, .static-path p { margin: 0; }
+  .static-path p { margin-top: 0.3rem; color: var(--ink-soft); font-size: 0.88rem; }
+  .static-scroll { overflow-x: auto; margin-top: 0.65rem; }
+  .static-scroll table { width: 100%; min-width: 46rem; border-collapse: collapse; font-size: 0.78rem; }
+  .static-scroll th, .static-scroll td { border: 1px solid var(--line); padding: 0.55rem; text-align: left; vertical-align: top; }
+  .static-scroll thead th { color: var(--ink-soft); background: var(--paper-muted); }
+
+  @media (max-width: 760px) {
+    .lab-controls { grid-template-columns: 1fr; }
+    .step-actions button { flex: 1; }
+    .boundary-result dl { grid-template-columns: 1fr; }
+    .boundary-result dl > div:last-child { grid-column: auto; }
+    .result-head { display: grid; }
+    .result-head > strong { justify-self: start; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .boundary-track > span { transition: none; }
+  }
+
+  @media print {
+    .command-boundary-lab { break-inside: avoid; box-shadow: none; }
+    .lab-head { color: #000; background: transparent; }
+    .lab-head > span, .lab-head p { color: #000; }
+    .lab-controls, .path-description, .noscript-note, .boundary-track, .boundary-result { display: none !important; }
+    .static-fallback { border-top: 0; margin: 0; padding: 1rem; }
+    .static-fallback summary { display: none; }
+    .static-fallback:not([open]) > :not(summary) { display: block !important; }
+    .static-scroll { overflow: visible; }
+    .static-scroll table { min-width: 0; font-size: 8pt; }
+    .static-scroll th, .static-scroll td { color: #000; background: transparent; }
+  }
+</style>

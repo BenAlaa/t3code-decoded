@@ -1,0 +1,63 @@
+---
+interface Props { id: string; }
+interface Step { label: string; native: string; canonical: string; durable: string; }
+
+const { id } = Astro.props;
+if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(id)) {
+  throw new Error("CodexRpcBoundaryLab requires a stable kebab-case id.");
+}
+const labId = `codex-rpc-${id}`;
+
+const steps: Step[] = [
+  { label: "Start / resume", native: "Spawn codex app-server, initialize it, then start or resume a provider thread.", canonical: "session.started and thread.started identify a live adapter session.", durable: "Only the orchestration binding and any saved resume cursor can survive; the child process and event consumer are live state." },
+  { label: "Turn request", native: "turn/start carries the prompt plus selected model, reasoning effort, and service tier.", canonical: "turn.started and item/content events describe the product-visible turn.", durable: "The earlier turn-start command is durable intent. Native request completion is not a SQL commit." },
+  { label: "Server asks", native: "The app-server sends an incoming approval or user-input JSON-RPC request.", canonical: "request.opened or user-input.requested becomes a pending product request.", durable: "The pending native handler waits in process; its durable counterpart arrives only after runtime ingestion dispatches an internal command." },
+  { label: "Notifications", native: "Items, plan deltas, token usage, reroutes, and errors arrive as app-server notifications.", canonical: "The adapter maps selected shapes into ProviderRuntimeEvent values.", durable: "The adapter queue and hot provider stream are volatile until ingestion commits a derived internal command." },
+  { label: "Stop / failure", native: "Close the runtime or observe child stdio/process/protocol failure.", canonical: "session.exited, runtime.warning, or runtime.error explains the observed outcome.", durable: "Stopping a process does not retroactively prove a provider result was projected; a prior accepted intent may outlive delivery." },
+];
+const payload = JSON.stringify(steps).replaceAll("<", "\\u003c");
+---
+
+<section class="codex-rpc-lab" data-codex-rpc-lab data-codex-ready="initializing" aria-labelledby={`${labId}-title`}>
+  <header><span>Interactive transport ledger</span><h3 id={`${labId}-title`}>Move one Codex observation across the boundary</h3><p>The labels deliberately separate upstream JSON-RPC from T3’s stable runtime vocabulary and from durable orchestration state.</p></header>
+  <div class="codex-interactive">
+    <div class="controls" aria-label="Codex boundary positions">
+      <button type="button" data-codex-previous disabled>← Earlier</button>
+      <label for={`${labId}-range`}>Boundary <strong data-codex-count>1 / {steps.length}</strong><input id={`${labId}-range`} type="range" data-codex-range min="0" max={steps.length - 1} value="0" step="1" aria-valuetext={steps[0].label} /></label>
+      <button type="button" data-codex-next>Later →</button>
+    </div>
+    <p class="sr-only" role="status" aria-live="polite" aria-atomic="true" data-codex-status>Position 1 of {steps.length}: {steps[0].label}</p>
+    <article data-codex-detail><h4 data-codex-label>{steps[0].label}</h4><dl><div><dt>Native app-server</dt><dd data-codex-native>{steps[0].native}</dd></div><div><dt>Canonical T3 event</dt><dd data-codex-canonical>{steps[0].canonical}</dd></div><div><dt>Durability boundary</dt><dd data-codex-durable>{steps[0].durable}</dd></div></dl></article>
+  </div>
+  <details class="fallback" open><summary>All boundary positions</summary><ol>{steps.map((step) => <li><strong>{step.label}</strong><p><b>Native:</b> {step.native}</p><p><b>Canonical:</b> {step.canonical}</p><p><b>Durable:</b> {step.durable}</p></li>)}</ol></details>
+  <noscript><p class="noscript-note">JavaScript is off; the complete boundary ledger above remains available.</p></noscript>
+  <script type="application/json" data-codex-data set:html={payload}></script>
+</section>
+
+<script>
+  document.querySelectorAll<HTMLElement>("[data-codex-rpc-lab]").forEach((lab) => {
+    if (lab.dataset.codexReady === "true") return;
+    try {
+      const steps = JSON.parse(lab.querySelector("[data-codex-data]")?.textContent ?? "[]");
+      const range = lab.querySelector<HTMLInputElement>("[data-codex-range]");
+      const previous = lab.querySelector<HTMLButtonElement>("[data-codex-previous]");
+      const next = lab.querySelector<HTMLButtonElement>("[data-codex-next]");
+      let index = 0;
+      const set = (selector: string, value: string) => { const node = lab.querySelector(selector); if (node) node.textContent = value; };
+      const paint = (requested: number) => {
+        index = Math.max(0, Math.min(steps.length - 1, requested)); const step = steps[index]; if (!step) return;
+        if (range) { range.value = String(index); range.setAttribute("aria-valuetext", step.label); }
+        if (previous) previous.disabled = index === 0; if (next) next.disabled = index === steps.length - 1;
+        set("[data-codex-count]", `${index + 1} / ${steps.length}`); set("[data-codex-status]", `Position ${index + 1} of ${steps.length}: ${step.label}`);
+        set("[data-codex-label]", step.label); set("[data-codex-native]", step.native); set("[data-codex-canonical]", step.canonical); set("[data-codex-durable]", step.durable);
+      };
+      previous?.addEventListener("click", () => paint(index - 1)); next?.addEventListener("click", () => paint(index + 1)); range?.addEventListener("input", () => paint(Number(range.value)));
+      paint(0);
+      lab.dataset.codexReady = "true";
+    } catch { lab.dataset.codexReady = "error"; }
+  });
+</script>
+
+<style>
+  .codex-rpc-lab { margin: 2rem 0; border: 1px solid var(--line-strong); border-radius: 14px; overflow: hidden; background: var(--paper-raised); font-family: var(--font-ui); } header { padding: 1rem 1.2rem; border-bottom: 1px solid var(--line); } header span { color: var(--signal-deep); font: 750 .65rem/1 var(--font-ui); letter-spacing: .1em; text-transform: uppercase; } h3 { margin: .35rem 0; } header p { margin: 0; color: var(--ink-soft); font-size: .82rem; } .codex-rpc-lab:not([data-codex-ready="true"]) .codex-interactive { display: none; } .codex-rpc-lab[data-codex-ready="true"] .fallback { display: none; } .controls { display: grid; grid-template-columns: auto 1fr auto; gap: .7rem; align-items: end; padding: 1rem 1.2rem; } label { display: grid; gap: .3rem; color: var(--ink-soft); font-size: .75rem; } label strong { color: var(--ink); } input { width: 100%; accent-color: var(--signal); } button { min-height: 2.4rem; border: 1px solid var(--line); border-radius: 7px; background: var(--paper); color: var(--ink); cursor: pointer; } button:disabled { opacity: .45; cursor: not-allowed; } article { margin: 0 1.2rem 1rem; padding: .9rem; border-left: 4px solid var(--signal); background: var(--paper-muted); } h4 { margin: 0 0 .6rem; } dl { display: grid; grid-template-columns: repeat(3, 1fr); gap: .55rem; margin: 0; } dl div { padding: .65rem; border: 1px solid var(--line); background: var(--paper-raised); } dt { color: var(--ink-faint); font-size: .62rem; font-weight: 750; letter-spacing: .08em; text-transform: uppercase; } dd { margin: .25rem 0 0; font-size: .77rem; line-height: 1.45; } .fallback { margin: 0 1.2rem 1.1rem; } .fallback li { margin: .7rem 0; } .fallback p { margin: .2rem 0; color: var(--ink-soft); font-size: .75rem; } .noscript-note { margin: 0 1.2rem 1rem; color: var(--ink-faint); } @media (max-width: 650px) { .controls, dl { grid-template-columns: 1fr; } } @media (prefers-reduced-motion: reduce) { .codex-rpc-lab *, .codex-rpc-lab *::before, .codex-rpc-lab *::after { scroll-behavior: auto !important; transition: none !important; animation: none !important; } } @media print { .codex-interactive, .noscript-note { display: none !important; } .fallback { display: block !important; } .fallback summary { display: none; } }
+</style>
