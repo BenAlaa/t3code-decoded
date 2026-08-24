@@ -1,0 +1,265 @@
+---
+slug: threads-and-work-items
+order: 250
+number: "25"
+kind: chapter
+part: Part V · The work lifecycle
+partOrder: 5
+title: Threads, provider tasks, plans, skills, and subagents
+shortTitle: Threads and work items
+summary: A T3 thread is the durable work record. Provider task and subagent activity is normalized into activities and roster projections; high-frequency progress and usage streams are bounded, while liveness and plan progress stay explicitly ephemeral.
+status: source-checked
+gates: [sources, interaction]
+objectives:
+  - Separate the durable thread work record from provider task and subagent observations.
+  - Trace task lifecycle normalization into activities, bounded latest-state streams, the Agents projection, and the quiet work log.
+  - Identify which liveness and plan-progress indicators disappear on restart or settlement.
+  - Explain lifecycle, pin, and snooze as thread overlays rather than scheduler state.
+keywords: [thread, work item, task, subagent, workflow, liveness, plan progress, pin, snooze, work log]
+sourceAreas: [packages/contracts/src/orchestration.ts, apps/server/src/orchestration, packages/client-runtime/src/state/subagentRuntime.ts, apps/web/src/components, apps/mobile/src/features/threads]
+visuals: [interactive work-log projector, durable and ephemeral state map]
+updatedAt: 2026-08-24
+---
+
+import Callout from "../../components/Callout.astro";
+import EvidenceClaim from "../../components/EvidenceClaim.astro";
+import Figure from "../../components/Figure.astro";
+import Mermaid from "../../components/Mermaid.astro";
+import SourceExcerpt from "../../components/SourceExcerpt.astro";
+import SourceList from "../../components/SourceList.astro";
+import WorkLogLab from "../../components/WorkLogLab.astro";
+
+“Task” is overloaded in agent products. Here, a **thread** is the durable work
+item: it has a project, title, model selection, runtime and interaction modes,
+conversation, activities, checkpoints, session summary, and lifecycle fields. A
+provider task or subagent is observed runtime activity inside that thread, not a
+second durable cross-provider work-item aggregate.
+
+This lets a provider expose a fleet, workflow, child agent, background shell, or
+nothing at all without forcing every provider into a false scheduler schema. T3 can
+retain useful normalized evidence while preserving provider task identity and
+provenance in an activity payload.
+
+## The durable record is the thread
+
+The thread read model holds message/activity history, latest turn, checkpoints,
+proposed plans, session summary, and lifecycle overlays. It is the address used for
+routing, recovery, and cross-surface navigation. A task id is not promoted to that
+role: it travels inside normalized `task.started`, `task.progress`, `task.updated`,
+and `task.completed` activities.
+
+Thread lifecycle is durable. Archive, settled/active override, and delete have
+their own state. Snooze is explicitly an overlay on an active thread: it suppresses
+the inbox until `snoozedUntil` passes or activity wakes it. Pinning is another
+overlay: active pinned threads render in a pinned block, while settled and snoozed
+threads remain in their own shelves. A fractional pin order key lets a client move
+one pin without rewriting its neighbors.
+
+These overlays are separate fields, but their commands deliberately coordinate
+visibility state. Settling also unpins and unsnoozes; pinning unsets settlement and
+unsnoozes. Snooze rejects pending approval/input and queued-start windows, yet it
+can hide a thread whose provider session is already running. That coupling organizes
+the inbox; it still does not schedule or cancel native provider work.
+
+<EvidenceClaim kind="verified" title="Pin and snooze organize the durable thread; they do not schedule provider work" refs={["work-thread-record", "work-thread-shell", "work-thread-lifecycle-events", "work-thread-lifecycle-decisions"]}>
+  Archive, settlement, snooze, pinning, and fractional pin ordering are commands,
+  events, and projected thread fields. They can change where a work item appears and
+  whether it is considered settled, but these paths do not assign or resume a native
+  provider task.
+</EvidenceClaim>
+
+<Callout title="Not a durable cross-provider scheduler" tone="warning">
+  The source does not define a global queue, dependency graph, retry policy,
+  assignment service, or durable task-completion contract across providers. A
+  provider lifecycle is useful observability within a thread, not evidence that T3
+  can resume, schedule, or reconcile that task universally after restart.
+</Callout>
+
+## Native activity becomes product evidence; high-frequency streams are bounded
+
+Adapters translate native task/subagent updates into canonical task events. Runtime
+ingestion turns those into thread activities. High-frequency progress uses a stable
+per-thread/per-task id, so a meaningful tick replaces latest state instead of
+creating an unbounded timeline. Typed usage has a second stable id, and agent-owned
+tool heartbeats have another stable latest-state shape. By contrast, `task.started`,
+`task.updated`, and `task.completed` keep the provider event id. They are retained
+activities, but this code does not collapse all lifecycle evidence into one bounded
+row. A usage-only update cannot erase the latest status line, and a status update
+cannot erase the last known task usage.
+
+<SourceExcerpt id="work-task-latest-activities" focus={[569, 575, 579, 583, 591, 596, 623, 626, 636, 638]} note="Progress and typed usage are persisted under separate stable task-scoped activity ids, so either stream may update without erasing the other." />
+
+The payload can retain task type, agent linkage, title, role, model, effort,
+tool-use id, workflow/phase metadata, output file, status, error, and typed usage.
+The server stamps `agentKind`, so clients do not reverse-engineer an agent from a
+provider-specific task-type vocabulary. Legacy rows without that server stamp fall
+back to background classification and therefore do not enter the current Agents
+roster merely because their task type looks agent-like.
+
+<SourceExcerpt id="work-task-usage-contract" focus={[477, 480, 486, 493, 504, 519, 527, 533, 539]} note="The shared contract defines typed per-task usage and a denylist-based agent/background classifier; provider type-name drift is expected." />
+
+Codex and Claude have concrete task normalization paths in the pinned source.
+Codex turns collaboration-agent notifications into task lifecycle/progress events.
+Claude maps SDK task, workflow, and member progress messages into task events,
+including typed usage when present. This audit does not establish equivalent
+task-rollup coverage for Cursor, Grok, or OpenCode; absence here is an evidence
+boundary, not a claim they can never support it.
+
+<Figure number="25.1" title="Provider tasks become thread evidence, then surface-specific views" hint="progress and usage are bounded latest-state streams; lifecycle events retain provider ids" caption="Codex and Claude normalize native task observations into the shared runtime vocabulary. Runtime ingestion stamps task linkage and writes thread activities; progress, typed usage, and agent tool heartbeats use stable latest-state ids, while start/update/completion keep provider event ids. Clients fold retained activity into a web Agents roster and surface-specific quiet views. In parallel, the server updates in-memory background liveness and plan progress. Those ephemeral services are read for current status but are not a second durable task projection." textEquivalent="Native Codex or Claude task signals pass through provider adapters into canonical task events. Runtime ingestion creates thread activities. Progress, usage, and agent tool heartbeat streams use stable latest-state identifiers; lifecycle start, update, and completion retain provider event identifiers. The web Agents panel and web/mobile work logs derive different views from those activities. A separate branch updates in-memory liveness and plan progress, which disappear on restart or settlement according to service rules." sources={["codex-task-normalization", "claude-task-event-lifecycle", "work-task-linkage-ingestion", "work-task-stable-streams", "work-subagent-fold", "work-web-quiet-timeline", "work-mobile-quiet-timeline", "work-task-live-services"]}>
+  <Mermaid id="provider-task-projections" label="Provider tasks through durable and ephemeral projections" chart={`flowchart LR
+    N[native task / subagent] --> A[provider adapter]
+    A -. canonical task event .-> I[runtime ingestion]
+    I --> D[(thread activities)]
+    I --> B[bounded progress / usage / heartbeat latest state]
+    B --> D
+    D --> F[client subagent fold]
+    F --> W[web Agents roster]
+    D --> Q[quiet web / mobile work logs]
+    I -. live update .-> L[in-memory liveness + plan progress]`} />
+</Figure>
+
+## The Agents view is a projection, not a second log
+
+The client folds retained `task.*` and agent-owned `tool.progress` activities into
+a source-neutral subagent model. It accepts pending, running, waiting, idle,
+completed, failed, cancelled, and interrupted; idle is explicitly resumable rather
+than automatically “working.” The web Agents panel displays stable spawn order,
+current activity, model/effort, token count, tool-use count, and elapsed time. Its
+elapsed clock is presentation state: settled rows freeze at completion.
+
+The fold is tolerant of missing starts, late completions, reactivation, and session
+death. Task usage is parsed field by field and max-merged so duplicate or late
+cumulative frames cannot shrink a known count or erase a known breakdown.
+
+<SourceExcerpt id="work-subagent-usage-merge" focus={[149, 154, 166, 184, 192, 200, 205, 215, 223]} note="The client accepts partial typed usage and field-wise max-merges retained values. This is an idempotent presentation fold, not cost accounting." />
+
+For Codex and Claude task data, the normalizer can roll up per-task `totalTokens`,
+input/cache/output/reasoning fields, `toolUses`, and `durationMs` when typed usage
+supplies them. These are task-local, provider-observed rollups. They are not invoice
+records. **Inference from the separate ingestion paths:** they do not feed either
+Chapter 20 lane; neither the live thread-context meter nor the transcript-scan
+historical usage total consumes this task rollup.
+
+<Callout title="Do not join these token columns to Chapter 20" tone="info">
+  Chapter 20’s live lane selects one context-window snapshot for a thread; its
+  historical lane scans selected Codex and Claude transcript homes. Task usage is
+  activity payload for an Agents/work-log projection. No common accumulator joins
+  those three measurements in the pinned implementation.
+</Callout>
+
+<EvidenceClaim kind="inference" title="Task rollups are a third, isolated usage path" refs={["work-task-usage-contract", "work-task-latest-activities", "work-subagent-usage-merge", "usage-live-admission", "usage-live-activity", "usage-source-status"]}>
+  The inspected task path terminates in activity payloads and the Agents fold. The
+  live context path admits <code>thread.token-usage.updated</code>, while historical
+  accounting reads provider transcript sources. No inspected accumulator joins the
+  task rollup into either Chapter 20 total; that negative conclusion is bounded to
+  these concrete paths.
+</EvidenceClaim>
+
+## Live liveness and plan progress are intentionally not durable
+
+`ThreadBackgroundLivenessService` is an in-memory registry for sidebar status
+labels. Agent work becomes `working`; monitor work becomes `monitoring` only when
+no agent work is live. Inert plan-mode bookkeeping is excluded. The registry is
+empty after restart until fresh task events arrive, and a dead session clears it.
+
+Plan progress follows the same pattern. It stores a current in-progress or next
+pending step with completed/total counts in memory, clears when every step is
+complete, and clears when the turn settles or the session dies. It is a live
+annotation for working indicators, not a durable plan-execution ledger.
+
+A durable thread can therefore remain visible after its liveness pill and
+plan-progress label disappear. That is not loss of the thread record; it avoids
+showing stale runtime work as live.
+
+## Quiet views select from the same evidence
+
+Web chat keeps the parent narrative quiet: agent lifecycle rows collapse into a
+spawn-batch call to action that opens Agents. Direct agents group by spawn turn;
+workflow members group under their coordinator. The detailed per-agent state lives
+in the derived Agents roster rather than one parent-log row per task. Mobile has no
+matching Agents roster on this path, so it retains compact terminal/task signals per
+task identity in the work log. Both are presentations of thread activity, not
+separate stores.
+
+### Skills are provider inventory, not orchestrated tasks
+
+Each provider-instance snapshot carries default-empty `slashCommands` and `skills`
+arrays. Their contents remain driver-specific: Codex asks app-server for its native
+skill inventory and adds T3's feedback command; Claude combines discovered skills
+with commands reported during SDK initialization; OpenCode flattens its inventory;
+the inspected Cursor and Grok snapshots expose models and probe state without
+skills or slash commands.
+
+The composer then normalizes presentation, not execution, with surface-specific
+menu policy. On web, enabled skills join `/` only when `showSkillsInSlashMenu` is
+enabled, and a visible skill name suppresses the same-named provider slash command.
+Mobile independently includes enabled skills alongside matching provider commands
+and does not apply that web collision helper. Both `$` paths search enabled skills;
+choosing one inserts `$skill ` provider-facing prompt syntax. That insertion does not
+create a durable task, plan step, dependency, or scheduler assignment by itself.
+
+<EvidenceClaim kind="verified" title="Skill availability follows the selected provider instance" refs={["work-provider-skill-contract", "work-provider-inventory-contract", "codex-provider-skills", "codex-provider-feedback-command", "claude-provider-skills-commands", "cursor-provider-snapshot", "grok-provider-snapshot", "opencode-provider-skills", "work-provider-skill-menu", "work-web-skill-composer", "work-mobile-skill-composer", "work-mobile-skill-search", "work-web-skill-insertion", "work-mobile-skill-insertion"]}>
+  The product receives skills and commands inside each provider snapshot, then
+  filters and searches that inventory in the composer. No generic orchestration
+  command in this path converts a skill selection into a durable work item.
+</EvidenceClaim>
+
+<WorkLogLab id="work-log-projector" />
+
+## What the model does and does not promise
+
+| State or view | Durable? | Source of truth | Appropriate claim |
+|---|---:|---|---|
+| Thread, messages, activities, checkpoints, lifecycle overlays | yes | orchestration read model/projections | durable project work record |
+| Provider task/subagent identity and status | activity-backed, provider-derived | normalized runtime events and client fold | observed state, subject to provider delivery and retention |
+| Web Agents roster and rollups | derived | client fold or future v2 projection | current presentation of retained evidence |
+| Background liveness / plan progress | no | in-memory server service | current server observation only |
+| Snooze / pin / settled placement | yes | thread lifecycle fields | inbox/display organization, not execution scheduling |
+| Composer skills / commands | no task state implied | provider inventory and composer UI | selectable invocation affordance |
+
+A durable scheduler could add assignments, dependencies, retry rules, and
+reconciliation receipts. That is a **future design**, not an inference that the
+current activity fold already provides those guarantees.
+
+<SourceList ids={[
+  "work-thread-record",
+  "work-thread-shell",
+  "work-thread-lifecycle-events",
+  "work-thread-lifecycle-decisions",
+  "work-task-usage-contract",
+  "work-task-linkage-ingestion",
+  "work-task-latest-activities",
+  "work-task-stable-streams",
+  "work-task-activities",
+  "work-task-live-services",
+  "codex-task-normalization",
+  "claude-task-event-lifecycle",
+  "work-subagent-usage-merge",
+  "work-subagent-fold",
+  "work-subagent-legacy-classification",
+  "work-agent-panel-model",
+  "work-web-agent-panel",
+  "work-web-agent-summary",
+  "work-web-quiet-timeline",
+  "work-mobile-quiet-timeline",
+  "work-mobile-work-log",
+  "work-background-liveness",
+  "work-plan-progress",
+  "work-provider-skill-contract",
+  "work-provider-inventory-contract",
+  "codex-provider-skills",
+  "codex-provider-feedback-command",
+  "claude-provider-skills-commands",
+  "cursor-provider-snapshot",
+  "grok-provider-snapshot",
+  "opencode-provider-skills",
+  "work-provider-skill-menu",
+  "work-web-skill-composer",
+  "work-mobile-skill-composer",
+  "work-mobile-skill-search",
+  "work-web-skill-insertion",
+  "work-mobile-skill-insertion",
+  "usage-live-admission",
+  "usage-live-activity",
+  "usage-source-status"
+]} />

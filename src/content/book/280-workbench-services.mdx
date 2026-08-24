@@ -1,0 +1,363 @@
+---
+slug: workbench-services
+order: 280
+number: "28"
+kind: chapter
+part: Part V · The work lifecycle
+partOrder: 5
+title: Terminals, files, previews, MCP, VCS, and pull requests
+shortTitle: Workbench services
+summary: "T3 Code's chat surrounds itself with server-owned workbench services. Their transports differ deliberately: terminal and preview state stream, assets use expiring signed HTTP paths, pull-request diffs use authenticated HTTP slices, and desktop owns the only in-app browser host."
+status: source-checked
+gates: [sources, interaction]
+objectives:
+  - Trace the ownership and transport boundary for terminals, workspace files, signed assets, preview, MCP, VCS, and pull requests.
+  - Distinguish server metadata from the desktop-only processes and webviews that enact a workbench action.
+  - Read surface parity as capability-specific rather than assuming every web, desktop, and mobile client has the same tool.
+  - Identify where authorization is re-checked instead of trusting a visible client control.
+keywords: [terminal, PTY, assets, signed URL, preview, browser automation, MCP, VCS, worktree, pull request, authorization, streaming]
+sourceAreas: [apps/server/src/terminal, apps/server/src/assets, apps/server/src/preview, apps/server/src/mcp, apps/server/src/vcs, apps/server/src/pullRequest, packages/contracts/src]
+visuals: [interactive workbench capability matrix, service data paths, surface parity ledger]
+updatedAt: 2026-08-24
+---
+
+import Callout from "../../components/Callout.astro";
+import EvidenceClaim from "../../components/EvidenceClaim.astro";
+import Figure from "../../components/Figure.astro";
+import Mermaid from "../../components/Mermaid.astro";
+import SourceExcerpt from "../../components/SourceExcerpt.astro";
+import SourceList from "../../components/SourceList.astro";
+import WorkbenchCapabilityLab from "../../components/WorkbenchCapabilityLab.astro";
+
+Chat is the control surface, not the whole application. A running T3 environment
+also owns processes, workspace paths, Git state, provider credentials, and source-
+control integrations. The book has already traced turn orchestration, worktree
+creation, context, and checkpoints. This chapter follows the adjacent **workbench
+services** without retelling those internal sagas.
+
+The rule that prevents most incorrect diagrams is simple: a visible panel does not
+move authority into the client. In the pinned implementation, server services keep
+the filesystem, PTY, VCS, asset-signing, and remote-host integrations. Web, desktop,
+and mobile clients ask one selected environment for a capability and render the
+result through surface-specific code.
+
+<Callout title="One product surface, several transport models" tone="info">
+  Do not collapse all of these into “the WebSocket.” Terminal attach and preview
+  metadata are streamed. Asset bytes are fetched through a signed HTTP URL after
+  an RPC issues it. Pull-request controls are RPC, while potentially large diff
+  slices use authenticated HTTP. MCP is a provider-scoped bearer HTTP endpoint that
+  brokers to a compatible desktop host.
+</Callout>
+
+## 1. The service map: owner before UI
+
+| Service | Primary authority | Main data movement | A tempting but false shortcut |
+|---|---|---|---|
+| Terminal | server PTY manager | RPC commands; attach snapshot then live events | “The browser owns the shell.” |
+| Files | server workspace services | authenticated project RPC | “The file tree is a local checkout.” |
+| Assets | server asset access | issue URL by RPC, fetch bytes by signed HTTP | “A file URL exposes the workspace.” |
+| Preview | server metadata plus desktop Electron host | RPC/events plus desktop IPC/webview | “The server is the browser renderer.” |
+| T3 MCP preview tools | provider-session registry and MCP server | scoped bearer HTTP, then broker stream | “T3 controls every MCP server.” |
+| VCS / worktrees | server driver and filesystem | RPC snapshots/commands | “A client branch selector creates a checkout locally.” |
+| Pull requests | server host-provider service | RPC controls; HTTP diff slices | “A rendered action proves the user may write.” |
+
+<Figure number="28.1" title="Workbench capabilities cross different transport boundaries" hint="follow authority, not panel chrome" caption="Clients use authenticated environment RPC for terminal commands, workspace files, preview metadata, VCS, and most pull-request controls. Terminal state also streams. Assets and large pull-request diffs take separate HTTP paths. A provider may receive a scoped T3 MCP bearer credential whose preview requests are brokered to an available desktop automation host; Electron main owns the guest Chromium WebContents." textEquivalent="Web, desktop, and mobile clients call authenticated server workbench services. The terminal returns a snapshot and live stream. Asset RPC returns an expiring signed HTTP URL. Pull-request RPC handles controls while authenticated HTTP carries diff slices. Server preview state is metadata; desktop Electron main owns the Chromium guest. A provider can call the bearer-authenticated T3 MCP preview toolkit, which brokers work to a compatible desktop host." sources={["workbench-terminal-contract", "workbench-terminal-manager-interface", "workbench-asset-contract", "workbench-asset-issue", "workbench-preview-contract", "workbench-desktop-preview-manager", "workbench-mcp-registry", "workbench-preview-automation-broker", "workbench-vcs-contract", "workbench-pr-rpc-contract", "workbench-pr-http-contract"]}>
+  <Mermaid id="workbench-transport-boundaries" label="Workbench service owners and transports" chart={`flowchart LR
+    C[Web / desktop / mobile client] -->|authenticated RPC| S[Environment server services]
+    S -->|snapshot + live events| T[Server PTY]
+    S -->|signed URL| A[Asset HTTP route]
+    S -->|authenticated diff request| D[PR diff HTTP route]
+    S -->|preview metadata| C
+    C -. curated desktop IPC .-> E[Electron main PreviewManager]
+    E --> W[Guest Chromium WebContents]
+    P[Provider session] -->|scoped bearer HTTP| M[T3 MCP preview toolkit]
+    M --> B[Preview automation broker]
+    B -. compatible host lease .-> E`} />
+</Figure>
+
+<WorkbenchCapabilityLab id="workbench-path-matrix" />
+
+The lab's surface rows intentionally say *which edge is evidenced*, not which
+feature is “supported” in the abstract. Desktop often shares the web renderer, but
+its Electron main/preload boundary adds authority that a hosted browser does not
+receive. Conversely, mobile has its own native terminal and file paths even though
+the server protocol is shared.
+
+## 2. A terminal is a server process with a streamed screen
+
+The terminal contract names a thread and a client-chosen terminal id; it carries a
+cwd, optional worktree path, dimensions, and bounded environment overrides. The
+server manager opens/reuses a PTY session, exposes lifecycle commands (open, write,
+resize, clear, restart, close), and offers two different subscriptions:
+
+- `attachStream` begins with the selected terminal's snapshot and follows it with
+  output/lifecycle events. This is the high-fidelity path used to reconstruct a
+  visible screen.
+- metadata subscription is a cheaper stream of terminal summaries for a broader
+  shell/session view.
+
+<SourceExcerpt id="workbench-terminal-attach-order" focus={[2351, 2357, 2365, 2377, 2382, 2391]} note="Attach subscribes before reading the initial snapshot, buffers racing events, emits the snapshot first, and then releases nonduplicate live events." />
+
+Terminal history is maintained in memory, persisted with a debounce/cap, and then
+replayed on a later first open before a new process is started. That makes a
+reopened screen useful after a client disconnect; it does **not** turn terminal
+history into a durable replay of every process state or side effect. The manager's
+finalizer kills its sessions, and thread deletion performs best-effort terminal and
+provider cleanup. Treat a terminal as a live server resource with an inspectable
+text history, not as a durable orchestration event stream.
+
+<EvidenceClaim kind="verified" title="Terminal history survives a client reconnect, not arbitrary process state" refs={["workbench-terminal-history-persistence", "workbench-terminal-history-reopen", "workbench-terminal-cleanup"]}>
+  The manager caps and persists screen history, reloads it before starting a new
+  PTY, and kills live sessions during finalization. Thread deletion asks the
+  cleanup reactor to close the thread's terminals and delete their history.
+</EvidenceClaim>
+
+Web renders that stream through its Ghostty-based surface. Mobile drives the same
+open/attach/write/resize/close protocol but renders through its native terminal
+module; it also explicitly reopens a stale, ended subscription only when the panel
+is shown. Desktop uses the web renderer path for the terminal panel. Those are
+rendering differences around one server-owned PTY boundary.
+
+## 3. Files and assets are deliberately different paths
+
+Workspace files use authenticated project operations: list/search entries, read a
+file, and write a file. The web file browser, preview, and editor are therefore
+views of an environment's workspace service; they are not a sync engine that copies
+the project into the client. Mobile has a tree/file-preview path and obtains a
+workspace-file asset URL using the same thread/environment address.
+
+An asset request is narrower. Its resource union names a workspace file in a
+thread, an attachment, or a project favicon. The server resolves the workspace
+context, normalizes the root, rejects paths outside that root, restricts previewable
+workspace resource types, resolves real paths, and emits an expiring signed URL.
+On retrieval it verifies the signature and expiry again; workspace claims also
+enforce exact-name or constrained relative-path rules, extension allow-lists, and
+canonical containment.
+
+<Callout title="A signed asset URL is a capability with a small surface" tone="warning">
+  The default asset token lifetime is one hour at this revision. A URL proves only
+  that the server issued claims for that resource/path and time window. It is not a
+  generic bearer credential for project search, terminal control, or a parent
+  directory listing. Clients refresh asset URLs through shared asset state instead
+  of treating them as permanent file identifiers.
+</Callout>
+
+<SourceExcerpt id="workbench-asset-token-verification" focus={[410, 422, 430, 443, 446]} note="Issuance signs narrow claims into a relative URL. Retrieval independently verifies the signature and expiry before resolving the claimed resource." />
+
+This split also explains why “file preview” has more than one meaning. Source text
+can arrive by a project read operation; an image, browser document, or nested asset
+can arrive through a signed HTTP path; and the interactive application preview in
+the next section is neither of those things.
+
+## 4. Preview state streams; Chromium authority stays on desktop
+
+The server `PreviewManager` holds small per-thread/tab snapshots: URL/navigation
+state, history affordances, viewport setting, timestamps, a server epoch, and a
+monotonic revision. It serializes state mutation and publishes ordered lightweight
+events, so reconnecting clients can list metadata and converge on a tab's recorded
+state. The manager's `refresh` operation only confirms that a session exists; the
+actual reload is performed by the desktop bridge and later reported back.
+
+The actual in-app browser is intentionally desktop-only. The Electron preload
+exposes a curated preview IPC API for tab creation, navigation, zoom, screenshot,
+recording, element picking, and automation actions. The web route rejects the
+preview keybinding outside a supported desktop runtime with a “Preview is
+desktop-only” message. Thus the server can coordinate preview metadata across
+subscribers, but it cannot make a plain web client or phone into a Chromium webview
+host.
+
+This is a useful two-layer model:
+
+1. **Server coordination:** tab identity, state/revision, and typed preview RPC.
+2. **Desktop enactment:** the renderer requests actions through curated preload
+   IPC; Electron main's preview manager validates and owns the guest Chromium
+   `WebContents`, then reports navigation, loading, and failures over the bridge.
+
+That division prevents a remote client from assuming it can inspect a page merely
+because a server has a preview record. A record may exist while no compatible
+desktop host is connected.
+
+<EvidenceClaim kind="verified" title="A preview record and a browser host are separate capabilities" refs={["workbench-preview-contract", "workbench-preview-manager", "workbench-preview-web-gate", "workbench-desktop-preview-preload", "workbench-desktop-preview-ipc", "workbench-desktop-preview-manager"]}>
+  The server's revisioned snapshot can exist without a desktop browser host.
+  Renderer code receives only the curated IPC surface; Electron main validates
+  the guest webview before the desktop preview manager adopts it.
+</EvidenceClaim>
+
+## 5. T3's MCP service gives a provider a scoped preview toolkit
+
+T3 can attach its own `t3-code` MCP server to a provider session when the agent
+browser-access setting permits it. This is not the same as discovering or managing
+every external MCP server configured by Codex, Claude, Cursor, Grok, or OpenCode.
+It is a narrowly scoped T3 endpoint for preview operations.
+
+At provider-session preparation, the server either revokes/clears prior MCP state
+when access is disabled or issues a fresh random bearer credential. Its scope is
+bound to the environment, thread, provider instance, and a registry-generated MCP
+session id—the latter is not an adapter-native Codex, Claude, Cursor, Grok, or
+OpenCode session identity. The registry stores a hash, not the raw token, and only
+advertises the `preview` capability. The `/mcp` route sits outside ordinary
+environment auth, so it requires that provider-scoped bearer credential. Registry
+liveness is refreshed by both MCP traffic and active provider turns; stop/revoke
+paths remove credentials eagerly, while abandoned records age out after the
+liveness window.
+
+<SourceExcerpt id="workbench-mcp-credential-issue" focus={[120, 123, 125, 128, 137, 145, 157]} note="The registry generates both the bearer token and its own MCP session id, hashes the token, and binds the resulting preview-only scope to environment, thread, and provider instance." />
+
+All five adapter paths can consume the T3-owned MCP configuration, but their native
+injection mechanisms differ: Codex uses app-server arguments plus a bearer-token
+environment variable; Claude supplies an HTTP MCP server; Cursor and Grok pass ACP
+MCP server definitions; OpenCode registers the remote server only when T3 owns the
+local OpenCode server (`!server.external`). This is adapter integration for one T3
+toolkit, not shared management of each harness's external MCP inventory.
+
+The MCP server authenticates the request, provides the resulting invocation scope
+to preview toolkit handlers, and sends automation through `PreviewAutomationBroker`.
+The broker selects a compatible desktop host in the same environment, keeps a
+provider-session-to-host lease while the connection remains live, and returns an
+unavailable error when no suitable host can perform an operation. It does not
+silently transfer an active browser automation session to another desktop because a
+credential timer expired.
+
+<EvidenceClaim kind="verified" title="The MCP credential authorizes a scoped broker request, not a browser by itself" refs={["workbench-mcp-provider-preparation", "workbench-mcp-session-start", "workbench-mcp-registry", "workbench-mcp-http-auth", "workbench-mcp-http-toolkit", "workbench-mcp-codex-injection", "workbench-mcp-claude-injection", "workbench-mcp-cursor-injection", "workbench-mcp-grok-injection", "workbench-mcp-opencode-injection", "workbench-preview-automation-broker"]}>
+  Authentication yields an invocation scope. The broker still needs a compatible
+  desktop host in the same environment and keeps a live provider-session assignment
+  sticky so a multi-step browser interaction does not silently jump between hosts.
+</EvidenceClaim>
+
+<Callout title="MCP inventory is an adapter boundary, not a universal registry" tone="info">
+  Provider runtime observations include MCP status/OAuth event types, and adapters
+  can receive their own native MCP configuration. This chapter establishes only the
+  T3-owned, provider-session-scoped preview toolkit. It does not infer a cross-
+  provider control plane for arbitrary third-party MCP servers.
+</Callout>
+
+## 6. VCS remains an environment service; worktrees remain a lifecycle saga
+
+The VCS contract exposes a driver kind and capability flags such as worktree,
+bookmark, atomic-snapshot, and default-push support. Client views query or command
+the server driver against the selected workspace; they do not obtain raw local Git
+access merely by rendering a branch, diff, or worktree picker.
+
+<EvidenceClaim kind="verified" title="VCS capability is queried through an environment-owned driver" refs={["workbench-vcs-contract", "workbench-git-worktree-contract"]}>
+  The public contract advertises driver capabilities and sends cwd-scoped worktree
+  and ref operations to the selected environment. It does not hand a browser raw
+  access to a local Git process.
+</EvidenceClaim>
+
+Two earlier boundaries matter here:
+
+- [Chapter 22](../worktree-topology/) traces the start-turn worktree
+  saga, including its server filesystem effects and failure seam.
+- [Chapter 27](../checkpoints-revert/) traces hidden checkpoint refs,
+  comparison modes, and the destructive restore/revert path.
+
+The workbench is where those results become visible: a terminal's cwd can be the
+thread worktree, a file panel reads it, and review/VCS panels query its Git state.
+That co-location is not a transaction. A terminal command, a Git operation, and a
+provider file edit still have their own ordering and error channels.
+
+## 7. Pull requests add host authorization and a second transport lane
+
+For each eligible project with a repository identity and supported host provider,
+the pull-request service builds a repository target. Projects without the required
+identity/provider/repository are skipped. It deduplicates worktrees of one repository
+for listing purposes, but retains alternate roots for host-viewer lookup so one
+unreadable checkout does not make a whole host look signed out. Host support and
+account identity are therefore server-side facts, not client guesses.
+
+For a write, the service checks two distinct gates in order:
+
+1. **Host/provider capability:** does the selected provider support this action,
+   merge strategy, update strategy, comment/review feature, or other requested
+   operation?
+2. **Fresh viewer permission:** does the currently signed-in account have the
+   necessary host-reported right now?
+
+Only then does it call the host provider. The server deliberately does not try to
+invent permissions it cannot query, such as whether a person may edit their own
+already-posted text; that decision stays with the host. Successful mutations bump
+server-side invalidation epochs so subsequent list/detail reads refresh rather than
+pretend cached rows are authoritative.
+
+<SourceExcerpt id="workbench-pr-write-gates" focus={[1300, 1306, 1320, 1335, 1347, 1357]} note="A PR action first passes provider capability and strategy checks, then fetches current viewer permissions before invoking the host provider." />
+
+Most PR controls use typed RPC. Diff content is exceptional: large, compressible
+diff slices travel through an authenticated HTTP endpoint, with a host-opaque cursor
+and truncation/next-cursor fields. The web route checks each connected environment's
+advertised pull-request capability and selects a capable source. Desktop inherits
+that web route. This pinned mobile source audit found terminal, file, and VCS paths
+(including a control that can open an existing PR externally), but no corresponding
+in-app pull-request list/detail route; that observation is not a promise about a
+future mobile release.
+
+<EvidenceClaim kind="verified" title="Pull-request writes and large reads take deliberate server paths" refs={["workbench-pr-project-resolution", "workbench-pr-write-gates", "workbench-pr-invalidation", "workbench-pr-rpc-contract", "workbench-pr-http-contract", "workbench-pr-web-capability", "workbench-mobile-external-pr"]}>
+  Server-side capability and fresh viewer checks guard writes. Successful mutations
+  invalidate shared epochs. Large diff slices use authenticated HTTP, while the web
+  route selects only environments that advertised pull-request capability.
+</EvidenceClaim>
+
+## What a surface can honestly claim
+
+| Surface | Strongly evidenced workbench roles | Important non-equivalence |
+|---|---|---|
+| Web | terminal renderer, files/editor, signed assets, VCS views, capability-gated PR route | cannot host the in-app Chromium preview |
+| Desktop | web roles plus Electron preview/webview and preview automation host | the web renderer alone does not acquire Electron IPC authority |
+| Mobile | native terminal rendering, file tree/preview, signed workspace assets, server-backed VCS state/actions | no matching desktop-style preview host or in-app PR list/detail route was found in this audit |
+| Provider session | provider harness work plus optional T3-scoped MCP preview toolkit | no generic ownership of client filesystem, terminal, or arbitrary MCP inventory |
+
+The durable lesson is to locate authority before adding an arrow: **environment
+server** for resources and host integrations, **desktop** for browser enactment,
+**provider adapter/session** for harness-native behavior, and **client** for the
+interactive view of a selected environment.
+
+<SourceList ids={[
+  "workbench-terminal-contract",
+  "workbench-terminal-manager-interface",
+  "workbench-terminal-attach-order",
+  "workbench-terminal-history-persistence",
+  "workbench-terminal-history-reopen",
+  "workbench-terminal-cleanup",
+  "workbench-terminal-web",
+  "workbench-terminal-mobile",
+  "workbench-project-file-rpc-contract",
+  "workbench-project-file-server",
+  "workbench-project-file-client",
+  "workbench-mobile-files",
+  "workbench-asset-contract",
+  "workbench-asset-claims",
+  "workbench-asset-containment",
+  "workbench-asset-issue",
+  "workbench-asset-token-verification",
+  "workbench-asset-resolve",
+  "workbench-asset-client",
+  "workbench-mobile-workspace-asset",
+  "workbench-preview-contract",
+  "workbench-preview-manager",
+  "workbench-preview-web-gate",
+  "workbench-desktop-preview-preload",
+  "workbench-desktop-preview-ipc",
+  "workbench-desktop-preview-manager",
+  "workbench-preview-automation-contract",
+  "workbench-preview-automation-broker",
+  "workbench-mcp-provider-preparation",
+  "workbench-mcp-session-start",
+  "workbench-mcp-registry",
+  "workbench-mcp-credential-issue",
+  "workbench-mcp-http-auth",
+  "workbench-mcp-http-toolkit",
+  "workbench-mcp-codex-injection",
+  "workbench-mcp-claude-injection",
+  "workbench-mcp-cursor-injection",
+  "workbench-mcp-grok-injection",
+  "workbench-mcp-opencode-injection",
+  "workbench-vcs-contract",
+  "workbench-git-worktree-contract",
+  "workbench-pr-rpc-contract",
+  "workbench-pr-http-contract",
+  "workbench-pr-project-resolution",
+  "workbench-pr-write-gates",
+  "workbench-pr-invalidation",
+  "workbench-pr-web-capability",
+  "workbench-mobile-external-pr",
+  "workbench-mobile-vcs-state",
+]} />

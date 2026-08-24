@@ -1,0 +1,229 @@
+---
+slug: worktree-topology
+order: 220
+number: "22"
+kind: chapter
+part: Part V · The work lifecycle
+partOrder: 5
+title: Current checkout versus isolated worktrees
+shortTitle: Worktree topology
+summary: "A new thread may operate in the project's current checkout or, for a Git repository, receive a newly created branch in a linked Git worktree; both routes retain Git as the authority for branch occupancy, filesystem state, and cleanup."
+status: source-checked
+gates: [sources, interaction]
+objectives:
+  - Distinguish current-checkout execution from an isolated linked Git worktree.
+  - Trace branch/base selection, optional origin refresh, worktree creation, setup, and thread metadata update.
+  - "Identify Git-owned invariants: a branch's worktree occupancy, dirty-state removal failure, and non-Git fallback."
+  - Read bootstrap failure recovery as a bounded orchestration cleanup, not a transaction that reverses Git.
+keywords: [Git, worktree, branch, base branch, origin, setup scripts, cleanup, bootstrap, topology, recovery]
+sourceAreas: [packages/contracts/src/git.ts, packages/contracts/src/vcs.ts, apps/server/src/vcs/GitVcsDriverCore.ts, apps/server/src/ws.ts, apps/server/src/git/GitWorkflowService.ts, apps/mobile/src/lib/projectThreadStartTurn.ts, apps/server/src/checkpointing/Utils.ts, apps/server/src/orchestration/Layers/ThreadDeletionReactor.ts, apps/web/src/hooks/useThreadActions.ts]
+visuals: [worktree topology lab, current checkout versus linked worktree]
+updatedAt: 2026-08-24
+---
+
+import Callout from "../../components/Callout.astro";
+import EvidenceClaim from "../../components/EvidenceClaim.astro";
+import Figure from "../../components/Figure.astro";
+import Mermaid from "../../components/Mermaid.astro";
+import SourceExcerpt from "../../components/SourceExcerpt.astro";
+import SourceList from "../../components/SourceList.astro";
+import WorktreeTopologyLab from "../../components/WorktreeTopologyLab.astro";
+
+A workspace choice is a choice about **where this thread may change files and
+checkout state**. `worktree` means a new linked Git checkout when the project is a
+Git repository. `local` means **do not create a new worktree**. It usually uses the
+project checkout, but it is not a promise that the thread has no stored workspace
+path: the mobile bootstrap can retain a selected existing `worktreePath` for a
+local request. Later runtime workspace resolution prefers that stored thread path
+and only then falls back to the project's root. It is not a generic container mode,
+and the current web send path deliberately downgrades the request to `local` for a
+non-Git project.
+
+<SourceExcerpt id="worktree-non-git-fallback" focus={[322, 323, 325, 326]} note="The web send path preserves the requested mode only for a Git repository." />
+
+## One repository can expose several checkout paths
+
+Git's ref list is also the occupancy map T3 presents to the user. The driver asks
+Git for `worktree list --porcelain -z`, parses branch/path pairs, normalizes them,
+filters paths that no longer exist, and attaches the surviving linked path to local
+branch refs. A branch marked with a `worktreePath` is therefore not an abstract
+availability hint: another checkout has that branch checked out.
+
+<SourceExcerpt id="worktree-ref-occupancy" focus={[2463, 2467, 2494, 2497, 2523, 2527, 2530, 2539, 2550, 2558]} note="Local branch refs are decorated from Git's porcelain worktree listing after path existence checks." />
+
+<Callout title="Git remains the invariant owner" tone="warning">
+  T3 does not make one branch safely checkout-able in arbitrary simultaneous
+  directories. It asks Git to create or remove worktrees and reports the result.
+  Branch occupancy, uncommitted changes, hook failures, and path state remain
+  Git-level concerns that can reject an operation.
+</Callout>
+
+The RPC contract exposes the relevant choices directly: creation accepts a base
+`refName`, optional new branch name and base reference metadata, plus an optional
+explicit path; removal accepts the path and an optional `force` flag. The result
+returns a worktree path and ref name. A pull-request preparation result separately
+admits `isOnPullRequestHead: false`, documenting that an existing linked checkout
+can be intentionally retained even when it could not safely be moved to the
+requested head.
+
+<SourceExcerpt id="worktree-create-remove-contract" focus={[124, 137, 139, 141, 143, 160, 162, 164]} note="The wire contract carries worktree creation and removal inputs." />
+
+<SourceExcerpt id="worktree-result-contract" focus={[264, 273, 274, 283, 286, 288, 292]} note="The results return linked worktree data and explicitly qualify a reused PR checkout's head freshness." />
+
+## Current checkout and new worktree diverge at bootstrap
+
+For an ordinary local request, no `git worktree add` call appears in the bootstrap
+branch. Its execution cwd is the thread's already-stored `worktreePath`, if one is
+present, otherwise the project root. A selected new-worktree branch instead follows
+this ordered path:
+
+1. Start with the selected base branch.
+2. If “start from origin” is requested *and* an `origin` remote exists, fetch
+   origin and resolve the selected base to a remote-tracking commit.
+3. Ask the Git workflow to create a worktree from that base, with the requested
+   new branch name and the selected base as merge-base metadata.
+4. Save the returned branch/path onto the thread, refresh Git status at that
+   linked path, run any opted-in setup script there, then start the turn.
+
+<SourceExcerpt id="worktree-bootstrap-path" focus={[979, 981, 984, 990, 995, 1000, 1002, 1005, 1009, 1011, 1017, 1020, 1022]} note="The bootstrap conditionally refreshes origin, creates the linked checkout, records it on the thread, then starts setup and the turn." />
+
+The distinction between a request and a cwd matters on mobile. Its builder sets a
+new-worktree request's initial path to `null`, but leaves the supplied path intact
+for a local request. The runtime resolver then gives any non-null thread path
+priority over the project root. Thus “local” is best read as “no **new** worktree
+creation,” not as “this thread can never point at an existing linked checkout.”
+
+The important qualification is step 2: the source checks for `origin` first. A
+stored preference to start from origin does not make an origin-less repository fail;
+the path stays on the selected local base. That is a practical fallback, not an
+assertion that the local base equals a server's latest commit.
+
+<SourceExcerpt id="worktree-origin-base-test" focus={[1505, 1527, 1530, 1541, 1546, 1553, 1561, 1563]} note="The driver test demonstrates an origin fetch, remote commit resolution, a worktree created at that commit, and merge-base metadata." />
+
+At the Git boundary, a new branch uses `git worktree add -b <new> <path> <base>`;
+an existing ref omits `-b`. Absent an explicit path, the driver creates a path below
+its configured worktrees directory using repository name and a slash-sanitized
+branch name. When both a new branch and base-ref metadata are supplied, it sets
+`branch.<new>.gh-merge-base` using the branch portion of a remote ref when it can
+parse one.
+
+<SourceExcerpt id="worktree-create-command" focus={[2763, 2766, 2768, 2770, 2774, 2779, 2785, 2786, 2793]} note="Creation is an actual Git worktree add command with a bounded timeout and optional base-ref configuration." />
+
+## Setup sees a worktree cwd and two path labels
+
+After creation, the setup runner finds the project, chooses its first
+`runOnWorktreeCreate` script, opens a terminal at the linked worktree path, and
+writes the command. It supplies `T3CODE_PROJECT_ROOT` for the original project root
+and `T3CODE_WORKTREE_PATH` for the linked checkout. A missing selected script returns
+`no-script`; terminal failures become structured runner errors. In the bootstrap
+path, a setup launch failure records a `setup-script.failed` activity and warning;
+a successful launch records requested/started activities. These outcomes are
+observability around the selected workspace, rather than a hidden switch back to a
+different checkout.
+
+<SourceExcerpt id="worktree-setup-runner" focus={[123, 127, 134, 135, 136, 141, 146, 159, 176, 181]} note="The setup terminal runs at the linked checkout and receives explicit project-root/worktree path labels." />
+
+<SourceExcerpt id="worktree-setup-test" focus={[93, 112, 123, 130, 137, 142, 147]} note="The test asserts deterministic setup terminal creation, cwd, both environment labels, and command write." />
+
+<Figure number="22.1" title="Current checkout and isolated worktree are different topologies" hint="only one branch creates a linked path" caption="A local request creates no linked Git checkout; its runtime cwd resolves from a stored thread path first, then the project root. Worktree mode first confirms Git, optionally refreshes origin, creates a new branch in a linked path, records the returned path on the thread, then runs setup there. Both modes ultimately dispatch the turn, but no arrow claims that Git creation and durable thread updates are one transaction." textEquivalent="The local route connects a local request to no-new-worktree creation, then resolves the existing stored thread path if present or the project root before a turn starts. The worktree route connects the project root through an optional origin fetch and remote base resolution, then Git worktree creation, then a thread worktree-path update and a setup terminal at the linked checkout, then the turn. A failure arrow from the bootstrap goes to thread cleanup only; Git remains the authority for any linked directory it created." sources={["worktree-non-git-fallback", "worktree-local-selected-path", "worktree-runtime-cwd-resolution", "worktree-bootstrap-path", "worktree-create-command", "worktree-setup-runner", "worktree-setup-launch-outcome", "worktree-bootstrap-failure-cleanup"]}>
+  <Mermaid id="current-checkout-versus-worktree" label="Thread workspace topology" chart={`flowchart LR
+    P[Project root checkout] --> L[local request: no new worktree]
+    L --> R[stored thread path, else project root]
+    R --> T[turn starts]
+    P --> W{worktree requested\nand Git repository?}
+    W -->|yes| O[optional origin fetch + base resolution]
+    O --> A[git worktree add\nnew branch + linked path]
+    A --> M[thread metadata: branch + worktreePath]
+    M --> S[setup terminal at linked path]
+    S --> T
+    W -->|no| L
+    A -. bootstrap failure .-> C[delete newly created thread when applicable]`} />
+</Figure>
+
+## Thread deletion and worktree cleanup are separate operations
+
+Durably deleting a thread is not itself a Git worktree removal command. The server's
+post-delete reactor attempts to stop that thread's provider session and close its
+terminal with terminal-history deletion. It does not call the Git worktree driver in
+this reactor. This is important even for a thread that has a `worktreePath`: deleting
+the conversation's durable record and cleaning an on-disk checkout have different
+owners and failure modes.
+
+The web client can add a second, explicitly confirmed cleanup step. When the deleted
+thread is the only thread linked to that path and a local API is available, it offers
+to delete the orphaned worktree too. Only after the durable thread deletion succeeds
+does it call `removeWorktree` with `force: true`. If that Git removal or the
+subsequent refresh fails, the client reports “Thread deleted, but worktree removal
+failed”; the durable thread stays deleted while the worktree can remain for manual
+inspection or later cleanup.
+
+<EvidenceClaim kind="inference" title="A thread-delete cleanup does not imply filesystem cleanup" refs={["worktree-thread-deletion-effects", "worktree-web-orphan-cleanup"]}>
+  The server deletion reactor contains provider-session and terminal-history
+  cleanup, while the web client separately asks for confirmation and invokes the
+  forced Git removal only after thread deletion. This establishes distinct
+  operations and an observable partial-failure seam; it does not claim every client
+  surface offers the same optional cleanup prompt.
+</EvidenceClaim>
+
+## Explicit worktree removal is a Git command, while bootstrap recovery is narrower
+
+The explicit removal route invokes `git worktree remove <path>` and adds `--force`
+only if requested. A driver test confirms a created linked path disappears after
+normal removal. It does not delete the branch in the shown implementation, and it
+does not turn a dirty-tree refusal into success. Treat `force` as an explicit Git
+operation, not an automatic recovery action.
+
+<SourceExcerpt id="worktree-remove-command" focus={[2982, 2985, 2986, 2989, 2990, 2993]} note="Removal delegates to Git and forwards force only when the input asked for it." />
+
+<SourceExcerpt id="worktree-create-remove-test" focus={[1377, 1388, 1395, 1397, 1399, 1401]} note="The focused driver test creates a new-ref worktree, observes its branch, removes it, and observes that its path is gone." />
+
+Bootstrap failure has a different purpose. If a turn-start bootstrap fails after it
+created its thread, the server attempts an uninterruptible `thread.delete` cleanup
+and reports whether that cleanup happened. The observed code does **not** issue a
+matching `git worktree remove` in this catch path. Therefore a failed bootstrap may
+leave Git evidence that needs an operator's inspection; claiming atomic rollback of
+both durable and filesystem changes would be false.
+
+<SourceExcerpt id="worktree-bootstrap-failure-cleanup" focus={[1025, 1027, 1031, 1033, 1038, 1041, 1046, 1048]} note="Failure recovery cleans up a bootstrap-created thread and returns a disposition; this range contains no Git worktree deletion." />
+
+<EvidenceClaim kind="inference" title="Worktree creation and thread projection form a recoverable saga, not a transaction" refs={["worktree-bootstrap-path", "worktree-bootstrap-failure-cleanup", "worktree-remove-command"]}>
+  The operation crosses Git and durable orchestration boundaries in separate calls,
+  while the failure path explicitly deletes a created thread but does not show a
+  compensating Git removal. That supports a saga-style interpretation and the need
+  for inspection/retry; it does not prove the exact filesystem outcome of every Git
+  failure timing.
+</EvidenceClaim>
+
+## Work the topology by hand
+
+Choose a route below. The only animation is the short, user-triggered transition
+between explanations; reduced-motion users receive the same state update without
+motion, and the complete ledger remains available for printing or without script.
+
+<WorktreeTopologyLab id="thread-workspace-choice" />
+
+<EvidenceClaim kind="future" title="A richer cleanup ledger could reconcile Git and thread state" refs={["worktree-create-remove-contract", "worktree-bootstrap-failure-cleanup", "worktree-ref-occupancy"]}>
+  A future workflow could persist an explicit cleanup attempt/result and reconcile
+  it against Git's worktree listing after a failed bootstrap. That capability is a
+  design proposal; it is not established by the current thread cleanup path.
+</EvidenceClaim>
+
+<SourceList ids={[
+  "worktree-non-git-fallback",
+  "worktree-ref-occupancy",
+  "worktree-create-remove-contract",
+  "worktree-result-contract",
+  "worktree-bootstrap-path",
+  "worktree-local-selected-path",
+  "worktree-runtime-cwd-resolution",
+  "worktree-origin-base-test",
+  "worktree-create-command",
+  "worktree-setup-runner",
+  "worktree-setup-test",
+  "worktree-setup-launch-outcome",
+  "worktree-remove-command",
+  "worktree-create-remove-test",
+  "worktree-bootstrap-failure-cleanup",
+  "worktree-thread-deletion-effects",
+  "worktree-web-orphan-cleanup"
+]} />
