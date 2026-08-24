@@ -1,0 +1,264 @@
+---
+slug: release-updates-observability
+order: 380
+number: "38"
+kind: chapter
+part: "Part VII · Reach and ship"
+partOrder: 7
+title: "Release, update, and observability: three safety boundaries"
+shortTitle: Release operations
+summary: "T3 Code's release graph publishes an exact CLI runtime before clients can require it. Desktop, service, and mobile each cross an update boundary differently, while analytics and diagnostics distinguish opt-out product telemetry from local traces, optional OTLP export, authenticated browser ingestion, and demand-driven native resource history."
+status: source-checked
+gates: [sources, interaction]
+objectives:
+  - Follow stable and nightly release-channel resolution through the exact-version publication invariant.
+  - Compare the desktop, boot-service, and Expo update boundaries without treating them as one protocol.
+  - Locate the point at which a server update becomes reversible, committed, and ready for client correlation.
+  - Separate anonymous product analytics, local traces, optional remote exporters, authenticated browser traces, and ephemeral resource diagnostics.
+keywords: [release, nightly, npm, GitHub Releases, exact version, electron-updater, service launcher, SQLite snapshot, Expo Updates, fingerprint, PostHog, OTLP, resource telemetry, privacy]
+sourceAreas: [.github/workflows/release.yml, docs/operations/release.md, docs/internals/server-updates.md, apps/desktop/src/updates, apps/server/src/cloud, apps/server/src/telemetry, apps/server/src/observability, apps/server/src/resourceTelemetry, apps/mobile/src/features/updates]
+visuals: [release dependency graph, updater boundary comparison, release operations lab]
+updatedAt: 2026-08-24
+---
+
+import Callout from "../../components/Callout.astro";
+import EvidenceClaim from "../../components/EvidenceClaim.astro";
+import Figure from "../../components/Figure.astro";
+import Mermaid from "../../components/Mermaid.astro";
+import ReleaseOperationsLab from "../../components/ReleaseOperationsLab.astro";
+import SourceExcerpt from "../../components/SourceExcerpt.astro";
+import SourceList from "../../components/SourceList.astro";
+
+A release is not one artifact copied to three clients. It is a dependency graph
+with a particular invariant: a client can offer to update a connected server to
+its own version only after the exact `t3@<version>` runtime exists. The mechanisms
+that consume that release then have different owners and different safe points:
+Electron exits and installs an application, a boot-service launcher trials an
+immutable server runtime around a SQLite snapshot, and Expo swaps a compatible
+JavaScript bundle only after mobile persistence and lifecycle checks.
+
+The same precision matters for diagnostics. Product analytics, server traces,
+browser traces, metrics, and native resource samples are related operational
+signals, but they do not share a destination, retention model, or authorization
+boundary.
+
+<Callout title="A channel is not an update protocol" tone="warning">
+Stable versus nightly decides which release metadata and artifacts a client is
+eligible to discover. It does not decide whether a particular runtime may replace
+another one. Each updater has its own preconditions, commit point, and recovery
+story.
+</Callout>
+
+## Act I — release graph: publish the runtime before exposing the client
+
+The release workflow resolves two channels. A scheduled or explicitly nightly run
+uses the next patch version plus a UTC date and run number, publishes a GitHub
+prerelease, and uses npm's `nightly` dist-tag. A stable run requires a semver-like
+version and produces a `v<version>` tag. The nightly lane is deliberately not the
+latest stable release and has its own desktop updater channel.
+
+<SourceExcerpt id="release-channel-resolution" focus={[103, 108, 111, 116, 123, 127, 132, 136]} note="The release workflow chooses nightly from scheduled or explicitly selected runs; otherwise it validates and resolves a stable version." />
+
+The important edge is downstream of naming. Connected servers are asked to install
+the **client's exact version**, not “whatever npm currently calls latest.” The
+operations guide therefore requires `publish_cli` before `release`, and `release`
+before the hosted web deployment. This prevents a newly visible client from issuing
+an update request for a package version that cannot yet be fetched.
+
+<Figure number="38.1" title="Release availability is ordered around the exact server runtime" hint="Follow the solid arrows. A client may be discoverable only after the exact runtime it can request is published." caption="Stable and nightly first resolve a version/channel. The CLI package for that exact version publishes to npm before the GitHub release can expose desktop artifacts and updater metadata. The hosted client follows the GitHub release. Connected server self-update requests are version-pinned, so they resolve the same package—not an npm dist-tag at update time." textEquivalent="A channel resolver feeds exact CLI publication. CLI publication gates the GitHub release. The GitHub release gates hosted-web deployment and supplies desktop updater metadata. A desktop or hosted client can request a connected boot-service server to install that exact npm version. A nightly channel is separate metadata and a prerelease, not a different server update algorithm." sources={["release-channel-resolution", "release-exact-version-invariant", "release-operations-guide", "release-server-self-update"]}>
+  <Mermaid id="release-exact-version-dag" label="Release dependency graph and exact-version server update invariant" chart={`flowchart LR
+    R[Resolve version + channel]
+    N[Publish t3@exact version\nto npm]
+    G[GitHub Release\ndesktop artifacts + channel metadata]
+    W[Hosted web deployment]
+    C[Desktop / hosted client\nversion V]
+    S[Boot-service server\ninstall t3@V]
+    R --> N --> G --> W
+    G --> C
+    W --> C
+    C -->|request exact V| S
+    N -->|"t3@V must already exist"| S
+    R -. nightly selects prerelease\nnightly updater metadata .-> G`} />
+</Figure>
+
+<SourceExcerpt id="release-exact-version-invariant" focus={[174, 176, 179, 182, 184, 186, 187]} note="The release operations guide names the exact-version invariant and the CLI → release → web dependency order." />
+
+This is a release-time guarantee, not a claim that every machine is immediately
+updated. A disconnected server can remain on an earlier immutable runtime; a
+desktop client can decline to download; a mobile binary may be incompatible with an
+OTA bundle. The graph makes versions available in a safe order. The updater on each
+machine chooses whether and when to cross its own boundary.
+
+<EvidenceClaim kind="verified" title="The dist-tag is not the connected-server target" refs={["release-exact-version-invariant", "release-server-self-update"]}>
+  The inspected release guide explicitly calls for `t3@&lt;version&gt;`, and the service
+  update implementation rejects a target that is not an exact version. Describing
+  connected-server update as a normal `npm update` would erase the source's most
+  important compatibility control.
+</EvidenceClaim>
+
+## Act II — three update architectures cross three different boundaries
+
+### 1. Desktop: check automatically, but download and install by user action
+
+The packaged desktop app configures an Electron updater for the selected channel.
+It may check on startup and on an interval, but it does not silently download or
+install. A check moves update state toward `available`; a user action starts the
+download; a later user action starts quit-and-install. A single active action
+reservation prevents overlapping check, download, channel-change, and install work.
+
+<SourceExcerpt id="desktop-update-check-download" focus={[336, 345, 350, 365, 392, 400, 405, 423, 435, 443]} note="Desktop checks are guarded against incompatible state; downloading is accepted only from an available update and owns a single update action reservation." />
+
+Install is a process-lifecycle boundary, not merely a file replacement. Before
+`quitAndInstall`, the app stops every backend in the pool—including parallel WSL
+and Windows instances—with a grace budget, destroys windows, then yields control to
+the updater. That avoids relying on an application shutdown cascade after the OS
+has begun quitting it.
+
+<SourceExcerpt id="desktop-update-install-boundary" focus={[465, 472, 482, 491, 499, 505, 510]} note="The desktop installer first marks the application as quitting, stops all pool instances, destroys windows, and then calls the Electron updater." />
+
+### 2. Boot-service server: stage, preflight, trial, then have the launcher commit
+
+The remote server path is intentionally stricter because it can migrate the state
+that serves a remote client. It only exists for a server running under the supported
+background-service launcher; a desktop-managed server tells the user to update its
+desktop app, and an unsupported process shape gives manual-install guidance.
+
+The active child first downloads an immutable exact-version runtime into staging and
+runs its `__service-preflight`. The preflight result must name the requested version
+and report readiness before the runtime is placed into its version directory. Only
+then does the child ask the stable launcher to activate the prepared version.
+
+<SourceExcerpt id="server-update-exact-preflight" focus={[64, 70, 77, 85, 94, 100, 109, 120, 129, 140, 149]} note="The service update path rejects non-exact targets, prevents concurrent updates, stages the runtime, and requires a version-matching preflight result before handoff." />
+
+The stable launcher, rather than the child it is about to stop, owns durable active
+selection. It writes a pending trial, stops the old server after response-flush
+grace, snapshots SQLite database/WAL/shared-memory files, starts the target under an
+activation gate, and waits for `prepared`. Only the launcher commits the new active
+version and removes the snapshot. A failed or timed-out trial restores the snapshot
+and restarts the old version.
+
+```text
+old child:  stage V → preflight V → request-update(V)
+launcher:   record pending → stop old → snapshot SQLite → start V as trial
+trial V:    migrate + bind + prepare roots → report prepared
+launcher:   commit V → discard snapshot → let V open activation gate
+```
+
+<SourceExcerpt id="server-update-launcher-handoff" focus={[171, 179, 188, 191]} note="After staging succeeds, the active server reports progress and hands a target version/database path to the service launcher; the launcher returns a correlation update id." />
+
+The snapshot is a bounded rollback tool, not a universal undo. It covers the
+database, WAL, and shared-memory files around the trial; attachments and other
+state-directory files are outside that boundary. A launcher protocol that is too
+old blocks a target that needs this safety path. After a commit, ordinary service
+manager restart policy applies; there is no promise of a second automatic rollback
+for every later runtime failure.
+
+### 3. Mobile: OTA eligibility is native compatibility plus a safe teardown moment
+
+Mobile's Expo Updates configuration uses a fingerprint runtime version. Inference:
+because the fingerprint is derived from native-project inputs, it is a compatibility
+gate between an OTA JavaScript bundle and the installed native binary—not a release
+label intended to synchronize mobile with npm.
+
+<SourceExcerpt id="mobile-ota-fingerprint-policy" focus={[159, 162, 165, 169]} note="The mobile app configuration sets Expo runtimeVersion to the fingerprint policy and declares OTA update settings." />
+
+After an eligible bundle downloads, automatic application is deferred to a safe
+background transition. The update coordinator flushes draft and outbox persistence,
+then checks that the app is still backgrounded and is not behind an app-initiated
+foreground handoff such as a picker. A failed flush or unsafe lifecycle state keeps
+the current runtime alive and rearms a later transition. Explicit user-requested
+update application is a separate immediate path.
+
+<EvidenceClaim kind="verified" title="Mobile prioritizes durable user intent over automatic OTA eagerness" refs={["mobile-ota-fingerprint-policy", "release-mobile-update-runtime"]}>
+  The mobile update environment requires pending writes to flush and requires a
+  safe background state before a deferred reload. This does not prove every Expo
+  deployment has an update available; it describes the repository's client-side
+  decision boundary when one is downloaded.
+</EvidenceClaim>
+
+<Figure number="38.2" title="The updater owner changes with the artifact being replaced" hint="Use the three columns as different state machines, not steps of one universal updater." caption="Desktop keeps the user in charge of download and installation, then stops pooled children before application replacement. A boot-service server has a stable launcher trial an exact immutable runtime around a SQLite snapshot before commit. Mobile accepts only fingerprint-compatible OTA bundles and waits for persistence plus a safe lifecycle window before reloading JavaScript." textEquivalent="Desktop: check, user download, user install, stop backend pool, quit/install. Server: exact runtime stage, preflight, launcher pending state, SQLite snapshot, target trial, prepared signal, commit or rollback. Mobile: fingerprint-compatible OTA check/download, flush drafts/outbox, confirm safe true background, reload or defer." sources={["desktop-update-check-download", "desktop-update-install-boundary", "server-update-exact-preflight", "server-update-launcher-handoff", "release-server-update-architecture", "mobile-ota-fingerprint-policy", "release-mobile-update-runtime"]}>
+  <Mermaid id="three-update-boundaries" label="Desktop, server, and mobile update boundaries" chart={`flowchart TB
+    subgraph D[Desktop application]
+      DC[Scheduled check] --> DA[Update available]
+      DA -->|user clicks| DD[Download]
+      DD -->|user clicks| DS[Stop backend pool + quit/install]
+    end
+    subgraph S[Boot-service server]
+      SS[Stage exact t3@V] --> SP[Preflight V]
+      SP --> SL[Launcher: pending + SQLite snapshot]
+      SL --> ST[Trial V reports prepared]
+      ST -->|success| SC[Commit V]
+      ST -->|failure / timeout| SR[Restore snapshot + run old V]
+    end
+    subgraph M[Expo mobile]
+      MF[Fingerprint-compatible OTA] --> MD[Download bundle]
+      MD --> MP[Flush drafts + outbox]
+      MP --> MS{Still safe background?}
+      MS -->|yes| MR[Reload JS runtime]
+      MS -->|no / flush failed| MX[Defer next transition]
+    end`} />
+</Figure>
+
+## Act III — observability and privacy are separate lanes, not one data pipe
+
+The server's anonymous PostHog analytics layer is configured on by default but can
+be disabled with `T3CODE_TELEMETRY_ENABLED`. Events remain buffered in memory and
+are sent in batches only when delivery is enabled; the payload explicitly disables
+PostHog person profiles. The service supplies platform, architecture, client type,
+and T3 Code version alongside the event properties.
+
+<SourceExcerpt id="analytics-posthog-controls" focus={[31, 34, 37, 40, 42, 44]} note="Telemetry configuration supplies default PostHog settings, an enabled switch, and bounded in-memory buffering settings." />
+
+<SourceExcerpt id="analytics-posthog-boundary" focus={[69, 75, 83, 88, 95, 101, 108]} note="Batch delivery exits when telemetry is disabled or no identifier is available, and marks the PostHog person profile as disabled." />
+
+Identity selection is an ordered, hashed ladder: a Codex account id if readable,
+else a Claude user id, else an installation-scoped anonymous UUID in the T3 home
+directory. The code hashes the chosen value with its source namespace before
+returning it. That reduces direct identifier exposure to the analytics service; it
+does **not** mean all event properties are automatically anonymous, so the payload
+schema remains an operational privacy boundary.
+
+<SourceExcerpt id="analytics-identity-ladder" focus={[248, 252, 258, 263, 270, 278, 286, 295, 299]} note="Identifier resolution documents and implements the Codex → Claude → persisted anonymous-id fallback, hashing the first available source." />
+
+Tracing has a different default. The server creates a bounded local file trace sink
+and applies HTTP-header redaction. When an OTLP trace URL is configured, the local
+tracer also delegates to the remote exporter; metrics, by contrast, exist only when
+an OTLP metrics URL is configured. This is a local-plus-optional-remote trace lane,
+not a claim that metrics are retained locally.
+
+<SourceExcerpt id="observability-local-remote-lanes" focus={[19, 28, 36, 41, 48, 55, 63, 71, 82]} note="The observability layer builds local file tracing with redaction and optional OTLP delegation; metrics layer creation depends on an OTLP metrics endpoint." />
+
+Browser OTLP records follow another route: the server authenticates the raw request
+at the `operate` scope, then **attempts** to decode and record it locally. A decode or
+local-collection failure is logged and recovered; it does not prevent the original
+JSON body from being forwarded when a remote trace endpoint is configured. With no
+remote URL, the route returns no content after that best-effort local attempt. The
+authentication boundary is strict, while local recording and remote forwarding are
+deliberately independent delivery lanes.
+
+<SourceExcerpt id="observability-browser-ingest" focus={[146, 150, 154, 159, 166, 171, 176, 188]} note="The browser trace proxy authenticates with the operate scope, attempts local decoding and recording without making that attempt fatal, and independently forwards the original JSON only when OTLP is configured." />
+
+Finally, native resource telemetry is diagnostics-oriented rather than an event
+archive. Its native sidecar keeps a one-hour **in-memory**, bounded ring. Periodic
+streaming is off until a diagnostics subscription is retained; explicit refresh
+still works. The model samples counters and process trees, so processes that begin
+and end between samples may not be seen. It is explicitly not syscall, eBPF, ETW,
+or endpoint-security tracing.
+
+<SourceExcerpt id="resource-telemetry-demand-history" focus={[129, 133, 137, 140, 144, 148, 152, 156, 164, 170]} note="The resource telemetry design specifies bounded in-memory native history, subscriber-driven streaming, sampleNow behavior, and counter-sampling limits." />
+
+<EvidenceClaim kind="inference" title="Operational signals have intentionally unequal persistence and egress" refs={["telemetry-analytics-service", "telemetry-server-observability", "telemetry-browser-ingest-route", "telemetry-resource-architecture"]}>
+  This is an inference from the independently configured paths: product analytics
+  can be opted out of and is batch-delivered, traces always have a local sink with
+  optional OTLP delegation, browser trace ingestion requires an environment scope,
+  and resource history is bounded in a native sidecar. Treating all four as a single
+  “telemetry upload” would overstate both retention and network behavior.
+</EvidenceClaim>
+
+<ReleaseOperationsLab id="release-update-telemetry" />
+
+The operational reading is therefore concise: **release ordering makes an exact
+runtime available; each platform crosses its own replacement boundary; diagnostics
+retain, export, and authorize different things on purpose.**
+
+<SourceList ids={["release-channel-resolution", "release-exact-version-invariant", "release-operations-guide", "release-desktop-update-service", "release-desktop-update-reducers", "release-server-update-capability", "release-server-self-update", "release-server-update-client", "release-server-update-architecture", "release-mobile-update-runtime", "analytics-posthog-controls", "analytics-posthog-boundary", "analytics-identity-ladder", "telemetry-analytics-service", "telemetry-identity-resolution", "observability-local-remote-lanes", "telemetry-server-observability", "observability-browser-ingest", "telemetry-browser-client-tracing", "telemetry-browser-ingest-route", "resource-telemetry-demand-history", "telemetry-resource-architecture", "telemetry-resource-server", "telemetry-resource-native"]} />

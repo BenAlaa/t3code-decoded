@@ -1,0 +1,239 @@
+---
+slug: access-transports
+order: 340
+number: "34"
+kind: chapter
+part: "Part VII · Reach and ship"
+partOrder: 7
+title: "Reachability is a route; authority is a separate proof"
+shortTitle: Access transports
+summary: "A T3 Code environment can be host-local, paired through an endpoint, provisioned through a Tailnet, or reached through the desktop SSH gateway. These paths differ in how they launch and expose a server, but every usable route still has to establish an endpoint, enroll a client, and preserve the server's authority boundary."
+status: source-checked
+gates: [sources, interaction, links]
+objectives:
+  - Separate launch transport from the HTTP/WebSocket access route a client ultimately uses.
+  - Distinguish a primary target from a paired bearer registration, including the bind and enrollment boundaries.
+  - Explain why Tailscale provisions advertised endpoints rather than creating a new connection-target kind.
+  - Follow the desktop SSH gateway from remote server readiness to a local forwarded endpoint.
+keywords: [remote access, primary, bearer, pairing, Tailscale, Tailnet, SSH, endpoint, exposure, trust boundary]
+sourceAreas: [apps/server/src/auth, packages/client-runtime/src/connection, apps/desktop/src/backend, apps/desktop/src/ssh, packages/tailscale/src, packages/ssh/src]
+visuals: [access transport route map, interactive access transport lab]
+updatedAt: 2026-08-24
+---
+
+import AccessTransportLab from "../../components/AccessTransportLab.astro";
+import Callout from "../../components/Callout.astro";
+import EvidenceClaim from "../../components/EvidenceClaim.astro";
+import Figure from "../../components/Figure.astro";
+import Mermaid from "../../components/Mermaid.astro";
+import SourceList from "../../components/SourceList.astro";
+
+Remote access is easiest to misunderstand when “transport” is used for every
+arrow in the picture. This chapter uses two narrower terms:
+
+- **Launch transport** is how an environment server comes into existence or is
+  found: a desktop child, an already-running process, or desktop-owned SSH work
+  that starts or reuses a remote process.
+- **Access transport** is the usable HTTP/WebSocket route after that: loopback,
+  LAN, a selected HTTPS endpoint, or a local SSH forward.
+
+Neither word is authorization. A route merely lets a client reach an environment
+that can evaluate its credential and scopes. The durable server, filesystem,
+provider processes, and work state stay on the environment side of that boundary.
+For credential exchange, ticketing, and per-method scopes, see [Chapter 8](../auth-pairing/); for the shared resolver, supervisor, and RPC
+session after a route is prepared, see [Chapter 29](../shared-client-runtime/).
+
+<Callout title="A Tailnet is not a fifth target kind" tone="warning">
+  Tailscale can make one or more endpoints available—a Tailnet IP or a MagicDNS
+  HTTPS endpoint—but the client target union remains Primary, Bearer, Relay, and
+  SSH. A Tailnet endpoint selected during pairing is normally reached as a
+  **Bearer** connection. Endpoint provisioning and connection identity are
+  deliberately different layers.
+</Callout>
+
+## 1. First establish a route, then prove the right to use it
+
+The client runtime's target model is compact. A **Primary** target already holds
+HTTP and WebSocket bases. **Bearer** and **SSH** targets instead retain a connection
+id and obtain the associated profile through the catalog; Relay has its own
+managed-bootstrap path. This is a model of *how a client prepares a connection*,
+not a taxonomy of every network that may carry the bytes.
+
+That distinction resolves a common false equivalence. A desktop app launching its
+own host-local backend has a launch path, but a paired phone or browser never needs
+to replay that launch. It needs an advertised endpoint and an enrollment credential.
+Conversely, a desktop SSH flow has substantial launch machinery, yet the renderer
+eventually reaches a local HTTP/WebSocket forward rather than implementing SSH
+itself.
+
+<EvidenceClaim kind="verified" title="Four client target kinds converge only after route-specific preparation" refs={["access-target-model", "access-connection-catalog", "access-connection-resolver"]}>
+  Primary carries direct bases. Bearer and SSH targets carry a connection id, while
+  the resolver switches on those four target tags before producing its common
+  prepared-connection shape. Tailscale is absent from that union because its code
+  advertises endpoints rather than representing a client target.
+</EvidenceClaim>
+
+<Figure number="34.1" title="Launch and access are separate routes into one environment boundary" hint="solid arrows are usable routes; dashed arrows provision or enroll rather than carry normal RPC traffic" caption="A host-local primary can be accessed directly on loopback. A paired client uses a LAN, HTTPS, or Tailnet endpoint to exchange an enrollment credential and later reach the server with its bearer-based access path. Desktop SSH launches or reuses a remote server and then gives the renderer a loopback forward. In every case, the environment retains the filesystem, providers, and durable work state." textEquivalent="Four routes end at one environment boundary. A host-local primary starts locally and is reached through loopback. A paired bearer client reaches an already-running server through an advertised LAN, HTTPS, or Tailnet endpoint, enrolls with a one-time credential, and later uses its registered bearer route. Tailscale appears only as an endpoint provider feeding the bearer route. Desktop-managed SSH first launches or reuses a remote server, then forwards it to loopback for the renderer. All routes terminate at the server-owned environment." sources={["access-target-model", "access-desktop-exposure", "access-pairing-grant", "access-tailscale-endpoints", "access-ssh-forward"]}>
+  <Mermaid id="access-transport-routes" label="Launch and access transport route map" chart={`flowchart LR
+    P[Desktop host-local primary] -->|launch| E[Environment server\nfiles · providers · durable state]
+    P -->|loopback HTTP / WS| E
+    L[Paired client] -->|LAN or HTTPS endpoint| E
+    L -. one-time enrollment .-> E
+    T[Tailscale endpoint provider] -. Tailnet IP or MagicDNS HTTPS .-> L
+    D[Electron main] -->|SSH launch or reuse| R[Remote server]
+    D -->|local SSH forward| S[Renderer]
+    S -->|loopback HTTP / WS| R`} />
+</Figure>
+
+## 2. Bind policy determines exposure, not entitlement
+
+Desktop exposure begins with a conservative default. `local-only` resolves to a
+`127.0.0.1` bind and has no advertised network endpoint. `network-accessible`
+resolves to `0.0.0.0` and advertises a usable non-loopback LAN IPv4 address when
+one can be found; if one cannot, desktop treats that requested network exposure as
+unavailable rather than fabricating a destination. The server's auth descriptor
+independently categorizes the configured host as loopback, desktop-managed-local,
+or remote-reachable and chooses the bootstrap methods accordingly.
+
+The important restraint is what this does **not** imply. A broad bind is a larger
+set of machines able to attempt a connection; it is not a grant of orchestration,
+terminal, or review authority. Likewise, a loopback bind is a route constraint,
+not a substitute for the desktop main/preload boundary described in
+[Chapter 32](../desktop-electron/). Bind deliberately, then make the client prove
+its entitlement at the environment.
+
+<EvidenceClaim kind="verified" title="Exposure and authentication policy are computed separately" refs={["access-desktop-exposure", "access-environment-auth-policy"]}>
+  Desktop's local-only and network-accessible modes choose different bind and
+  advertisement values. Environment auth separately derives a policy from runtime
+  mode and whether the configured host is remotely reachable, including which
+  bootstrap methods it permits.
+</EvidenceClaim>
+
+## 3. Pairing enrolls a client once; registration preserves a usable route
+
+A one-time pairing credential is deliberately an enrollment secret, not the
+long-term object the remote client repeatedly puts on the wire. The pairing store
+creates a credential with a default five-minute TTL, standard client scopes unless
+the issuer narrows them, and optional proof-key binding. It persists the record.
+Consumption checks expiration and the optional proof key, atomically consumes an
+available stored credential, and removes the active pairing link from the change
+stream. A manager issuing another pairing credential must already hold
+`access:write`; requested delegated scopes must be nonempty, distinct, and a subset
+of that manager's scopes.
+
+After that exchange, pairing onboarding builds a Bearer registration: a target with
+a stable `connectionId`, a profile containing normalized HTTP and derived WebSocket
+bases, and a bearer credential. Those values are intentionally associated, not a
+random URL plus a token pasted into unrelated settings. Later edits refuse to
+continue if the saved target, profile, or credential no longer forms that bearer
+shape.
+
+This chapter stops at the trust-boundary consequence. It does not restate the token
+exchange, browser-session, DPoP, WebSocket-ticket, or RPC-scope machinery from
+Chapter 8. The operational point here is simpler: **an endpoint makes enrollment
+possible; enrollment makes a saved access route usable; neither transfers
+environment ownership to the client.**
+
+<EvidenceClaim kind="verified" title="One-time pairing and saved bearer state have different lifetimes" refs={["access-pairing-grant", "access-pairing-delegation", "access-bearer-registration"]}>
+  The server persists and consumes a one-time credential, whereas client onboarding
+  represents the resulting remote environment as a target, a profile, and a bearer
+  credential sharing one connection id. The issuer cannot delegate scopes it does
+  not possess.
+</EvidenceClaim>
+
+## 4. Tailscale supplies endpoints; pairing and bearer access remain ordinary
+
+The desktop Tailscale add-on scans interfaces for Tailnet IPv4 addresses and
+advertises them as private-network endpoints. Separately, if it can determine a
+MagicDNS name, it can advertise a Tailscale HTTPS endpoint. That HTTPS endpoint is
+only marked available after Tailscale Serve is enabled and its probe succeeds;
+otherwise the same name is presented as requiring configuration. The distinction
+is useful: discovering a hostname is not proof that it currently forwards to the
+environment.
+
+Tailscale Serve is explicit endpoint provisioning. The wrapper configures
+`tailscale serve --bg --https=<port>` to proxy to the local backend and disables
+the corresponding mapping with `serve ... off`. Desktop keeps the enablement and
+port in its exposure state and only asks the endpoint provider to inspect Tailscale
+when network exposure or Serve is opted in. That avoids making private-network
+discovery an invisible background prerequisite for ordinary local use.
+
+Once a user selects a reachable Tailnet endpoint and pairs, the client has not
+become a “Tailscale connection.” It has a Bearer target whose profile points at a
+Tailnet address. That is why the resolver, retry policy, cache ownership, and
+session readiness remain the shared-runtime concerns of Chapter 29, regardless of
+whether the bytes cross Wi-Fi, a Tailnet, or another HTTPS route.
+
+<EvidenceClaim kind="verified" title="Tailscale has provider semantics, not target semantics" refs={["access-tailscale-endpoints", "access-tailscale-serve", "access-target-model"]}>
+  Tailscale's advertised-endpoint provider is tagged as a private-network add-on
+  and may return IP and MagicDNS HTTPS endpoints. The core client target union has
+  no Tailscale variant; its paired route is represented through the existing bearer
+  registration.
+</EvidenceClaim>
+
+## 5. SSH is a desktop gateway with a local access endpoint
+
+SSH is the exception that proves why launch transport needs its own name. The
+renderer does not spawn `ssh`, read `~/.ssh/config`, or receive an SSH password.
+Through the curated desktop boundary, Electron main delegates host discovery,
+ensure, and disconnect operations to the SSH environment manager, with desktop
+password prompts supplied at that native edge.
+
+On provisioning, the manager resolves the SSH target, starts or reuses the remote
+server, reserves a local loopback port, and launches `ssh -L` from that local port
+to the remote server's loopback port. It waits for HTTP readiness through the
+forward before returning HTTP and WebSocket bases. The onboarding layer then saves
+an SSH target/profile; when that target is prepared later, the platform gateway
+refreshes the SSH bootstrap path before remote authorization continues.
+
+The consequence is deliberately asymmetric: the desktop owns the SSH process and
+tunnel lifetime; the renderer sees a ready environment route; the remote machine
+still owns the server process, projects, files, git, terminals, and provider
+sessions. That complements Chapter 32's process map rather than turning SSH into
+another desktop-local backend pool member.
+
+<EvidenceClaim kind="verified" title="SSH provisioning turns remote launch into a loopback route for the renderer" refs={["access-desktop-ssh-gateway", "access-ssh-forward", "access-ssh-registration"]}>
+  The desktop service delegates to an SSH environment manager. The manager reserves
+  a local port, forwards it to remote loopback, waits for HTTP readiness, and
+  returns the local bases. Client onboarding stores a distinct SSH profile rather
+  than treating that tunnel as a primary or bearer target.
+</EvidenceClaim>
+
+## Work the route, not a vague idea of “remote”
+
+Use the lab to select a route and read four independent facts: how the server is
+launched or found, what endpoint carries normal client access, where authority
+narrows, and what durable registration is kept. It intentionally has no connect
+button, timer, or simulated retry loop; those are runtime concerns, not proof that
+the trust boundary is understood.
+
+<AccessTransportLab id="launch-and-access" />
+
+The resulting checklist is short:
+
+1. Is there a real endpoint that the intended client can reach under browser and
+   network constraints?
+2. Does the bind/exposure policy match the trust zone of that endpoint?
+3. Is enrollment bounded to the intended scopes, lifetime, and device proof?
+4. Does the saved target describe the route honestly—Primary, Bearer, Relay, or
+   SSH—without mistaking Tailscale or an SSH forward for a new authority model?
+
+If all four answers are sound, Chapter 29 can supervise a normal prepared
+connection. If any answer is missing, a live socket would only conceal a
+reachability or trust-boundary defect until the next device, network, or restart.
+
+<SourceList ids={[
+  "access-target-model",
+  "access-connection-catalog",
+  "access-connection-resolver",
+  "access-desktop-exposure",
+  "access-environment-auth-policy",
+  "access-pairing-grant",
+  "access-pairing-delegation",
+  "access-bearer-registration",
+  "access-tailscale-endpoints",
+  "access-tailscale-serve",
+  "access-desktop-ssh-gateway",
+  "access-ssh-forward",
+  "access-ssh-registration",
+]} />
