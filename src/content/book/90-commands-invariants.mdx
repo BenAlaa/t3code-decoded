@@ -1,0 +1,294 @@
+---
+slug: commands-invariants
+order: 90
+number: "9"
+kind: chapter
+part: Part III · Transactional domain core and post-commit delivery
+partOrder: 3
+title: Commands, invariants, and the boundary of atomicity
+shortTitle: Commands and invariants
+summary: Client commands are authenticated and normalized before a serialized, Effectful decider plans events; an existing-thread turn commits atomically, while first-turn bootstrap is a WebSocket saga with narrower compensation.
+status: source-checked
+gates: [sources, interaction]
+objectives:
+  - Distinguish client wire commands, dispatchable commands, and trusted internal commands.
+  - Locate authorization, normalization, decision, and SQL transaction boundaries.
+  - Derive the exact two-to-four-event batch for a turn on an existing thread.
+  - Contrast that atomic batch with the WebSocket-only bootstrap saga and its compensation limits.
+keywords: [commands, invariants, normalization, decider, aggregate, transaction, bootstrap, compensation]
+sourceAreas: [packages/contracts/src/orchestration.ts, apps/server/src/orchestration/Normalizer.ts, apps/server/src/orchestration/decider.ts, apps/server/src/orchestration/Layers/OrchestrationEngine.ts, apps/server/src/ws.ts, apps/server/src/orchestration/http.ts]
+visuals: [command boundary map, existing-turn event batch, bootstrap saga, failure-position explorer]
+updatedAt: 2026-08-24
+---
+
+import Callout from "../../components/Callout.astro";
+import CommandBoundaryLab from "../../components/CommandBoundaryLab.astro";
+import EvidenceClaim from "../../components/EvidenceClaim.astro";
+import Figure from "../../components/Figure.astro";
+import Mermaid from "../../components/Mermaid.astro";
+import SourceExcerpt from "../../components/SourceExcerpt.astro";
+import SourceList from "../../components/SourceList.astro";
+
+A command is a request to change orchestration state. It is not yet a fact, and it
+is not a direct provider call. The server first turns an accepted client shape into
+a dispatchable command, decides that command against its current domain model, and
+only then opens the transaction that makes the resulting facts durable.
+
+That order is the key to this part of the book:
+
+> authorize → normalize → queue → deduplicate → decide → transact → publish → react
+
+For an accepted receipt miss, crossing the first six boundaries through a successful
+transaction establishes durable intent. A receipt hit refers to intent committed
+earlier, while a rejected command establishes no accepted intent. Provider execution
+begins later.
+
+## “Command” names three different shapes
+
+The contracts deliberately separate what a client may send from what the engine may
+receive.
+
+<SourceExcerpt id="command-union-boundary" focus={[913, 931, 938, 941, 959, 966, 1041, 1051, 1053, 1054, 1055, 1057]} note="The client-facing union can carry the bootstrap form of turn start. After normalization, the dispatchable client union uses the server-ready turn shape. The engine's full union adds commands reserved for trusted server and provider paths." />
+
+<div class="table-scroll" tabindex="0" role="region" aria-label="Three orchestration command shapes">
+<table class="comparison">
+  <caption class="sr-only">Client, dispatchable, and internal orchestration command boundaries</caption>
+  <thead><tr><th>Shape</th><th>Who can construct it</th><th>What changes before the next boundary</th></tr></thead>
+  <tbody>
+    <tr><td><code>ClientOrchestrationCommand</code></td><td>authenticated HTTP or WebSocket client</td><td>timestamps, workspace paths, and attachment data still need server normalization; turn start may include bootstrap instructions</td></tr>
+    <tr><td><code>DispatchableClientOrchestrationCommand</code></td><td>server after client normalization</td><td>raw attachment data has become persisted attachment metadata; the shape is ready for the domain engine</td></tr>
+    <tr><td><code>InternalOrchestrationCommand</code></td><td>trusted server/provider reactors</td><td>assistant deltas, sessions, plan updates, activities, diff completion, and similar runtime results re-enter the same domain engine</td></tr>
+  </tbody>
+</table>
+</div>
+
+“Client” and “internal” are admission boundaries, not a complete actor history.
+Events later infer an actor class from command-id prefixes and provider metadata.
+Do not interpret the internal union as “commands that are not serialized” or
+“commands that bypass invariants”: both dispatchable client commands and trusted
+internal commands enter the engine's command union.
+
+<EvidenceClaim kind="verified" title="Client authorization happens before normalization" refs={["rpc-authorization-scopes", "ws-dispatch-handler", "orchestration-http-snapshots", "provider-runtime-ingestion"]}>
+  HTTP dispatch requires <code>orchestration:operate</code>, then normalizes its
+  payload. WebSocket RPC authorization likewise checks the method's required scope
+  before the dispatch handler normalizes the command. Internal reactor dispatch is a
+  separate trusted path; it is not made client-reachable by belonging to the engine
+  union.
+</EvidenceClaim>
+
+## The full command boundary
+
+<Figure number="9.1" title="Decision is before the SQL transaction" hint="solid arrows are synchronous; dashed arrows cross trust or delivery boundaries" caption="A client command is authorized and normalized before it joins trusted internal commands at the serialized engine queue. Receipt lookup and domain decision happen before the transaction. The transaction commits events, synchronous projections, and the accepted receipt together; in-memory folding and hot publication happen afterward." textEquivalent="An authenticated client command passes schema and scope checks, then normalization. Trusted internal commands enter through a separate boundary. Both reach one serialized command queue. The engine first checks a command receipt. A receipt hit returns its stored outcome. On a miss, an Effectful decider reads the in-memory command model and plans one or more events. Only after decision does one SQL transaction append those events, update synchronous projections, and save an accepted receipt. After commit, the engine replaces its in-memory model and publishes each event to an in-memory PubSub. The last sequence is returned only after that publication loop. Reactors consume the hot events asynchronously." sources={["command-union-boundary", "normalizer-staging-boundary", "event-engine-runtime", "orchestration-dispatch", "decider-effect-dependencies", "engine-commit-publication", "command-receipt-handling"]}>
+  <Mermaid id="command-boundary-map" label="T3 Code command boundary from client admission to post-commit reactors" chart={`flowchart LR
+    C[client command] --> A[schema + scope]
+    A --> N[normalize + stage]
+    I[trusted internal command] -.trusted path.-> Q[serialized queue]
+    N --> Q
+    Q --> R{receipt?}
+    R -->|hit| X[stored outcome]
+    R -->|miss| D[decide against read model]
+    D --> T[SQL transaction]
+    T --> E[append event batch]
+    E --> P[synchronous projections]
+    P --> K[accepted receipt]
+    K --> M[in-memory fold]
+    M --> H[hot PubSub]
+    H --> Z[async reactors]
+    H --> S[return last sequence]`} />
+</Figure>
+
+The queue is an important concurrency boundary. The implementation creates one
+unbounded command queue and drains it with one worker. Every command therefore sees
+the command read model produced by the commands before it. This is how an invariant
+check closes a race: two clients may submit concurrently, but they do not decide
+concurrently against the same stale model.
+
+<EvidenceClaim kind="verified" title="Serialization is not optimistic concurrency control" refs={["event-engine-runtime", "orchestration-dispatch", "event-store-versioning"]}>
+  The event store assigns a per-stream version when inserting, but dispatch does not
+  ask the caller for an expected version. Correctness at this boundary comes from the
+  single engine worker and its authoritative in-memory model, not from rejecting an
+  expected-version mismatch supplied by a client.
+</EvidenceClaim>
+
+## Normalization can perform irreversible work early
+
+Normalization does more than validate syntax. It replaces client timestamps with the
+server receipt time, canonicalizes project workspace roots, validates image data,
+creates attachment identifiers, creates directories, and writes attachment bytes.
+
+<SourceExcerpt id="normalizer-staging-boundary" focus={[46, 48, 49, 55, 69, 82, 85, 103, 107, 118, 125, 140, 150, 158, 172, 176, 178]} note="Attachment directories and bytes are written while constructing the normalized command. This function runs before the orchestration engine opens the event/projection/receipt transaction." />
+
+That placement has two consequences:
+
+1. An invariant rejection or later SQL failure does not automatically roll back the
+   staged attachment bytes.
+2. Every client retry normalizes before receipt lookup. With no accepted receipt it
+   can allocate new attachment identifiers before trying the transaction again; even
+   an accepted same-id retry can stage new files before the engine returns the old
+   receipt result.
+
+<Callout title="Atomic command does not mean atomic filesystem" tone="warning">
+  “Atomic” in the existing-turn path refers to the SQL event, projection, and
+  receipt writes. It does not include normalization-time directories and attachment
+  bytes. Chapter 13 maps file retention and cleanup in detail.
+</Callout>
+
+## The decider is isolated, but not a deterministic pure function
+
+The decider receives a normalized command and the current command read model. It
+does not query SQLite, write files, or call a provider. It does, however, run in
+Effect: some cases read the clock, and every planned event receives a random UUID.
+
+<EvidenceClaim kind="verified" title="Persistence-free is more precise than pure" refs={["decider-effect-dependencies", "existing-turn-decider", "engine-commit-publication"]}>
+  The decider's dependency surface is domain state plus clock and crypto services.
+  The engine invokes it before <code>sql.withTransaction</code>. If a persistence
+  failure leaves no receipt, a retry decides again and may allocate different event
+  identifiers or times even though the command id is unchanged.
+</EvidenceClaim>
+
+Within a turn start, the decider enforces four concrete rules or transitions:
+
+<div class="table-scroll" tabindex="0" role="region" aria-label="Existing thread turn invariants and transitions">
+<table class="comparison">
+  <caption class="sr-only">Invariant checks and lifecycle transitions for thread turn start</caption>
+  <thead><tr><th>Question</th><th>Decision</th><th>Why it belongs here</th></tr></thead>
+  <tbody>
+    <tr><td>Does the target thread exist?</td><td>missing thread rejects the command</td><td>the serialized model is authoritative at decision time</td></tr>
+    <tr><td>Was a proposed plan named?</td><td>the referenced plan must exist on its source thread</td><td>a structurally valid id is not proof that the plan is present</td></tr>
+    <tr><td>Does that plan cross projects?</td><td>source and target thread must belong to the same project</td><td>the decider can inspect related aggregates in one model</td></tr>
+    <tr><td>Was the target settled or snoozed?</td><td>emit lifecycle-reset events before message and turn intent</td><td>valid activity evolves state; it is not always a rejection</td></tr>
+  </tbody>
+</table>
+</div>
+
+<EvidenceClaim kind="inference" title="Do not teach archived-turn rejection from a comment alone" refs={["turn-atomic-batch", "ws-dispatch-handler"]}>
+  A WebSocket cleanup comment says archived threads reject turn starts, but the
+  pinned <code>thread.turn.start</code> case calls the general thread-presence check,
+  not the explicit “not archived” helper. The executable case shown here therefore
+  does not support that blanket invariant. Treat it as a source discrepancy to test,
+  not as a guaranteed rule.
+</EvidenceClaim>
+
+## An existing-thread turn is one two-to-four-event decision
+
+<SourceExcerpt id="turn-atomic-batch" focus={[926, 927, 932, 944, 950, 956, 963, 976, 983, 984, 1003, 1004, 1012, 1020, 1028, 1036]} note="The mandatory suffix is message-sent then turn-start-requested. A settled override adds thread.unsettled; an active snooze adds thread.unsnoozed. The result is therefore two, three, or four events in a fixed order." />
+
+For a normal turn on an existing thread, the planned batch is:
+
+1. optional `thread.unsettled`;
+2. optional `thread.unsnoozed`;
+3. mandatory `thread.message-sent`;
+4. mandatory `thread.turn-start-requested`, causally linked to the message event.
+
+The engine opens one SQL transaction only after that complete batch exists. It
+appends each event, folds it into a temporary command model, applies all synchronous
+SQLite projectors, and finally upserts one accepted receipt whose result is the last
+event's global sequence. A failure in any one of those SQL operations rolls back the
+whole batch.
+
+<EvidenceClaim kind="verified" title="Two to four events commit as one SQL unit" refs={["turn-atomic-batch", "engine-commit-publication", "command-receipt-schema"]}>
+  No observer can durably see only the user message from this command while the
+  turn-start request is absent. The optional lifecycle resets, message, turn intent,
+  their transactional projections, and the accepted receipt either commit together
+  or roll back together.
+</EvidenceClaim>
+
+<Callout title="The acknowledgement stops at durable intent" tone="info">
+  The returned sequence is the last event in this batch. It does not mean a provider
+  harness has accepted the prompt, started a process, streamed a token, or completed
+  the turn. Those are post-commit reactor and runtime-ingestion concerns.
+</Callout>
+
+## First-turn bootstrap is a WebSocket saga
+
+The first turn can ask the server to create a thread, prepare a Git worktree, run a
+setup script, and then start the turn. Those operations cannot share the
+existing-turn transaction: Git and process launch are external effects, and several
+domain subcommands each commit independently.
+
+<Figure number="9.2" title="Bootstrap crosses four commit classes" hint="Tx labels are independent command receipts, not savepoints" caption="Only WebSocket dispatch interprets the bootstrap payload as a saga. Thread creation, metadata update, and final turn start are separately receipted domain commands around Git and setup effects. A later non-interruption failure can dispatch thread.delete, but that compensation does not undo the worktree." textEquivalent="A WebSocket client sends a turn-start command with bootstrap data. After normalization, the WebSocket handler may dispatch thread.create as SQL transaction A with a server-generated command id. It can then fetch and create a Git worktree outside SQL. It dispatches thread.meta.update as SQL transaction B, refreshes Git status, and optionally launches a setup script outside SQL. Setup launch failure is recorded best effort and the saga continues. The handler strips bootstrap data and dispatches the final thread.turn.start as SQL transaction C using the outer command id. If a later non-interruption failure occurs after this saga created the thread, it dispatches thread.delete as compensation transaction D. The compensation tombstones domain state but contains no Git-worktree removal." sources={["bootstrap-saga-full", "bootstrap-command-path", "turn-atomic-batch", "engine-commit-publication"]}>
+  <Mermaid id="bootstrap-saga" label="WebSocket first-turn bootstrap saga and compensating delete" chart={`flowchart TD
+    W[WS turn.start + bootstrap] --> N[normalize]
+    N --> A[Tx A: thread.create]
+    A --> G[Git fetch + create worktree]
+    G --> B[Tx B: thread.meta.update]
+    B --> R[refresh Git status]
+    R --> U[launch setup process]
+    U --> C[Tx C: final turn.start]
+    U -.launch failure is logged; continue.-> C
+    A -.later non-interruption failure.-> D[Tx D: thread.delete]
+    G -.worktree remains.-> D
+    C --> Q[last sequence to WS client]`} />
+</Figure>
+
+The saga's real boundaries are easy to miss:
+
+- `thread.create`, `thread.meta.update`, and compensation use fresh
+  server-generated command ids; the final turn retains the client's outer id.
+- Setup launch failure is converted into best-effort activity plus a warning, then
+  the final turn is still attempted.
+- Cleanup runs only when this request successfully created the thread and the later
+  failure is not interruption-only.
+- Successful cleanup reports a `deleted` disposition, but it adds a thread tombstone;
+  it does not erase the committed history.
+
+<EvidenceClaim kind="inference" title="Bootstrap compensation does not remove Git state" refs={["bootstrap-saga-full"]}>
+  The compensation function dispatches <code>thread.delete</code>. The shown failure
+  path contains no worktree or branch removal. That is an absence-of-code inference
+  at the pinned revision, not a promise that future cleanup will remain narrow.
+</EvidenceClaim>
+
+<EvidenceClaim kind="verified" title="Bootstrap behavior is not transport-neutral" refs={["bootstrap-saga-full", "ws-dispatch-handler", "orchestration-http-snapshots"]}>
+  The HTTP endpoint accepts the same client command schema, requires operate scope,
+  normalizes, and dispatches directly to the engine. Only the WebSocket helper
+  branches on <code>thread.turn.start</code> with <code>bootstrap</code> to run the
+  create/worktree/setup saga. Sending that payload over HTTP does not execute the
+  WebSocket bootstrap choreography.
+</EvidenceClaim>
+
+<EvidenceClaim kind="verified" title="The outer bootstrap request is not end-to-end idempotent" refs={["bootstrap-saga-full", "command-receipt-handling"]}>
+  Individual engine subcommands have receipt semantics, but there is no receipt for
+  the saga as a whole. A byte-for-byte retry can attempt thread creation and Git work
+  again rather than replaying one completed outer result. Treat “same command id” as
+  an engine-transaction guarantee, not as a distributed-saga guarantee.
+</EvidenceClaim>
+
+## Explore the failure boundary
+
+The same word—“failed”—can describe a request rejected before decision, SQL rolled
+back after decision, a hard crash after commit, or a bootstrap failure after Git
+state exists. Move the boundary and compare what survives.
+
+<CommandBoundaryLab id="command-failure-positions" />
+
+The durable unit is deliberately small: an accepted engine command and its event
+batch. Everything before it can leave staging residue; everything after it can miss
+hot delivery; and the bootstrap path composes several such units with external
+effects. Chapter 10 now examines the receipt and publication windows inside that
+unit.
+
+<SourceList ids={[
+  "command-union-boundary",
+  "orchestration-command-catalog",
+  "provider-runtime-ingestion",
+  "rpc-authorization-scopes",
+  "ws-dispatch-handler",
+  "orchestration-http-snapshots",
+  "normalizer-staging-boundary",
+  "turn-normalizer",
+  "event-engine-runtime",
+  "orchestration-dispatch",
+  "decider-effect-dependencies",
+  "decider-command-sequence",
+  "existing-turn-decider",
+  "turn-atomic-batch",
+  "event-store-versioning",
+  "engine-commit-publication",
+  "bootstrap-saga-full",
+  "bootstrap-command-path",
+  "command-receipt-handling",
+  "engine-rejected-receipt",
+  "command-receipt-schema",
+  "command-commit-acknowledgement",
+  "provider-turn-reactor"
+]} />

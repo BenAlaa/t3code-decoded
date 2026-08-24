@@ -1,0 +1,401 @@
+---
+slug: persistence-recovery
+order: 130
+number: "13"
+kind: chapter
+part: Part III · Transactional domain core and post-commit delivery
+partOrder: 3
+title: Persistence, reconstruction, and crash recovery
+shortTitle: Persistence and recovery
+summary: SQLite is the durable domain core, but settings, secrets, attachments, terminal history, logs, and hidden Git refs cross separate filesystems and recovery protocols with sharply different guarantees.
+status: source-checked
+gates: [sources, interaction]
+objectives:
+  - Trace SQLite acquisition, ordered migrations, projector cursors, and command-model reconstruction.
+  - Reproduce the hidden 1,000-event projector bootstrap ceiling.
+  - Compare the journaled service-update database restore with unjournaled cross-store sagas.
+  - Separate tombstones, derived-row pruning, log rotation, and in-memory caps from one another.
+keywords: [SQLite, WAL, migrations, recovery, settings, secrets, attachments, terminal history, Git refs, tombstones]
+sourceAreas: [apps/server/src/persistence, apps/server/src/orchestration/Layers/ProjectionPipeline.ts, apps/server/src/serviceLauncher.ts, apps/server/src/serverSettings.ts, apps/server/src/terminal, apps/server/src/vcs]
+visuals: [startup reconstruction DAG, projector replay counter, recovery matrix, retention taxonomy]
+updatedAt: 2026-08-24
+---
+
+import Callout from "../../components/Callout.astro";
+import EvidenceClaim from "../../components/EvidenceClaim.astro";
+import Figure from "../../components/Figure.astro";
+import Mermaid from "../../components/Mermaid.astro";
+import RecoveryMatrixLab from "../../components/RecoveryMatrixLab.astro";
+import SourceExcerpt from "../../components/SourceExcerpt.astro";
+import SourceList from "../../components/SourceList.astro";
+
+T3 Code does not have one persistence boundary. SQLite owns the orchestration event
+log, command receipts, projection tables, authentication, and several runtime
+records. JSON and secret files own configuration. Image files own attachments.
+Terminal and provider logs have independent buffering and retention. Hidden Git
+refs own checkpoint trees. A provider process owns work that may already be running
+outside all of them.
+
+Recovery quality follows the coordination protocol between those stores—not the
+strongest store named in the operation.
+
+## SQLite is the domain core
+
+The server chooses a Bun or Node SQLite implementation at runtime, creates the
+database directory, opens `state.sqlite`, and configures the connection before
+application traffic begins.
+
+<SourceExcerpt id="sqlite-runtime-pragmas" focus={[24, 27, 29, 33, 36, 37, 38, 39, 40, 44, 49, 51, 53, 59]} note="Acquisition selects the runtime driver, sets a five-second busy timeout, enables foreign keys, selects WAL, and then runs the statically ordered migration manifest." />
+
+The Node implementation wraps one `DatabaseSync` connection with a semaphore, so
+operations through that service are serialized. WAL permits a separate CLI and
+server process to coordinate with less reader/writer blocking, while the explicit
+busy timeout waits for locks instead of immediately returning `SQLITE_BUSY`.
+
+<EvidenceClaim kind="inference" title="WAL is configured; the source audit finds no stronger power-loss policy" refs={["sqlite-runtime-pragmas"]}>
+  The setup executes `busy_timeout = 5000`, `foreign_keys = ON`, and
+  `journal_mode = WAL`. Repository search at the pinned commit found no explicit
+  `PRAGMA synchronous` choice or application-triggered WAL checkpoint. The book can
+  state the configured pragmas, but should not invent stronger fsync or power-loss
+  guarantees from the word “WAL.”
+</EvidenceClaim>
+
+## Migrations are a numbered program
+
+`Migrations.ts` imports every migration and constructs a statically ordered map. At
+this pinned revision the manifest contains 41 migrations. Startup invokes the
+migration runner after the SQLite pragmas; it does not discover filenames and sort
+them at runtime.
+
+The first migrations establish the architectural core:
+
+<div class="table-scroll" tabindex="0" role="region" aria-label="Foundational SQLite migrations">
+<table class="comparison">
+  <caption class="sr-only">Foundational migration tables and constraints</caption>
+  <thead><tr><th>Migration</th><th>Durable role</th><th>Important boundary</th></tr></thead>
+  <tbody>
+    <tr><td><code>001</code> orchestration events</td><td>append-only event envelopes with stream versions</td><td>unique event id and aggregate-version pair</td></tr>
+    <tr><td><code>002</code> command receipts</td><td>accepted/rejected result lookup by command id</td><td>no command type or payload fingerprint</td></tr>
+    <tr><td><code>004</code> provider bindings</td><td>provider instance, native session id, and resume cursor</td><td>external provider state is not in the same transaction</td></tr>
+    <tr><td><code>005</code> projection tables</td><td>projects, threads, messages, activities, sessions, turns, and per-projector cursor</td><td>deleted projects/threads use tombstones</td></tr>
+    <tr><td><code>007</code> attachment references</td><td>JSON metadata in projection rows</td><td>image bytes remain separate files</td></tr>
+    <tr><td><code>013</code> plans</td><td>durable plan projection</td><td>later migrations refine linkage and shape</td></tr>
+  </tbody>
+</table>
+</div>
+
+<EvidenceClaim kind="inference" title="The checkpoint blob table is dormant in the inspected production paths" refs={["checkpoint-diff-blob-migration", "checkpoint-git-capture-restore"]}>
+  Migration `003` creates `checkpoint_diff_blobs`, but a repository-wide production
+  search at this commit found no read or write outside migration registration. Active
+  checkpoint diffs are derived from hidden Git refs. Treat the table as dormant or
+  legacy evidence, not proof that checkpoint blobs currently drive recovery.
+</EvidenceClaim>
+
+Selected migration tests exercise upgrades from older shapes. There is no injected
+process-crash test halfway through the full 41-step startup runner.
+
+## Projectors reconstruct from cursors—with a 1,000-event ceiling
+
+The projection pipeline registers nine projectors. For each committed event it
+runs every projector sequentially; each projector's SQL changes and cursor update
+share a transaction. Startup reads every projector's stored cursor and asks the
+event store for the tail beginning at `lastSequence + 1`.
+
+The surprising part is the read default. `readFromSequence` defaults `limit` to
+1,000 and treats that number as the **total remaining result count**, even though it
+pages internally. Bootstrap calls it without supplying a larger or unlimited
+value. A projector that is 1,001 events behind applies only the first 1,000 during
+that startup and the server proceeds with the projector still behind.
+
+<Figure number="13.1" title="Startup reconstructs selected state, not every side effect" hint="the projection replay edge is capped at 1,000 events" caption="The service launcher may repair an interrupted SQLite-triplet rollback before the server starts. SQLite then configures pragmas and migrations. Projector cursors rebuild derived tables, after which an optimized command model loads. Reactors remain parked while provider-session reconciliation runs. Activation opens hot consumers, but it does not replay their missing side effects or reconcile every adjacent file store." textEquivalent="Before boot, the service launcher checks a durable restore marker and can restore state.sqlite plus its WAL and SHM sidecars. SQLite opens, applies pragmas, and runs 41 ordered migrations. The projection pipeline reads each projector cursor and requests at most 1,000 remaining events. The engine loads projects, threads, plans, sessions, latest turns, and projector states into its command model. Reactor roots are parked while active provider sessions are reconciled. After listeners prepare, startup activates reactors and admits commands. Provider sessions may recover lazily on future operations; terminal text loads on first open. Attachments, hidden refs, settings-secret pairs, and missed reactor jobs have no general startup reconciler." sources={["service-update-recovery", "sqlite-runtime-pragmas", "migration-runner", "projection-bootstrap-cursors", "projection-read-cap", "startup-parked-reactors"]}>
+  <Mermaid id="startup-reconstruction-dag" label="Startup reconstruction and recovery DAG" chart={`flowchart TB
+    U{restore marker?} -->|yes| R[restore state.sqlite + WAL + SHM]
+    U -->|no| O[open SQLite]
+    R --> O
+    O --> P[busy timeout + FK + WAL]
+    P --> M[run 41 migrations]
+    M --> C[read each projector cursor]
+    C -->|default total limit 1000| F[fold persisted events]
+    F --> Q[load optimized command model]
+    Q --> K[park reactor roots]
+    K --> S[reconcile projected active sessions]
+    S --> A[prepare listeners + activate]
+    A -. lazy .-> L[provider adoption · terminal history open]
+    A -. "source audit: no general repair" .-> N[attachments · hidden refs · secret pairs · missed reactor work]`} />
+</Figure>
+
+<EvidenceClaim kind="verified" title="Internal paging does not remove the bootstrap cap" refs={["projection-bootstrap-cursors", "projection-read-cap"]}>
+  The event-store loop may issue several SQL pages, but it decrements one caller
+  limit and stops when that reaches zero. Because projector bootstrap omits a limit,
+  its total result is capped at 1,000—not 1,000 per page until the tail is empty.
+</EvidenceClaim>
+
+Existing bootstrap tests fold three events and verify that rerunning at the stored
+cursor is idempotent. No test creates 1,001 events behind one projector. A valuable
+regression test is mechanical: append 1,001 events, reset one projector cursor to
+zero, bootstrap once, and assert whether its cursor reaches the global head.
+
+After projection bootstrap, the engine loads an optimized command read model from
+SQL: projects, threads, plans, sessions, latest turns, and projector states. It does
+not reload every message, activity, or checkpoint. Snapshot safety uses the minimum
+required projector cursor as its sequence watermark, so clients are not told that a
+newer partially projected head is complete. That safe watermark does not itself
+finish a projector left behind by the cap.
+
+## The service updater has an explicit recovery journal
+
+Managed server updates are the clearest crash-aware persistence protocol in the
+repository. The active child first persists a pending update record. After the
+handoff delay, the launcher stops that child, stages and syncs copies of
+`state.sqlite`, `state.sqlite-wal`, and `state.sqlite-shm`, and then starts the trial.
+It does **not** write the restore marker before the trial.
+
+The marker belongs to the rollback path: immediately before copying backup files
+over the live triplet, the launcher creates and syncs a marker inside the backup.
+On a later boot, pending service state without that marker resumes the trial; a
+marker makes startup retry the interrupted rollback restoration first.
+
+Commit writes terminal service state before discarding the backup. Rollback restores
+the triplet, records the terminal state, discards the backup, and then restarts the
+old child. Tests verify commit only after `prepared`, reject a rollback with the
+wrong update id, and restore a trial-mutated main/WAL/SHM set.
+
+<Callout title="The recovery boundary is intentionally narrow" tone="warning">
+  The updater documentation correctly excludes attachments and other files. Restoring
+  SQLite cannot rewind settings, secrets, logs, terminal histories, hidden Git refs,
+  provider processes, or arbitrary workspace changes made during a candidate trial.
+</Callout>
+
+No test kills the launcher at every instruction between pending-state persistence,
+backup staging, marker creation, partial triplet replacement, directory sync,
+terminal-state write, and backup deletion. The protocol is designed for retry, but
+those injected-crash cases remain valuable coverage.
+
+## Cross-store operations are small sagas
+
+<RecoveryMatrixLab />
+
+The matrix makes an important distinction: “atomic write” usually protects one
+file replacement. It does not make a sequence spanning several files and SQLite
+atomic. Among the inspected cross-store paths, only the service-update flow has an
+explicit durable phase marker and a startup reconciler across its named resources.
+
+## Settings JSON and secret files
+
+Settings load into a cache guarded by a semaphore and publish a hot change stream.
+A missing file becomes defaults. Malformed JSON is logged and also falls back to
+defaults; the file is not quarantined or repaired automatically. Redacted settings
+resolve their referenced secret files, and a missing secret materializes as an empty
+value.
+
+An update mutates secret files first, normalizes the redacted public shape, atomically
+renames the settings JSON, then replaces the cache and publishes. This ordering
+prevents plaintext secrets from entering settings JSON, but it creates cross-file
+failure windows:
+
+- adding a secret and then failing the JSON write leaves an orphan secret;
+- removing a secret and then failing the JSON write leaves the old redacted pointer
+  with no value;
+- the pinned startup-path audit found no reconciler that proves every redacted
+  pointer and secret file form one committed version.
+
+The JSON helper writes a same-directory temporary file and renames it, without an
+explicit file or directory sync. Secret `set` similarly writes a temporary file,
+applies `0600`, renames, and reapplies permissions; exclusive `create` syncs its new
+file, but the multi-file settings update still has no shared journal.
+
+Tests verify redaction, roundtrip materialization, race handling, and permissions.
+They do not inject a crash between secret mutation and settings JSON replacement.
+
+## Attachments cross the transaction in both directions
+
+Attachment normalization validates an image, creates a random attachment id, and
+writes its file **before** the HTTP or WebSocket path dispatches the command. A
+rejected command therefore leaves a possible orphan. Retrying an already accepted
+command id repeats normalization first, creates another random file, and then learns
+from the receipt that the older command already succeeded.
+
+Projection cleanup has the inverse ordering problem. A projector records reference
+changes and advances its SQL cursor transaction, then performs scheduled filesystem
+deletions with errors logged and swallowed. During engine dispatch, that cleanup can
+occur while the engine's larger transaction still has later events to process; a
+later projection failure can roll SQL back after the file has disappeared. During
+startup bootstrap, a crash after cursor commit but before cleanup means the cursor
+prevents that cleanup from being selected again.
+
+<EvidenceClaim kind="inference" title="The inspected paths do not join the attachment lifecycle atomically" refs={["attachment-path-safety", "normalizer-staging-boundary", "engine-commit-publication", "attachment-projection-cleanup", "projection-bootstrap-cursors"]}>
+  The store validates ids and constrains file paths. That blocks path traversal. It
+  does not provide a transaction that joins pre-dispatch file creation, command
+  acceptance, projection references, and later deletion.
+</EvidenceClaim>
+
+The real revert-cleanup test creates files and verifies removal. A differently named
+rollback test never creates its supposed source file; it proves projection-row
+rollback and nonexistence, not rollback of a filesystem deletion. No general orphan
+garbage collector was found at this revision.
+
+## Terminal history restores text, not a process
+
+Terminal history is capped at 5,000 lines by default and persisted through a keyed
+coalescing worker after a 40 ms debounce. Output updates memory, schedules the
+history write, and then reaches live subscribers. The worker directly overwrites the
+history file; it does not use the settings atomic-rename helper.
+
+Explicit terminal close persists immediately and drains the keyed worker. General
+manager scope finalization kills active sessions but does not explicitly flush and
+drain every history key. A hard crash can therefore lose the debounce window.
+Because the worker directly overwrites the target instead of using an atomic rename,
+an abruptly interrupted write also carries a partial-file risk; the exact filesystem
+outcome is an inference, not a behavior asserted by the normal write path.
+
+On first open after restart, the manager reads and sanitizes saved text and then
+starts a new PTY. Saved text does not encode the old shell process, working job,
+input buffer, or terminal emulator state. Tests cover caps, sanitization, deletion,
+inactive-history eviction, and legacy filename migration—not crash injection or
+scope-finalizer flush.
+
+## Provider logs are diagnostic, not recovery truth
+
+Provider runtime NDJSON logging declares itself best-effort. It rotates at 10 MiB
+with ten files by default, applies age and total-size retention, buffers writes, and
+deliberately excludes high-rate canonical deltas and progress events. Drain clears
+the pending batch even when writes fail, while setup failure degrades to a no-op
+logger. A hard crash can lose the buffered window.
+
+The ordinary server logger emits pretty stdout plus the observability trace logger.
+The pinned logging-path audit found no separate authoritative `server.log` event
+ledger. Local trace rotation and optional OTLP export support diagnosis. Durable “work log” activities are a
+different system: runtime ingestion dispatches activity commands into SQLite
+projection rows, and revert can prune those derived rows.
+
+## Checkpoints live in hidden Git refs
+
+Checkpoint refs use `refs/t3/checkpoints/<base64url-thread>/turn/<count>`. Capture
+creates an isolated temporary Git index, seeds it from HEAD, runs `git add -A`, writes
+a tree and parentless commit, then updates the hidden ref. SQL checkpoint metadata is
+dispatched afterward, so a crash can leave an orphan ref.
+
+Restore reads the hidden tree into worktree and index, cleans untracked files, then
+resets the index toward HEAD. Consequently the implementation preserves file content
+on a successful restore but does not preserve the original staged-versus-unstaged
+boundary. The `CheckpointStore` comment promising “workspace and staging state” is
+too strong.
+
+Revert is an unjournaled saga: restore workspace, refresh, roll the provider back,
+delete later refs, then dispatch durable completion. A crash can leave any prefix of
+those mutations. The inspected thread-deletion handler does not delete checkpoint
+refs, and the pinned startup-path audit found no ref/SQL reconciliation pass.
+
+<EvidenceClaim kind="inference" title="Checkpoint staging-state documentation exceeds the implementation" refs={["checkpoint-git-capture-restore"]}>
+  `git add -A` in an isolated index collapses both staged and unstaged file content
+  into one checkpoint tree. Restore can reproduce that tree's files, but its final
+  index reset cannot recreate where the user had drawn the staging boundary.
+</EvidenceClaim>
+
+## Tombstones are not a retention policy
+
+Several mechanisms remove different kinds of data and must not be merged under the
+word “cleanup”:
+
+<div class="table-scroll" tabindex="0" role="region" aria-label="Deletion, revert, and retention taxonomy">
+<table class="comparison">
+  <caption class="sr-only">Different persistence cleanup mechanisms; remaining-state cells include explicitly scoped source-audit findings</caption>
+  <thead><tr><th>Mechanism</th><th>What changes</th><th>What remains</th></tr></thead>
+  <tbody>
+    <tr><td>project/thread deletion</td><td>sets SQL <code>deleted_at</code>; shell queries omit tombstoned rows</td><td>events, receipts, and tombstoned rows remain; the inspected handler does not delete provider bindings or hidden refs</td></tr>
+    <tr><td>thread revert</td><td>prunes selected derived messages, plans, activities, turns, attachment files, and newer checkpoint refs</td><td>the append-only orchestration event history and revert events</td></tr>
+    <tr><td>provider/terminal log retention</td><td>rotates, caps, or evicts independent log/history files</td><td>SQLite domain history unless a separate domain operation changes it</td></tr>
+    <tr><td>in-memory fold caps</td><td>limits current message/checkpoint collections in memory</td><td>SQL rows; the cap is not database garbage collection</td></tr>
+  </tbody>
+</table>
+</div>
+
+The event-store API exposes append and reads, not event-history deletion. The receipt
+repository exposes upsert/get, not a retention pass. Provider-binding deletion exists
+in the repository interface, but a pinned-source search found no production caller;
+that is an absence-of-code inference, not a permanent product promise.
+
+## What startup repairs
+
+<div class="table-scroll" tabindex="0" role="region" aria-label="Startup reconstruction coverage">
+<table class="comparison">
+  <caption class="sr-only">Eager, lazy, and absent startup reconstruction</caption>
+  <thead><tr><th>Timing</th><th>State</th><th>Limit</th></tr></thead>
+  <tbody>
+    <tr><td>before server boot</td><td>restore-marker-directed recovery of an interrupted SQLite-triplet rollback</td><td>only named database files</td></tr>
+    <tr><td>eager</td><td>migrations, projector cursors, optimized command model</td><td>projector read defaults to 1,000 total events</td></tr>
+    <tr><td>eager best-effort</td><td>projected active provider sessions missing from live adapter inventory become stopped/error</td><td>retry once; does not replay the original turn</td></tr>
+    <tr><td>delayed/current-state</td><td>agent awareness republishes active threads after activation</td><td>not historical event replay</td></tr>
+    <tr><td>lazy</td><td>provider binding adoption/resume and terminal text restoration</td><td>requires a later routed operation or first terminal open</td></tr>
+    <tr><td>not generally reconciled in the source audit</td><td>missed reactor jobs, attachment orphans, ref/SQL pairs, settings/secret pairs</td><td>no general startup pass was found; later incidental operations may still converge selected state</td></tr>
+  </tbody>
+</table>
+</div>
+
+## Evidence and missing crash tests
+
+<div class="table-scroll" tabindex="0" role="region" aria-label="Persistence and recovery test ledger">
+<table class="comparison">
+  <caption class="sr-only">Tested persistence behavior and missing failure injection</caption>
+  <thead><tr><th>Area</th><th>Covered</th><th>Still missing</th></tr></thead>
+  <tbody>
+    <tr><td>SQLite</td><td>concurrent writer waits; selected migration upgrades</td><td>power loss, WAL checkpoint policy, crash halfway through the full runner</td></tr>
+    <tr><td>projection bootstrap</td><td>three-event fold and repeat-at-cursor idempotency</td><td>1,001-event tail and serving while a projector remains behind</td></tr>
+    <tr><td>service updater</td><td>prepared-before-commit, id validation, main/WAL/SHM rollback</td><td>kill and restart at every marker/restore/state-write edge</td></tr>
+    <tr><td>settings/secrets</td><td>redaction, roundtrip, races, file permissions</td><td>crash between secret mutation and JSON replacement; malformed-file repair</td></tr>
+    <tr><td>attachments</td><td>real revert cleanup and SQL rollback</td><td>orphan collection, external delete followed by outer rollback, crash after cursor advance</td></tr>
+    <tr><td>terminal</td><td>normal persistence, sanitizer, cap, eviction, migration</td><td>torn overwrite, hard crash in debounce window, general-scope drain</td></tr>
+    <tr><td>checkpoints</td><td>diffs and basic hidden-ref behavior</td><td>staging-boundary roundtrip, orphan-ref startup repair, crash during revert saga</td></tr>
+  </tbody>
+</table>
+</div>
+
+<Callout title="Design transfer: journal every cross-store phase that must converge" tone="info">
+  The service updater demonstrates the useful pattern: stop concurrent writers,
+  stage recoverable state, persist a phase marker before mutation, make restoration
+  retryable, and clear backup state only after a terminal record. Settings, secrets,
+  attachments, checkpoint refs, provider calls, and terminal writes need their own
+  scoped variants if a meta-harness wants stronger recovery guarantees.
+</Callout>
+
+<SourceList ids={[
+  "sqlite-runtime-pragmas",
+  "migration-runner",
+  "checkpoint-diff-blob-migration",
+  "server-path-layout",
+  "projection-registration-order",
+  "projection-transaction-cursor",
+  "projection-bootstrap-cursors",
+  "projection-read-cap",
+  "projection-snapshot-shapes",
+  "service-update-recovery",
+  "settings-load-fallbacks",
+  "settings-secret-order",
+  "settings-atomic-write",
+  "secret-store-atomic-boundary",
+  "normalizer-staging-boundary",
+  "attachment-path-safety",
+  "attachment-projection-cleanup",
+  "terminal-history-persistence",
+  "terminal-history-defaults",
+  "terminal-output-persistence-order",
+  "terminal-explicit-close",
+  "terminal-scope-finalizer",
+  "terminal-lazy-history-open",
+  "provider-event-log-contract",
+  "provider-event-log-drain",
+  "observability-runtime",
+  "server-logger-sinks",
+  "checkpoint-git-capture-restore",
+  "checkpoint-capture-dispatch-order",
+  "checkpoint-revert-saga",
+  "projection-tombstones",
+  "revert-derived-pruning",
+  "event-store-api-surface",
+  "receipt-repository-api-surface",
+  "provider-binding-delete-surface",
+  "thread-deletion-side-effects",
+  "startup-parked-reactors",
+  "startup-provider-reconciliation",
+  "agent-awareness-recovery"
+]} />

@@ -1,0 +1,225 @@
+---
+slug: projections-read-models
+order: 110
+number: "11"
+kind: chapter
+part: Part III · Transactional domain core and post-commit delivery
+partOrder: 3
+title: Projection tables and read models
+shortTitle: Projections
+summary: New events fold through ordered SQLite projectors before the enclosing command commits; bootstrap replays committed events from per-projector cursors, and queries expose deliberately different read-model shapes.
+status: source-checked
+gates: [sources, interaction]
+objectives:
+  - Trace one durable event through every projection cursor and its SQL boundary.
+  - Distinguish the safe snapshot watermark from the durable event-store head.
+  - Separate full snapshots, command state, shell summaries, detail pages, and live replay.
+keywords: [projections, SQLite, read model, cursor, snapshot, replay, checkpoint]
+sourceAreas: [apps/server/src/orchestration/Layers/ProjectionPipeline.ts, apps/server/src/orchestration/Layers/ProjectionSnapshotQuery.ts, apps/server/src/persistence/Layers/ProjectionState.ts, apps/server/src/ws.ts]
+visuals: [ordered projection fold, cursor watermark lab, read-model comparison]
+updatedAt: 2026-08-24
+---
+
+import Callout from "../../components/Callout.astro";
+import EvidenceClaim from "../../components/EvidenceClaim.astro";
+import Figure from "../../components/Figure.astro";
+import Mermaid from "../../components/Mermaid.astro";
+import ProjectionCursorLab from "../../components/ProjectionCursorLab.astro";
+import SourceExcerpt from "../../components/SourceExcerpt.astro";
+import SourceList from "../../components/SourceList.astro";
+
+An orchestration event is not directly a UI row. The durable event store records a
+global sequence; a projection pipeline folds that event into several SQLite read
+tables; query services compose those tables into views for a particular reader.
+This is a synchronous part of normal command acceptance, not a background
+eventually-consistent worker that happens after a command has returned.
+
+## Nine folds share one event order
+
+Each named projector has its own `projection_state` cursor. For every event, the
+pipeline considers every projector in this exact sequence:
+
+1. Projects
+2. Messages
+3. Proposed plans
+4. Activities
+5. Sessions
+6. Turns
+7. Checkpoints
+8. Pending approvals
+9. Threads
+
+The final placement is meaningful. The thread projection refreshes summary fields
+after the message, plan, activity, session, turn, and approval tables have been
+updated. It can therefore compute navigation-oriented facts such as pending
+approval/input counts and whether a plan is actionable from current dependent rows.
+
+<EvidenceClaim kind="verified" title="Registration order is behavior" refs={["projection-registration-order"]}>
+  The registry names nine cursored projectors. Its concrete array puts the aggregate
+  thread/shell fold last, after the tables it reads to derive shell summary fields.
+</EvidenceClaim>
+
+<Figure number="11.1" title="A command folds one ordered event through SQLite read sides" hint="dashed detours are filesystem work outside projector SQL rollback" caption="A newly appended global event sequence enters nine sequential projector applications while the outer transaction is still open. Each projector completes its row and cursor SQL before any attachment effect it scheduled. A message fold can prune files before later projectors run; the final thread fold can delete files before the accepted receipt and outer commit. The sequence becomes durable only at that outer commit, while the earlier filesystem mutations are not enlisted in rollback." textEquivalent="The engine's outer SQL transaction appends an event, then runs projects, messages, plans, activities, sessions, turns, checkpoints, pending approvals, and threads in order. Each projector first completes its projection row and cursor SQL. After the messages projector, an optional attachment-pruning filesystem detour can occur before plans. After the final threads projector, an optional attachment-deletion detour can occur before the accepted receipt. The outer SQL transaction commits only after those steps, making the event, projection rows, cursors, and receipt durable. Filesystem mutations cannot be rolled back if later SQL fails. Committed events are then published to live consumers." sources={["engine-commit-publication", "projection-registration-order", "projection-transaction-cursor", "projection-attachment-cleanup"]}>
+  <Mermaid id="projection-command-fold" label="Ordered projection fold" chart={`flowchart LR
+    E[(newly appended\nsequence N)] --> P[projects]
+    P --> M[messages]
+    M --> PL[plans] --> A[activities] --> S[sessions] --> T[turns]
+    M -. optional prune after\nmessage SQL + cursor .-> FM[attachment filesystem]
+    FM -. then continue .-> PL
+    T --> C[checkpoints\nno-op] --> PA[pending approvals] --> TH[threads\nderived shell]
+    TH --> R[(accepted receipt)]
+    TH -. optional delete after\nthread SQL + cursor .-> FT[attachment filesystem]
+    FT -. then continue .-> R
+    R --> O[(outer SQL commit)] --> L[post-commit live stream]`} />
+</Figure>
+
+<EvidenceClaim kind="verified" title="The normal fold is part of command acceptance" refs={["engine-commit-publication", "projection-transaction-cursor", "projection-registration-order"]}>
+  The engine appends each planned event, updates the in-memory command model,
+  invokes the projection pipeline, and writes the accepted receipt within its
+  outer SQL transaction. The pipeline itself runs its ordered projector work
+  sequentially. Publication happens after that transaction succeeds.
+</EvidenceClaim>
+
+<SourceExcerpt id="projection-transaction-cursor" note="The projector work and its per-projector state cursor are in SQL work; filesystem attachment cleanup is deliberately invoked afterward and logs failures instead of undoing the projection." />
+
+## Cursor means “safe through here,” not “the newest event”
+
+The event store has a monotonically increasing, global `sequence`; each aggregate
+also has its own stream version. Projection restart uses the former. On bootstrap,
+each projector reads only events after *its own* `last_applied_sequence` and advances
+that cursor after its SQL fold. A projector that has nothing to do for an event still
+records that it safely considered the event.
+
+The query layer does not advertise the highest event in the log as a snapshot
+sequence. It checks the required projector state and returns their minimum. If a
+required state row is missing, the safe sequence is zero. That conservative
+watermark prevents a snapshot composed from several tables from claiming it includes
+an event that one required read side has not reached.
+
+<EvidenceClaim kind="verified" title="Restart replays each lane from its own cursor" refs={["projection-bootstrap-cursors"]}>
+  Bootstrap is a projector-by-projector replay from each durable cursor, not a
+  one-time global replay cursor shared by every table.
+</EvidenceClaim>
+
+<EvidenceClaim kind="verified" title="Catch-up currently stops after 1,000 total events" refs={["projection-bootstrap-cursors", "projection-read-cap"]}>
+  The event-store reader defaults to a 1,000-event total limit, and its pagination
+  loop decrements that one allowance rather than requesting every remaining page.
+  Projection bootstrap calls the reader without overriding the limit. A projector
+  more than 1,000 events behind therefore stops early at this revision; the small
+  bootstrap tests do not cover 1,001 events.
+</EvidenceClaim>
+
+<SourceExcerpt id="snapshot-safe-watermark" focus={[237, 238, 240, 243, 244, 247, 248, 249, 250, 251, 253, 254, 258]} note="The snapshot helper requires its required projectors and returns the minimum sequence among them. It intentionally does not read the event-store head." />
+
+<ProjectionCursorLab />
+
+<Callout title="A no-op can still advance a cursor" tone="info">
+  The registered checkpoint projector is currently a literal no-op. It is still
+  traversed and cursor-tracked in the pipeline. This is useful evidence against an
+  appealing but false rule: “cursor N means this projector wrote a row for event N.”
+</Callout>
+
+## Checkpoint is a naming trap
+
+Checkpoint data is currently carried by turn projection rows, rather than an active
+independent checkpoint table projector. The projector named `projection.checkpoints`
+returns no work. The detail snapshot query obtains checkpoint-oriented rows from the
+turn read side. Treat the name as a tracked pipeline slot, not evidence of a separate
+materialized checkpoint store.
+
+<EvidenceClaim kind="verified" title="The checkpoint projector is registered but does no work" refs={["checkpoint-projector-noop", "turn-checkpoint-projection"]}>
+  The implementation defines the checkpoint projector as `Effect.void` while
+  preserving its registration and cursor slot. Turn projection owns the current
+  checkpoint metadata.
+</EvidenceClaim>
+
+<EvidenceClaim kind="verified" title="Thread detail bounds a pathological fan-out" refs={["thread-detail-turn-limit"]}>
+  A windowed thread detail limits its raw turn scan to 150 rows. This is a query-read
+  limit, not an event replay limit and not a promise that one user turn's whole
+  subagent fan-out will fit in one page.
+</EvidenceClaim>
+
+## One database, several deliberately incomplete views
+
+“The snapshot” is not one universal object. The full hydrated snapshot composes
+projects, threads, messages, plans, activities, sessions, checkpoints, turns, and
+projector state in a single query transaction. The engine instead starts from a
+lighter command model that intentionally omits message bodies, activities, and
+checkpoints. The navigation shell is leaner still: project and active-thread summary
+rows. Thread detail is a dedicated, possibly paged read.
+
+<div class="table-scroll" tabindex="0" role="region" aria-label="Read model shapes">
+<table class="comparison">
+  <caption class="sr-only">Comparison of projection query shapes</caption>
+  <thead><tr><th>Reader</th><th>Purpose</th><th>What it intentionally leaves out</th></tr></thead>
+  <tbody>
+    <tr><td>Full hydrated snapshot</td><td>authoritative composed read for complete state</td><td>nothing from its selected projection families; it is the expensive shape</td></tr>
+    <tr><td>Command read model</td><td>engine bootstrap and command decisions</td><td>messages, activities, and checkpoints</td></tr>
+    <tr><td>Shell snapshot</td><td>project/thread navigation and live shell refetches</td><td>thread bodies, activity history, plans, checkpoint/turn detail</td></tr>
+    <tr><td>Thread detail snapshot</td><td>one selected conversation, optionally windowed</td><td>older turn windows beyond its cursor until requested</td></tr>
+  </tbody>
+</table>
+</div>
+
+<EvidenceClaim kind="verified" title="The query names are intentional API shapes" refs={["projection-snapshot-shapes"]}>
+  Full, command, shell, archived-shell, and thread-detail reads are separate query
+  shapes. The detail path intentionally reads its rows and watermark inside one
+  transaction.
+</EvidenceClaim>
+
+The HTTP `/orchestration/snapshot` endpoint returns the command-model shape, not the
+full hydrated snapshot. That is an API-level reminder not to infer a UI payload just
+from a type named “read model.” Shell and thread readers have their own endpoints and
+WebSocket stream behavior.
+
+## Live repair uses global cursors; page merging has another watermark
+
+WebSocket resume is bounded. A client’s `afterSequence` is a global event sequence.
+The handler attaches a live buffer before replay or snapshot work, then either
+replays a non-negative global gap through a captured head or falls back to a fresh
+snapshot when the gap is absent, impossible, or exceeds 1,000 events. Buffered live
+input can overlap the replay; client reducers deduplicate by global sequence.
+
+Thread detail adds `threadSequence` to a *windowed page*. It is the greatest
+deliverable detail-event sequence for that thread at or below the snapshot sequence.
+Its purpose is to delay merging a historical page until the live reducer has caught
+up. It is **not** the `afterSequence` accepted by the subscription API, and it cannot
+replace the global cursor.
+
+<SourceExcerpt id="thread-resume-race" focus={[1394, 1401, 1408, 1412, 1415, 1418, 1421, 1424, 1428, 1433, 1438, 1441, 1445, 1446, 1451, 1468, 1475]} note="Thread subscription attaches its scoped live input before choosing replay or snapshot. Its replay bound uses the global gap, then filters events for the selected thread." />
+
+<EvidenceClaim kind="verified" title="Thread paging and thread subscription have different sequence jobs" refs={["ws-thread-subscription", "thread-resume-race", "client-thread-convergence"]}>
+  A windowed page carries a thread-scoped merge watermark so historical rows do not
+  race current deltas. The subscription cursor remains global because unrelated
+  events also occupy the durable event sequence used for replay and overlap
+  deduplication.
+</EvidenceClaim>
+
+<Callout title="Filesystem work sits outside this exact SQL guarantee" tone="warning">
+  Attachment pruning and thread attachment cleanup run after the relevant projector's
+  SQL and cursor step, but before the remaining command work and outer SQL commit.
+  Cleanup errors are logged and swallowed so the fold can continue. A file mutation
+  cannot be undone if a later SQL failure rolls the outer transaction back; on a
+  successful command, the rows and cursors commit normally. This code does not turn
+  the filesystem into a transactional resource.
+</Callout>
+
+## Source trail
+
+<SourceList ids={[
+  "projection-registration-order",
+  "projection-transaction-cursor",
+  "projection-bootstrap-cursors",
+  "snapshot-safe-watermark",
+  "projection-read-cap",
+  "thread-detail-turn-limit",
+  "checkpoint-projector-noop",
+  "turn-checkpoint-projection",
+  "projection-snapshot-shapes",
+  "projection-attachment-cleanup",
+  "ws-thread-subscription",
+  "client-shell-convergence",
+  "client-thread-convergence",
+  "thread-resume-race",
+  "orchestration-http-snapshots"
+]} />

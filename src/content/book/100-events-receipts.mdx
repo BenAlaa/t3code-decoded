@@ -1,0 +1,263 @@
+---
+slug: events-receipts
+order: 100
+number: "10"
+kind: chapter
+part: Part III · Transactional domain core and post-commit delivery
+partOrder: 3
+title: Events, receipts, idempotency, and the post-commit gap
+shortTitle: Events and receipts
+summary: Events record durable domain facts, command receipts bind an id to one aggregate but not its payload, and hot publication after commit leaves a crash window that an acknowledgement cannot close.
+status: source-checked
+gates: [sources, interaction]
+objectives:
+  - Read the durable event envelope without confusing internal storage columns with public fields.
+  - Derive accepted, rejected, conflict, and no-receipt retry behavior.
+  - Identify exactly what shares the SQL transaction and what happens after commit.
+  - Explain why a returned sequence proves durable intent but not provider execution.
+keywords: [events, command receipts, idempotency, retry, sequence, publication, PubSub, crash window]
+sourceAreas: [packages/contracts/src/orchestration.ts, apps/server/src/persistence/Layers/OrchestrationEventStore.ts, apps/server/src/persistence/Services/OrchestrationCommandReceipts.ts, apps/server/src/orchestration/Layers/OrchestrationEngine.ts, apps/server/src/orchestration/Layers/ProviderCommandReactor.ts]
+visuals: [event envelope ledger, transaction boundary, duplicate-command matrix, crash-window explorer]
+updatedAt: 2026-08-24
+---
+
+import Callout from "../../components/Callout.astro";
+import EvidenceClaim from "../../components/EvidenceClaim.astro";
+import Figure from "../../components/Figure.astro";
+import Mermaid from "../../components/Mermaid.astro";
+import ReceiptWindowLab from "../../components/ReceiptWindowLab.astro";
+import SourceExcerpt from "../../components/SourceExcerpt.astro";
+import SourceList from "../../components/SourceList.astro";
+
+T3 Code persists two related ledgers for every accepted command:
+
+- the **event ledger** says what happened, in global order;
+- the **receipt ledger** says what result belongs to this command id.
+
+They commit together, but they answer different questions. An event supports replay
+and projection. A receipt prevents one command id from creating a second domain
+transaction for the same aggregate. Neither ledger records whether a provider
+harness ultimately completed the work triggered by that intent.
+
+## The public event envelope
+
+Every event variant combines the same base envelope with a type-specific payload.
+
+<div class="table-scroll" tabindex="0" role="region" aria-label="Orchestration event envelope fields">
+<table class="comparison">
+  <caption class="sr-only">Meaning of fields in the public orchestration event envelope</caption>
+  <thead><tr><th>Field</th><th>Meaning</th><th>Reading rule</th></tr></thead>
+  <tbody>
+    <tr><td><code>sequence</code></td><td>global durable order assigned by SQLite</td><td>resume and projection cursors compare this value across all aggregates</td></tr>
+    <tr><td><code>eventId</code></td><td>unique event identity allocated by the decider</td><td>identity is not the ordering mechanism</td></tr>
+    <tr><td><code>aggregateKind</code> + <code>aggregateId</code></td><td>project or thread stream owning the fact</td><td>these also define the accepted receipt's aggregate binding</td></tr>
+    <tr><td><code>type</code> + <code>payload</code></td><td>the domain fact and its variant-specific data</td><td>projectors switch on the type; the payload is not stored in the command receipt</td></tr>
+    <tr><td><code>occurredAt</code></td><td>domain timestamp selected during decision</td><td>do not use it as a replacement for global sequence order</td></tr>
+    <tr><td><code>commandId</code></td><td>command that caused the event, or null</td><td>several events can share one command id</td></tr>
+    <tr><td><code>causationEventId</code></td><td>direct event-level cause where one is known</td><td>for a turn start, the request event points at the user-message event</td></tr>
+    <tr><td><code>correlationId</code></td><td>command-level correlation, normally the command id</td><td>groups a batch without replacing event identity</td></tr>
+    <tr><td><code>metadata</code></td><td>provider ids, adapter key, request id, ingestion time, and optional client origin</td><td>metadata carries attribution and integration context, not aggregate state itself</td></tr>
+  </tbody>
+</table>
+</div>
+
+<EvidenceClaim kind="verified" title="Stream version and actor kind are storage metadata, not public envelope fields" refs={["event-envelope-fields", "event-store-versioning"]}>
+  SQLite assigns a zero-based per-aggregate <code>stream_version</code> and infers an
+  <code>actor_kind</code> column while inserting. The decoded public event returned by
+  this store contains the global sequence and envelope fields above, but not either
+  storage column. Actor classification is inferred from command-id prefixes and
+  provider metadata; it is not a claim supplied as a public event field.
+</EvidenceClaim>
+
+The event store therefore has two orders with different visibility:
+
+- a global `sequence`, exposed on every event and used for resumable reads;
+- a per-stream `stream_version`, computed and stored internally.
+
+The per-stream version is not an expected-version token in the command protocol.
+As Chapter 9 showed, one serialized command worker prevents concurrent decisions
+inside a server process.
+
+## A receipt is smaller than the command it deduplicates
+
+<SourceExcerpt id="command-receipt-schema" focus={[25, 26, 27, 28, 29, 30, 31, 32, 33]} note="The row binds commandId to aggregate kind/id, a timestamp, result sequence, status, and optional error. It has no command type, serialized body, or payload hash." />
+
+For an accepted command, `resultSequence` is the sequence of the last event in its
+batch. For an invariant rejection, the same schema is used differently: no event is
+appended, `status` is `rejected`, `error` carries the rejection, and
+`resultSequence` is the command model's current snapshot sequence. The field named
+`acceptedAt` is populated for both statuses.
+
+<EvidenceClaim kind="verified" title="Receipts bind an id to an aggregate, not to an immutable payload" refs={["command-receipt-schema", "command-receipt-handling"]}>
+  A receipt hit first compares aggregate kind and aggregate id. If they match, status
+  determines whether the engine returns the accepted sequence or the stored
+  rejection. The engine does not compare command type or body. Reusing an id for a
+  changed command on the same aggregate silently refers to the first result.
+</EvidenceClaim>
+
+This is **deduplication by caller discipline**: the caller must treat a command id as
+the permanent name of one intent. The server catches reuse across aggregates, but it
+cannot catch changed intent within the same aggregate.
+
+<Callout title="Receipt lookup happens after client normalization" tone="warning">
+  HTTP and WebSocket clients are authorized and normalized before the command enters
+  the engine. An accepted receipt prevents another event transaction; it does not
+  skip schema decoding, timestamp canonicalization, workspace normalization, or
+  attachment staging. Retrying an upload can therefore write new attachment files
+  before the engine discovers the receipt.
+</Callout>
+
+## Accepted events, projections, and receipt share one transaction
+
+<SourceExcerpt id="engine-commit-publication" focus={[197, 198, 203, 204, 205, 206, 210, 218, 219, 220, 221, 223, 224, 228, 234, 243, 244, 245, 259]} note="Decision has already finished when this excerpt begins. Event append, temporary model fold, synchronous SQLite projections, and the accepted receipt run inside withTransaction. The authoritative in-memory assignment and PubSub loop follow the commit; the last sequence returns after that loop." />
+
+<Figure number="10.1" title="One SQL commit, then a volatile delivery bridge" hint="the dashed branch marks the hard-crash window" caption="Event rows, synchronous projection rows, and the accepted receipt commit atomically. The engine then swaps its in-memory command model and publishes the batch event by event to an in-memory PubSub. The RPC result follows publication but cannot make that post-commit bridge durable." textEquivalent="The decider first plans an event batch outside SQL. One SQL transaction appends every event, applies every synchronous SQLite projection, and writes an accepted command receipt holding the last sequence. Commit makes all three durable at once. After commit, the engine assigns its next in-memory read model. It then publishes each committed event to an in-memory PubSub. A process crash between commit and the first publication leaves durable intent and a receipt but no hot event. A process crash midway can leave only a publication prefix. Only after the publication loop does the engine return the last sequence. Provider and other reactors consume those hot events asynchronously." sources={["engine-commit-publication", "command-receipt-schema", "hot-reactor-no-replay", "provider-turn-reactor"]}>
+  <Mermaid id="receipt-transaction-boundary" label="Durable transaction followed by in-memory event publication" chart={`flowchart LR
+    D[decide event batch] --> T
+    subgraph T[one SQL transaction]
+      E[append all events] --> P[apply SQLite projections]
+      P --> R[upsert accepted receipt]
+    end
+    T -->|commit| M[replace in-memory model]
+    M --> H[publish event 1..N]
+    H --> A[return last sequence]
+    H --> X[hot reactor streams]
+    X --> V[provider + side effects]
+    T -.process dies after commit.-> G[durable intent; hot event missing]`} />
+</Figure>
+
+Three observations follow directly from this ordering:
+
+1. A successful commit never leaves an accepted receipt without its event batch or
+   transactional projections.
+2. Hot publication is not part of that atomic unit.
+3. The RPC result waits for the publication loop, but publication only offers events
+   to in-memory subscribers; it does not wait for provider work to finish.
+
+## Duplicate behavior is a five-row matrix
+
+Receipt lookup happens before the decider. Aggregate comparison happens before
+receipt-status replay.
+
+<div class="table-scroll" tabindex="0" role="region" aria-label="Duplicate command receipt behavior">
+<table class="comparison">
+  <caption class="sr-only">Engine outcome for each durable receipt and retry target combination</caption>
+  <thead><tr><th>Stored receipt</th><th>Retry aggregate</th><th>Engine result</th><th>New events / publication</th></tr></thead>
+  <tbody>
+    <tr><td>accepted</td><td>same kind + id</td><td>return stored <code>resultSequence</code></td><td>none / none</td></tr>
+    <tr><td>accepted</td><td>different kind or id</td><td>command-id conflict</td><td>none / none</td></tr>
+    <tr><td>rejected</td><td>same kind + id</td><td>previously-rejected error with stored detail</td><td>none / none</td></tr>
+    <tr><td>rejected</td><td>different kind or id</td><td>command-id conflict</td><td>none / none</td></tr>
+    <tr><td>no row</td><td>any</td><td>decide against current state</td><td>depends on current decision</td></tr>
+  </tbody>
+</table>
+</div>
+
+An accepted same-aggregate retry does **not** replay the original events into the hot
+stream. It returns the stored sequence immediately. This is desirable after a lost
+RPC response when the original publication completed. It cannot repair a
+commit-to-publication crash gap.
+
+<EvidenceClaim kind="verified" title="Persisted invariant rejection is sticky" refs={["engine-rejected-receipt", "command-receipt-handling"]}>
+  After an invariant error, the engine attempts to save a rejected receipt and
+  ignores failure of that receipt write. If the row exists, a same-id retry stays
+  rejected without asking the decider again—even if domain state has since changed.
+  If the best-effort write failed, there is no row and a retry can be decided again.
+</EvidenceClaim>
+
+Persistence failures inside the accepted transaction are different. The transaction
+rolls back, no accepted receipt remains, and the failure is not recorded as a domain
+invariant rejection. A retry can run the decision and transaction again.
+
+## The hard-crash gap is real
+
+After SQL commit, the engine first replaces its in-memory model, then publishes each
+committed event sequentially. The pinned production-code audit found no outbox row
+whose delivery acknowledgement commits with the events.
+
+<EvidenceClaim kind="inference" title="A hard crash can strand durable intent from hot reactors" refs={["engine-commit-publication", "hot-reactor-no-replay", "command-receipt-handling"]}>
+  If the process dies after commit and before the relevant event is published, the
+  event batch and accepted receipt survive. The provider command reactor explicitly
+  subscribes to a hot stream that cannot resume work pending before it starts. A
+  same-id retry sees the accepted receipt and returns its sequence without
+  republishing. Together, those verified code paths imply a durable-intent / missing-
+  side-effect window.
+</EvidenceClaim>
+
+The failure handler does provide a narrower repair path while the process is still
+alive. For most dispatch failures, it reads the durable tail after the command's
+starting sequence, folds that tail back into the command model, and republishes it.
+That can reconcile a recoverable post-commit failure in the same process. It cannot
+run after a hard process crash, and it is not a durable outbox protocol. If a prefix
+was already published before a recoverable failure, replaying the durable tail can
+offer that prefix again; reconciliation is not exactly-once delivery.
+
+<EvidenceClaim kind="verified" title="Same-process reconciliation and restart replay are different guarantees" refs={["engine-failure-reconciliation", "hot-reactor-no-replay"]}>
+  The engine's catch path can rediscover committed events during a live dispatch
+  failure. The provider reactor's own startup comment says pre-subscription pending
+  work cannot be resumed. Do not generalize the catch path into guaranteed reactor
+  replay after restart.
+</EvidenceClaim>
+
+## Explore receipts and crash windows
+
+The lab starts with an accepted receipt. Change its status, target aggregate, body,
+and original delivery window. In particular, compare “response lost” with “hard
+crash after commit”: both can look like silence to the first caller, but only one
+preserves the original hot publication.
+
+<ReceiptWindowLab id="receipt-crash-windows" />
+
+## What a sequence acknowledgement proves
+
+<div class="table-scroll" tabindex="0" role="region" aria-label="Acknowledgement guarantee ladder">
+<table class="comparison">
+  <caption class="sr-only">Guarantees established and not established at each completion boundary</caption>
+  <thead><tr><th>Boundary reached</th><th>What is established</th><th>What is still not established</th></tr></thead>
+  <tbody>
+    <tr><td>SQL commit</td><td>event batch, synchronous projections, accepted receipt</td><td>hot publication and any reactor work</td></tr>
+    <tr><td>PubSub loop completes</td><td>every event was offered to current in-memory subscribers</td><td>durable delivery or completed reactor handling</td></tr>
+    <tr><td>RPC returns <code>{`{ sequence }`}</code></td><td>server exposes the last durable event sequence</td><td>that the response reached the client</td></tr>
+    <tr><td>client receives sequence</td><td>client knows its durable intent was accepted</td><td>provider process start, token output, or turn completion</td></tr>
+    <tr><td>provider lifecycle events arrive</td><td>the corresponding later provider milestone</td><td>milestones not yet represented by a later event</td></tr>
+  </tbody>
+</table>
+</div>
+
+<EvidenceClaim kind="verified" title="Acknowledgement is not provider completion" refs={["command-commit-acknowledgement", "provider-turn-reactor"]}>
+  The engine returns after its PubSub publication loop. The provider command reactor
+  consumes <code>thread.turn-start-requested</code> later and sends work through its
+  own worker/forked path. The returned sequence therefore proves durable domain
+  intent, not provider acceptance, execution, or completion.
+</EvidenceClaim>
+
+<Callout title="RuntimeReceiptBus is not the durable command receipt table" tone="info">
+  The similarly named <code>RuntimeReceiptBus</code> is a test synchronization hook
+  for runtime ingestion; its production layer is a no-op. It does not deduplicate
+  commands, close the PubSub crash gap, or strengthen the RPC acknowledgement.
+</Callout>
+
+The right mental model is deliberately narrow: **receipt idempotency protects one
+serialized domain commit**. It is not payload equality, not normalization
+idempotency, not saga idempotency, not durable reactor delivery, and not provider
+exactly-once execution.
+
+<SourceList ids={[
+  "event-envelope-fields",
+  "event-store-versioning",
+  "event-engine-runtime",
+  "orchestration-dispatch",
+  "engine-commit-publication",
+  "engine-receipt-publication-boundary",
+  "command-receipt-schema",
+  "command-receipt-handling",
+  "engine-rejected-receipt",
+  "engine-failure-reconciliation",
+  "normalizer-staging-boundary",
+  "turn-atomic-batch",
+  "hot-reactor-no-replay",
+  "provider-reactor-hot-subscription",
+  "command-commit-acknowledgement",
+  "provider-turn-reactor",
+  "runtime-receipt-bus"
+]} />
