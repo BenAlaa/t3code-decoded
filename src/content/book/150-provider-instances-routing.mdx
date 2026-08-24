@@ -1,0 +1,331 @@
+---
+slug: provider-instances-routing
+order: 150
+number: "15"
+kind: chapter
+part: Part IV · Five harnesses, one product model
+partOrder: 4
+title: Drivers, instances, registries, and multi-instance routing
+shortTitle: Provider instances and routing
+summary: T3 Code separates an open driver kind from configured instance identity, discovery snapshots, durable thread bindings, native sessions, and continuation compatibility so several accounts of one harness can coexist.
+status: source-checked
+gates: [sources, interaction]
+objectives:
+  - Name every provider identity and use only providerInstanceId as the normal routing key.
+  - Derive explicit-versus-legacy settings precedence, enabled state, secret materialization, and unavailable shadows.
+  - Follow instance construction, child-scope replacement, snapshot aggregation, binding lookup, adoption, and resume.
+  - Explain what configuration reload and recovery do not guarantee.
+keywords: [ProviderDriver, ProviderInstance, registry, multi-instance, routing, settings, secrets, resume, recovery]
+sourceAreas: [packages/contracts/src/providerInstance.ts, packages/contracts/src/settings.ts, apps/server/src/provider/ProviderDriver.ts, apps/server/src/provider/Layers/ProviderInstanceRegistryHydration.ts, apps/server/src/provider/Layers/ProviderInstanceRegistryLive.ts, apps/server/src/provider/Layers/ProviderAdapterRegistry.ts, apps/server/src/provider/Layers/ProviderRegistry.ts, apps/server/src/provider/Layers/ProviderService.ts, apps/server/src/provider/Layers/ProviderSessionDirectory.ts]
+visuals: [provider identity ladder, settings reconciliation timeline, routing and recovery decision tree, interactive fleet router]
+updatedAt: 2026-08-24
+---
+
+import Callout from "../../components/Callout.astro";
+import EvidenceClaim from "../../components/EvidenceClaim.astro";
+import Figure from "../../components/Figure.astro";
+import Mermaid from "../../components/Mermaid.astro";
+import ProviderRoutingLab from "../../components/ProviderRoutingLab.astro";
+import SourceExcerpt from "../../components/SourceExcerpt.astro";
+import SourceList from "../../components/SourceList.astro";
+
+“Which provider owns this thread?” sounds like one lookup. In the implementation it
+is an identity chain:
+
+```text
+T3 thread → persisted provider-instance id → current ProviderInstance
+          → captured adapter → native session / resume cursor
+```
+
+The driver kind travels beside that chain as an implementation and consistency
+label. A native account may be visible in a discovery snapshot. Neither replaces
+the instance id as the normal route.
+
+This separation is what lets `codex_personal` and `codex_work` use the same Codex
+driver with different homes, environment, credentials, processes, snapshots, and
+adapter state.
+
+## The identity ladder
+
+<SourceExcerpt id="provider-instance-identity-contract" focus={[4, 6, 10, 12, 18, 24, 28, 30]} note="The contract distinguishes an open driver selector from a user-defined routing id. Unknown valid driver slugs remain decodable so a different build or fork can surface an unavailable instance instead of failing settings decode." />
+
+<div class="table-scroll" tabindex="0" role="region" aria-label="Provider identity ladder">
+<table class="comparison">
+  <caption class="sr-only">Provider-related identities and their architectural roles</caption>
+  <thead><tr><th scope="col">Identity</th><th scope="col">Example</th><th scope="col">Owner and role</th><th scope="col">Routing key?</th></tr></thead>
+  <tbody>
+    <tr><th scope="row">Driver kind</th><td><code>codex</code></td><td>open branded slug selecting implementation, config decoder, probe, adapter, and text generation</td><td>No; it verifies implementation and names the default legacy instance</td></tr>
+    <tr><th scope="row">Instance id</th><td><code>codex_work</code></td><td>user-defined slug naming one materialized configuration and its scoped closures</td><td><strong>Yes</strong></td></tr>
+    <tr><th scope="row">Discovery snapshot</th><td>models, auth state, health</td><td>UI-facing observation for one instance; cached and refreshed independently</td><td>No; its <code>instanceId</code> field points back to the route</td></tr>
+    <tr><th scope="row">Native account</th><td>provider email or login</td><td>provider-reported observation; may affect access and models</td><td>No</td></tr>
+    <tr><th scope="row">T3 thread id</th><td><code>thread_…</code></td><td>durable product conversation/work item</td><td>Entry to the persisted binding lookup</td></tr>
+    <tr><th scope="row">Native session id</th><td>app-server, SDK, ACP, or <code>ses_…</code></td><td>adapter/provider-owned continuation identity</td><td>No; wrapped in an opaque resume cursor</td></tr>
+    <tr><th scope="row">Continuation key</th><td><code>codex:instance:codex_work</code></td><td>driver-defined compatibility group used when deciding whether a session may continue across instance changes</td><td>No; a compatibility predicate</td></tr>
+  </tbody>
+</table>
+</div>
+
+`ProviderDriverKind` is intentionally not a closed five-literal union. The shipped
+build registers Codex, Claude, Cursor, Grok, and OpenCode, but settings and persisted
+state can outlive a build, move between forks, or refer to a driver that is absent
+after rollback. Schema decoding accepts any valid slug; the runtime makes absence
+visible.
+
+<EvidenceClaim kind="verified" title="The instance id is the stable route; the driver is context" refs={["provider-instance-identity-contract", "server-provider-routing-identity", "provider-adapter-registry-live"]}>
+  `ServerProvider` declares <code>instanceId</code> as its stable routing identity.
+  The live adapter facade resolves only by instance id. Its legacy
+  <code>listProviders</code> view merely lists driver kinds whose default instance
+  currently exists; it does not restore kind-based routing for custom instances.
+</EvidenceClaim>
+
+## Drivers are factories; instances are scoped records
+
+<SourceExcerpt id="provider-driver-instance-records" focus={[4, 8, 10, 14, 15, 20]} note="Driver and instance are plain records rather than one Effect Context tag per provider kind." />
+
+<SourceExcerpt id="provider-driver-instance-spi" focus={[55, 64, 71, 72, 73, 82, 93, 107, 114, 117]} note="Each create call receives the materialized instance inputs and must capture independent adapter, snapshot, and text-generation state inside the instance's scope." />
+
+A `ProviderDriver` contributes:
+
+- an open `driverKind` and static presentation metadata;
+- a schema for its opaque config envelope and a typed default;
+- a scoped `create` function.
+
+The registry decodes config once, then passes the typed value, instance id,
+presentation overrides, effective enabled flag, and materialized environment into
+`create`. The result is a `ProviderInstance` containing three captured closures:
+discovery snapshot, provider adapter, and text generation.
+
+This record-based SPI avoids the singleton trap. Two Context tags named “Codex”
+would still describe one service per Effect environment; two ordinary instance
+records can each own different Refs, PubSubs, child processes, file watchers, and
+finalizers.
+
+<EvidenceClaim kind="documented" title="supportsMultipleInstances is metadata without registry enforcement" refs={["provider-driver-instance-spi", "provider-instance-registry-reconcile"]}>
+  The metadata documentation says a driver may set
+  <code>supportsMultipleInstances: false</code> and the registry will reject a
+  duplicate configuration. At the pinned commit, all built-ins permit multiple
+  instances and the inspected registry reconciliation path never reads that field.
+  Treat it as documented intent, not an enforced runtime guarantee.
+</EvidenceClaim>
+
+## Settings hydrate an explicit map over legacy defaults
+
+T3 Code is midway through a provider-instance migration. Settings contain both:
+
+- legacy typed blobs under `settings.providers.<kind>`;
+- a new `providerInstances` record whose keys are instance ids and whose values
+  carry driver, opaque config, generic environment, enabled state, and optional
+  presentation.
+
+Hydration begins with the explicit map. For each built-in driver it computes the
+default instance id—literally the driver slug. Only if that key is absent does it
+synthesize an instance from the legacy blob. An explicit `providerInstances.codex`
+entry therefore wins over `providers.codex`; a custom `codex_work` exists alongside
+either default.
+
+Enabled state has its own precedence. Explicit `false` in the instance envelope or
+decoded driver config always disables. Otherwise the envelope value wins, then the
+driver config value, then the default is enabled.
+
+<Figure number="15.1" title="A settings edit rebuilds instance state before subscribers re-route" hint="the old scope closes before its replacement is constructed" caption="Explicit instance settings are merged over legacy defaults, then each opaque config is decoded against its registered driver. Reconciliation first closes scopes for removed or changed live instances. It retains unchanged object identities, constructs replacements or unavailable shadows, writes the live and unavailable Refs in sequence, and publishes one change tick only when entries, order, or unavailable state changed. Subscribers then re-pull current instances and streams. A durable thread binding is not synchronously migrated; the next eligible operation may recover through the new adapter if it has compatible resume state." textEquivalent="A ServerSettings change enters the hydration watcher. Explicit providerInstances are copied first; for each built-in with no explicit default-id entry, its legacy providers blob is synthesized. For each changed entry the instance registry closes the previous child scope before constructing a replacement. A registered driver with valid config creates a live instance. An unknown driver, invalid config, or create error creates an unavailable shadow. Unchanged live instances keep the same object and scope. The registry sets its live-entry Ref and then its unavailable-shadow Ref; these are two writes, not an atomic map swap. It publishes one change notification only if entry identity/order or unavailable state changed. ProviderRegistry re-pulls discovery snapshot sources and ProviderService re-pulls adapter streams after that tick. Persisted thread bindings remain in SQLite; a later routed operation can adopt or resume through the current adapter, or fail if no live route or cursor exists." sources={["provider-instance-hydration", "provider-instance-build-shadow", "provider-instance-registry-reconcile", "provider-adapter-registry-live", "provider-registry-live-sync", "provider-service-session-recovery"]}>
+	<Mermaid id="provider-instance-reconciliation" label="Settings hydration and provider-instance reconciliation" chart={`flowchart LR
+	  S[settings changed] --> H[explicit map + missing legacy defaults]
+	  H --> Q{unchanged live identity?}
+	  Q -->|yes| K[retain existing scoped instance]
+	  Q -->|no| C[close prior child scope if present]
+	  C --> X{replacement still configured?}
+	  X -->|no · removed| M[set live Ref, then unavailable Ref]
+	  X -->|yes| D{driver + config valid?}
+	  D -->|yes| L[create scoped live instance]
+	  D -->|no| U[build unavailable shadow]
+	  K --> M
+	  L --> M
+	  U --> M
+    M --> G{entries, order, or shadows changed?}
+    G -->|no| N[no change tick]
+    G -->|yes| T[publish one registry change tick]
+    T --> P[discovery registry re-pulls]
+    T --> A[ProviderService re-subscribes]
+    B[(durable thread binding)] -.next eligible operation.-> R[adopt or resume]
+    A --> R`} />
+</Figure>
+
+<Callout title="Hot reload is not atomic session migration" tone="warning">
+  The old changed scope closes before the replacement is built. Its native process
+  and event stream may stop during that interval. The durable binding remains, but
+  recovery is operation-triggered and needs a current live instance plus either an
+  already-adoptable session or persisted resume state. Configuration reload is not
+  a zero-downtime handoff protocol.
+</Callout>
+
+## Unavailable shadows preserve configuration truth
+
+Three construction failures become UI-visible shadows instead of server-boot
+failures:
+
+1. the driver slug is valid but not registered in this build;
+2. the registered driver's config decoder rejects the opaque value;
+3. driver creation returns `ProviderDriverError`.
+
+The shadow is disabled, not installed, in error status, has unknown auth, carries
+the exact unavailable reason, and appears in discovery aggregation. It is excluded
+from live adapter lookup and `listInstances`, so a caller cannot accidentally route
+a turn to a presentation-only object.
+
+This is rollback/fork tolerance: “I understand the saved shape but cannot run it”
+is represented as product state, not a corrupt settings file.
+
+## Environment values are materialized, not sandboxed
+
+Every instance can define generic environment entries. Sensitive entries are
+persisted in the server secret store under a name derived from instance id and
+variable name. Client-facing settings replace their value with an empty string and
+set `valueRedacted: true`; server-internal settings materialize the secret before
+driver construction. A redacted patch preserves the existing secret.
+
+At process construction, the materialized instance environment overlays inherited
+`process.env`. An intentional empty string overrides the inherited value. This is
+ordinary child-process configuration—not isolation from the parent environment.
+
+<EvidenceClaim kind="verified" title="Only marked environment entries use the secret store" refs={["provider-instance-environment-contract", "provider-instance-secret-materialization", "provider-instance-environment-overlay"]}>
+  Non-sensitive values persist in the settings document. Sensitive values are
+  split into the secret store and redacted on client reads. The mechanism does not
+  make every provider config field secret automatically.
+</EvidenceClaim>
+
+<EvidenceClaim kind="verified" title="OpenCode serverPassword is the explicit plaintext exception" refs={["opencode-password-settings", "opencode-password-persistence-test", "opencode-external-basic-auth"]}>
+  The OpenCode config schema labels <code>serverPassword</code> as stored in plain
+  text on disk; its password-shaped UI input is not encryption. When an external
+  OpenCode URL is configured, the adapter passes that value as Basic
+  authentication. A locally launched managed OpenCode server follows a different
+  process-ownership path.
+</EvidenceClaim>
+
+## Discovery and routing are two registries
+
+`ProviderRegistry` aggregates **snapshots** for presentation: availability, models,
+authentication, health, maintenance state, and per-instance refresh streams. It
+can hydrate a correlated cache at boot and retain selected prior model metadata
+while a fresh probe is partial.
+
+`ProviderAdapterRegistry` resolves **live behavior**. It is a stateless facade over
+the instance registry: `getByInstance`, `getInstanceInfo`, `listInstances`, and a
+change stream. Snapshot presence is not sufficient to route; a shadow is visible
+to the first registry and absent from the second.
+
+These surfaces all key by instance id, but their correlation checks live at different
+boundaries. `ProviderRegistry` validates that a discovery snapshot's driver and
+instance match its source. `ProviderService` performs the corresponding check for hot
+runtime events. `ProviderAdapterRegistry` is the exact live lookup/list/change facade;
+it does not perform either payload-correlation check.
+
+## The durable route is recovered lazily
+
+For an operation such as send, interrupt, approval, structured input, or rollback,
+`ProviderService` performs this decision:
+
+1. load the persisted binding for the T3 thread;
+2. require its instance id and resolve that exact current adapter;
+3. if the adapter already has the thread session, route immediately;
+4. otherwise, when recovery is allowed, invoke the recovery helper; it rechecks the
+   adapter and can list, adopt, and upsert an existing session;
+5. if that recheck finds no listed session, require an opaque resume cursor;
+6. restore persisted cwd/model/runtime mode, prepare MCP, and call
+   `startSession` with that cursor;
+7. validate the returned driver and update the durable binding.
+
+`stopSession` deliberately does not recover a stopped process merely to stop it.
+Starting a new session also stops stale live sessions for the same T3 thread on
+other current instances.
+
+<Figure number="15.2" title="Thread routing prefers a direct live route, then opaque recovery" hint="no binding and no cursor are terminal branches" caption="A product operation begins with the durable thread binding, not a provider-kind switch. Exact instance lookup must return a live adapter. If the adapter already reports that thread as active, the normal routing helper returns it directly without listing sessions or refreshing the binding. Otherwise an operation that permits recovery invokes the recovery helper, whose own recheck can adopt a listed live session and upsert its binding; if none is found, persisted resume state is required before startSession receives the saved cwd, model, runtime mode, and cursor. Stop avoids recovery. Missing bindings, removed/unavailable instances, missing cursors, native auth/transport errors, and adapter identity mismatches remain failures rather than silently selecting another account." textEquivalent="Given a thread operation, ProviderService reads its persisted binding. With no binding it returns validation failure. It requires the binding's provider-instance id and resolves that exact live adapter; an absent or unavailable configured instance fails instead of falling back to another instance of the same driver. If the first adapter.hasSession check is true, resolveRoutableSession returns a direct active route without listSessions, adoption, or a binding write. If no session is active and the operation disallows recovery, it continues as inactive only for stop semantics. When recovery is allowed, recoverSessionForThread rechecks the adapter; if listSessions yields the thread, that helper adopts the returned session and refreshes the binding. Otherwise it requires a resume cursor, restores persisted cwd, model selection and runtime mode, prepares the MCP session, and invokes adapter.startSession. Success validates driver identity and upserts the binding; native failure propagates." sources={["provider-service-session-recovery", "provider-service-start-session", "provider-session-directory", "provider-adapter-registry-live"]}>
+  <Mermaid id="provider-instance-routing" label="Provider instance routing and session recovery decision tree" chart={`flowchart TB
+    O[thread operation] --> B{persisted binding?}
+    B -->|no| X[validation failure]
+    B -->|yes| I[resolve exact instance adapter]
+    I -->|missing or shadow| U[route failure]
+    I -->|live| H{adapter has session?}
+    H -->|yes| A[route to active live session]
+    H -->|no| Q{recovery allowed?}
+    Q -->|no · stop| Z[mark stopped without restart]
+    Q -->|yes| J{recovery recheck finds listed session?}
+    J -->|yes| A2[adopt listed live session]
+    A2 --> W[upsert durable binding]
+    J -->|no| C{resume cursor?}
+    C -->|no| X
+    C -->|yes| R[startSession with saved cursor + mode + cwd + model]
+    R -->|identity valid| W
+    R -->|native error| F[propagate typed failure]`} />
+</Figure>
+
+Default continuation identity includes both driver and instance. Codex and Claude
+can override it with home/layout-derived groups, so a same-driver instance switch is
+compatible only when both driver kind **and** continuation key match. A shared
+native login by itself is not enough evidence.
+
+## Route a conceptual provider fleet
+
+Use the lab to compare a legacy default, an explicit same-driver work instance, an
+unknown-driver shadow, a removed instance with an old binding, and a rebuilt
+instance with or without resume state. The animation separates settings
+materialization from live lookup and lazy recovery.
+
+<ProviderRoutingLab id="provider-instance-router" />
+
+## Evidence and remaining seams
+
+Registry tests construct two Codex instances and verify distinct adapter,
+text-generation, and snapshot closures. They cover nested enabled-state precedence
+and boot-safe unknown-driver shadows. Settings tests verify that marked sensitive
+environment values do not enter `settings.json`, while redacted updates preserve
+the stored secret. ProviderService tests exercise persisted routing, resume,
+stale-session cleanup, event correlation, and input validation.
+
+The inspected tests do not inject a hard crash into every instruction of child-scope
+replacement and subsequent lazy recovery. They also do not enforce
+`supportsMultipleInstances: false`, because the production registry does not yet
+implement that documented branch.
+
+<Callout title="Design transfer: make identity impossible to collapse" tone="info">
+  A multi-harness orchestrator should use separate types for driver kind, configured
+  instance, native account observation, durable task/thread, native session, and
+  continuation group. Persist the configured instance route, preserve unavailable
+  entries, and require an explicit migration policy before moving live work between
+  accounts.
+</Callout>
+
+<SourceList ids={[
+  "provider-instance-identity-contract",
+  "server-provider-routing-identity",
+  "provider-session-contract",
+  "provider-driver-instance-spi",
+  "provider-driver-instance-records",
+  "built-in-provider-drivers",
+  "provider-instance-settings-contract",
+  "provider-instance-hydration",
+  "provider-instance-enabled-precedence",
+  "provider-instance-build-shadow",
+  "provider-instance-registry-reconcile",
+  "provider-unavailable-shadow",
+  "provider-adapter-registry-live",
+  "provider-registry-boot-cache",
+  "provider-registry-live-sync",
+  "provider-managed-snapshot-lifecycle",
+  "provider-instance-environment-contract",
+  "provider-instance-secret-materialization",
+  "provider-instance-settings-redaction",
+  "provider-instance-environment-overlay",
+  "opencode-password-settings",
+  "opencode-password-persistence-test",
+  "opencode-external-basic-auth",
+  "opencode-process-ownership",
+  "provider-session-directory",
+  "provider-service-session-recovery",
+  "provider-service-start-session",
+  "provider-reactor-session-continuity",
+  "codex-continuation-identity",
+  "claude-continuation-identity",
+  "provider-instance-registry-tests",
+  "provider-settings-secret-tests",
+  "provider-service-routing-tests"
+]} />

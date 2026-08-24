@@ -1,0 +1,134 @@
+---
+slug: codex-app-server-json-rpc
+order: 160
+number: "16"
+kind: chapter
+part: Part IV · Five harnesses, one product model
+partOrder: 4
+title: Codex through app-server JSON-RPC
+shortTitle: Codex app-server
+summary: Codex runs as a local app-server child speaking typed JSON-RPC over stdio; T3 translates its volatile native requests and notifications into canonical runtime events without making provider delivery durable.
+status: source-checked
+gates: [sources, interaction]
+objectives: [Trace the Codex process and JSON-RPC lifecycle, Distinguish native app-server shapes from canonical T3 events, Locate resume models plans approvals and live usage, Separate durable intent from volatile provider state]
+keywords: [Codex, app-server, JSON-RPC, stdio, resume, approvals, plans, token usage]
+sourceAreas: [packages/effect-codex-app-server/src, apps/server/src/provider/Layers/CodexAdapter.ts]
+visuals: [Codex JSON-RPC normalization flow, native-to-canonical boundary ledger]
+updatedAt: 2026-08-24
+---
+
+import Callout from "../../components/Callout.astro";
+import CodexRpcBoundaryLab from "../../components/CodexRpcBoundaryLab.astro";
+import EvidenceClaim from "../../components/EvidenceClaim.astro";
+import Figure from "../../components/Figure.astro";
+import Mermaid from "../../components/Mermaid.astro";
+import SourceExcerpt from "../../components/SourceExcerpt.astro";
+import SourceList from "../../components/SourceList.astro";
+
+Codex is not called by a browser or mobile client. T3 starts a local `codex
+app-server` child, speaks JSON-RPC over stdio, and owns the translation from its
+native protocol to the product’s `ProviderRuntimeEvent` stream. Process handles,
+pending RPC requests, and notification queues remain volatile. Durable truth still
+enters through orchestration commands and runtime ingestion.
+
+## A typed stdio client separates the child from the product
+
+<SourceExcerpt id="codex-app-server-client-typed-stdio" focus={[141, 149, 168, 176, 197, 203, 209]} note="The package registers typed request and notification handlers over stdio and exposes a typed request method. Child-process construction is catalogued separately below." />
+
+The transport tracks pending requests by JSON-RPC id, queues notifications, routes
+incoming server requests to handlers, and fails pending work when the stream ends.
+Spawn, process-exit, protocol, transport, and native request failures stay typed
+until the adapter maps them into T3’s shared provider-error taxonomy.
+
+<Figure number="16.1" title="Codex native protocol becomes a canonical event stream" hint="the lower hot-stream edge is not a transaction" caption="T3 spawns a Codex app-server child and initializes a typed stdio JSON-RPC client. A session runtime starts or resumes a native thread and sends turns. Native notifications and server requests are normalized by the adapter, then runtime ingestion dispatches internal commands whose successful transactions become durable orchestration state." textEquivalent="A Codex app-server child communicates over JSON-RPC stdio. The Codex runtime starts or resumes a native thread, sends or interrupts turns, reads or rolls back a thread, and responds to approval or input requests. The adapter maps selected native observations into an in-memory canonical provider-event stream. Runtime ingestion dispatches internal commands. Only the resulting event, projection, and receipt transaction is durable; the child, pending map, adapter queue, and hot stream are process-local." sources={["codex-app-server-client-typed-stdio", "codex-app-server-protocol-lifecycle", "codex-adapter-session-runtime", "provider-runtime-ingestion"]}>
+  <Mermaid id="codex-app-server-normalization" label="Codex app-server JSON-RPC normalization flow" chart={`flowchart LR
+    O[durable turn-start intent] --> R[provider command reactor]
+    R --> A[Codex adapter]
+    A -->|spawn + stdio| C[Codex app-server]
+    C -->|notifications / requests| A
+    A -->|canonical ProviderRuntimeEvent| H{{hot runtime stream}}
+    H --> I[runtime ingestion]
+    I -->|internal command| E[(event + projections + receipt)]
+    C -. native thread / pending request .-> V[volatile provider state]`} />
+</Figure>
+
+The stable contract begins at `ProviderRuntimeEvent`, not at an upstream method
+name. A product event is not evidence that T3 persists every native field; an
+unknown upstream notification can be ignored or mapped later without changing the
+client-facing contract.
+
+<EvidenceClaim kind="verified" title="Codex failures enter shared provider errors" refs={["codex-app-server-errors", "provider-adapter-error-taxonomy", "codex-adapter-error-mapping"]}>
+  The protocol package distinguishes process, protocol, transport, and JSON-RPC
+  request errors. The adapter classifies session-runtime process/transport loss,
+  missing native thread identity, and other operation failures as shared adapter
+  validation, session, request, or process errors.
+</EvidenceClaim>
+
+## Session start is also resume and configuration
+
+<SourceExcerpt id="codex-adapter-session-runtime" focus={[1642, 1648, 1654, 1659, 1671, 1674, 1683, 1691]} note="The adapter replaces an existing live session and supplies its resume cursor, runtime mode, and instance-bound model options. Event-consumer startup is catalogued separately below." />
+
+For one thread, `startSession` validates provider identity, closes any active Codex
+context, and creates a runtime with cwd and runtime mode. It forwards a resume
+cursor only when it matches Codex’s expected shape. Model and service-tier options,
+and later reasoning effort, are forwarded only when selection belongs to the
+adapter’s bound provider instance.
+
+The event consumer starts before the runtime start completes. This prevents an
+immediate native notification from being missed by the adapter; it does not journal
+notifications or make a process crash replay them. The reported
+`sessionModelSwitch: "in-session"` capability only says the adapter can change a
+live model; it does not promise every discovered model/option is accepted upstream.
+
+## Turns and interactions move in opposite directions
+
+`sendTurn` forwards text, attachments, model, reasoning effort, and service tier.
+Interrupt, read, and rollback address a live native context. A missing adapter
+session is not evidence that the durable T3 thread was deleted.
+
+When Codex already has an active turn, the runtime still calls native
+`turn/start`. App-server can accept that follow-up and return a queued native turn
+id, while the session deliberately keeps the current active id as the interrupt
+target. This is queued native-turn behavior—not the generic adapter SPI acquiring a
+`steer` method or reusing one product turn id.
+
+In the reverse direction, app-server requests approval or structured input. The
+adapter emits canonical pending-request observations; client responses return through
+`respondToRequest` or `respondToUserInput`. The native handler and waiting deferred
+are volatile. A product request becomes durable only after runtime ingestion commits
+an internal command.
+
+<CodexRpcBoundaryLab id="native-canonical-durable" />
+
+<Callout title="Accepted intent is not a completed Codex turn" tone="warning">
+  A durable turn-start command does not prove app-server started, a native request
+  reached Codex, an approval was answered, or a final result crossed the hot stream
+  and committed back into orchestration.
+</Callout>
+
+## Notification normalization is selective and product-shaped
+
+<SourceExcerpt id="codex-adapter-runtime-events" focus={[1000, 1011, 1014, 1031, 1065, 1073, 1082]} note="This excerpt shows selected native notifications becoming canonical token-usage and plan events. Model rerouting and error projection are catalogued as separate source ranges below." />
+
+Codex item activity becomes assistant content, tool/item lifecycle, and activity
+observations. Native plan material can become a proposed plan or plan delta;
+task/subagent-shaped signals are classified into product activity/task vocabulary.
+Model reroute becomes `model.rerouted`; retryable native error can become
+`runtime.warning`, fatal error `runtime.error`.
+
+Codex token-usage updates feed live per-thread context telemetry. They are not the
+Usage page’s transcript scanner, should not be summed with historical accounting,
+and do not represent subscription billing.
+
+<EvidenceClaim kind="inference" title="Canonicalization is not a lossless native archive" refs={["codex-adapter-runtime-events", "provider-runtime-event-union"]}>
+  The product contract has a finite event union while Codex emits versioned native
+  methods and payloads. The adapter retains selected diagnostics but does not make a
+  durable, complete archive of every notification or unknown upstream field.
+</EvidenceClaim>
+
+Stopping closes the runtime and interrupts its event fiber; listing sessions reads
+the adapter’s in-memory map. Tests cover instance-bound options, plans, errors,
+approval/input, usage, and consumer lifetime. They do not prove process-crash repair
+between adapter publication and runtime ingestion.
+
+<SourceList ids={["codex-app-server-client-typed-stdio", "codex-app-server-child-process", "codex-app-server-protocol-lifecycle", "codex-app-server-errors", "codex-adapter-session-runtime", "codex-adapter-event-consumer", "codex-followup-turn-queue", "codex-adapter-error-mapping", "codex-adapter-runtime-events", "codex-adapter-model-reroute", "codex-adapter-error-events", "codex-adapter-tests", "provider-adapter-error-taxonomy", "provider-runtime-event-union", "provider-runtime-ingestion"]} />

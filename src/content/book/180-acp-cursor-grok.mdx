@@ -1,0 +1,203 @@
+---
+slug: acp-cursor-grok
+order: 180
+number: "18"
+kind: chapter
+part: Part IV · Five harnesses, one product model
+partOrder: 4
+title: ACP transport, Cursor, and Grok
+shortTitle: ACP, Cursor, and Grok
+summary: A shared JSON-RPC runtime gives Cursor and Grok one transport skeleton, while their startup, mode/model, extension, interruption, and rollback semantics deliberately diverge.
+status: source-checked
+gates: [sources, interaction]
+objectives:
+  - Trace an ACP child from stdio JSON-RPC through a normalized hot runtime event.
+  - Separate negotiated ACP schema affordances from the product adapter’s declared SPI capability.
+  - Compare Cursor’s extensions and local transcript rollback with Grok’s XAI extensions and explicitly unsupported native rollback.
+  - Explain why steering and interruption need provider-specific race handling.
+keywords: [ACP, JSON-RPC, Cursor, Grok, session resume, extension, approval, steering, interrupt, rollback]
+sourceAreas: [packages/effect-acp/src, apps/server/src/provider/acp, apps/server/src/provider/Layers/CursorAdapter.ts, apps/server/src/provider/Layers/GrokAdapter.ts]
+visuals: [ACP session startup sequence, semantic fork matrix, steering race explorer]
+updatedAt: 2026-08-24
+---
+
+import Callout from "../../components/Callout.astro";
+import EvidenceClaim from "../../components/EvidenceClaim.astro";
+import Figure from "../../components/Figure.astro";
+import Mermaid from "../../components/Mermaid.astro";
+import AcpForkLab from "../../components/AcpForkLab.astro";
+import SourceExcerpt from "../../components/SourceExcerpt.astro";
+import SourceList from "../../components/SourceList.astro";
+
+Cursor and Grok are not two copies of a generic chat API. Both launch an Agent Client
+Protocol (ACP) child over stdio and reuse T3’s ACP session runtime; after that shared
+transport, their adapter code makes different promises. Those differences matter more
+than the shared method names when a meta-harness decides whether a turn can be resumed,
+steered, cancelled, or rolled back.
+
+This chapter uses **ACP capability** in its protocol sense only: the upstream
+initialization response can describe optional operations such as session load, fork,
+resume, or model switching. It does not mean T3 exposes a dynamic capability-negotiation
+surface to its own callers. The inspected T3 `ProviderAdapter` SPI declares only
+`sessionModelSwitch`; it is reported as `in-session` by these adapters. Do not turn the
+comparison below into a claim that every row is a negotiated runtime feature.
+
+## The reusable ACP machine
+
+`packages/effect-acp` is a typed ACP JSON-RPC client/server bridge. It owns a child
+process stdio transport, routes agent requests back to registered client handlers, and
+exposes typed calls for initialization, authentication, session lifecycle, prompt,
+cancel, configuration, and extension messages. `AcpSessionRuntime` puts the operational
+policy on top: it spawns the child inside a scope, serializes prompts, holds the active
+prompt fiber, parses `session/update` notifications, and gives adapters a queue of
+normalized ACP observations.
+
+<SourceExcerpt id="acp-client-typed-surface" focus={[40, 45, 65, 88, 102, 119, 126, 134]} note="The ACP client exposes initialize/authenticate, session creation/load/fork/resume, model/config writes, and prompt/cancel. Callback wiring is catalogued with the runtime sources below." />
+
+<Figure number="18.1" title="One ACP runtime, many provider-specific meanings" hint="the solid path is transport; the dashed path is the later durable ingestion boundary" caption="The shared runtime spawns one child, initializes and authenticates it, then creates or loads an ACP session. It parses session updates into a local queue. Cursor or Grok maps those observations and provider extensions into T3 ProviderRuntimeEvent values. Runtime ingestion later decides and commits product-side activity, request, plan, and turn state; the ACP child and its queues remain hot state." textEquivalent="An ACP child process communicates via stdio JSON-RPC with the effect-acp client. AcpSessionRuntime initializes it, authenticates it, and either loads a cursor-named session or makes a new one. Parsed updates, permission callbacks, and extension callbacks enter a local adapter queue. The Cursor or Grok adapter turns selected payloads into product runtime events. A separate runtime-ingestion path can turn selected observations into durable orchestration commands and projections. The child process, Deferred callback waits, active prompt fiber, and event queue are not SQLite state." sources={["acp-client-typed-surface", "acp-runtime-startup", "acp-runtime-event-queue", "provider-runtime-ingestion"]}>
+  <Mermaid id="acp-shared-runtime" label="Shared ACP transport and product boundary" chart={`flowchart LR
+    C[Cursor or Grok CLI child] <-->|stdio JSON-RPC| A[effect-acp client]
+    A --> R[AcpSessionRuntime]
+    R --> S[initialize → authenticate → load/new]
+    S --> Q[parsed local event queue]
+    Q --> D[provider-specific adapter]
+    D --> H[hot ProviderRuntimeEvent]
+    H -. internal commands .-> I[runtime ingestion]
+    I --> X[(durable events + projections)]
+    R -. scoped volatile state .-> V[child · prompt fiber · Deferred waits]`} />
+</Figure>
+
+The runtime gives a resumed session special treatment. It asks ACP for `session/load`
+with the stored native session id and suppresses replay-shaped updates during an
+initial bounded gate. It can complete on an RPC response or an idle replay gap, with a
+default 90-second timeout. That prevents a historical replay from being emitted as a
+new live turn, but it does not make the child’s upstream history a durable T3
+projection.
+
+<EvidenceClaim kind="verified" title="Prompt serialization and cancellation are local control policy" refs={["acp-runtime-prompt-cancel"]}>
+  `AcpSessionRuntime` protects prompt calls with a semaphore. Its cancel path interrupts
+  the active local prompt fiber and asynchronously sends ACP `session/cancel`. This is
+  a best-effort coordination step across a process boundary, not a transaction that
+  proves the agent stopped before a later native update arrives.
+</EvidenceClaim>
+
+## Cursor: config-driven mode, typed extensions
+
+Cursor spawns `cursor-agent … acp`, optionally passing a configured endpoint. Its ACP
+runtime advertises Cursor’s parameterized model-picker capabilities; start requires a
+non-empty working directory and may pass a persisted native `sessionId` as a resume
+input. It can add T3’s MCP server to that ACP session when one exists for the thread.
+
+After ACP startup, the adapter first applies the requested model and then configuration
+options. It derives a suitable Cursor mode from T3’s runtime/interaction intent:
+`plan`/`architect` aliases for plan work; approval/implement aliases for ordinary work.
+Those are selection heuristics over Cursor’s returned modes, not universal names
+guaranteed by ACP. A missing matching mode falls back to another available non-plan
+mode or the current mode.
+
+<SourceExcerpt id="cursor-session-mode-selection" focus={[217, 220, 227, 231, 241, 252, 264, 280, 290]} note="Cursor aliases plan/architect, approval/ask, and implement/agent modes, then writes model/configuration through the ACP session runtime." />
+
+The native extension surface adds product-specific meaning:
+
+- `cursor/ask_question` parks a Deferred answer, emits canonical
+  `user-input.requested`, and sends a resolved event when T3 responds.
+- `cursor/create_plan` becomes `turn.proposed.completed` with plan markdown.
+- `cursor/update_todos` is normalized into plan updates.
+- standard ACP `session/request_permission` either auto-selects an allowed option in
+  full-access mode or parks a Deferred approval and emits canonical request events.
+
+The Deferred is deliberately hot. A product request becomes durable only after the
+later ingestion command succeeds; a restart cannot re-enter an in-process ACP
+callback by reading the projection alone.
+
+## Grok: a different ACP dialect on the same rails
+
+Grok starts `grok agent stdio`, selects API-key versus cached-token authentication
+from the environment, and adds the `t3code` OAuth referrer. It uses the same base
+runtime lifecycle—initialize, authenticate, load-or-new session, queued updates—but
+wraps it with XAI prompt-completion handling and its own model resolver. A requested
+Grok model is applied with unstable ACP `session/set_model` only when it differs from
+the session setup’s current model.
+
+<SourceExcerpt id="grok-acp-runtime-support" focus={[32, 38, 43, 49, 65, 73, 90, 101, 107]} note="Grok’s wrapper launches `grok agent stdio`, selects its auth method, applies a t3code OAuth referrer, and switches model only when the requested native id differs." />
+
+Grok’s user-input extension is `x.ai/ask_user_question` (and an underscore-prefixed
+variant). It has a distinct cancellation response shape. Its standard ACP permission
+path is similar to Cursor’s but chooses a compatible permission option rather than
+assuming identical labels. Both adapters map tool, item, content, and plan updates
+into product runtime events, but neither claims that every native field becomes
+durable product data.
+
+## Where shared names fork
+
+<AcpForkLab id="cursor-grok-semantics" />
+
+<div class="table-scroll" tabindex="0" role="region" aria-label="Cursor and Grok semantic fork matrix">
+<table class="comparison">
+  <caption class="sr-only">Concrete Cursor and Grok adapter behavior, not generic ACP capability claims</caption>
+  <thead><tr><th scope="col">Concern</th><th scope="col">Cursor adapter</th><th scope="col">Grok adapter</th></tr></thead>
+  <tbody>
+    <tr><th scope="row">launch</th><td><code>cursor-agent … acp</code>; optional endpoint</td><td><code>grok agent stdio</code>; XAI auth/referrer setup</td></tr>
+    <tr><th scope="row">resume</th><td>passes a versioned Cursor session id to the shared ACP runtime</td><td>passes a versioned Grok session id to the same load-or-new path</td></tr>
+    <tr><th scope="row">mode/model</th><td>model plus config-option mode heuristic from discovered mode state</td><td>compares setup model then calls ACP <code>session/set_model</code> when needed</td></tr>
+    <tr><th scope="row">plan/input extensions</th><td>Cursor plan/todo/question extensions receive bespoke mappings</td><td>XAI ask-user extension receives bespoke mapping; ordinary ACP updates can still carry plans</td></tr>
+    <tr><th scope="row">running second prompt</th><td>reuses active turn id; only the last prompt completion settles it</td><td>same intent, with turn-target-aware settlement and interrupted-turn suppression</td></tr>
+    <tr><th scope="row">interrupt</th><td>cancels ACP and resolves pending approval/input waits</td><td>marks a target as interrupted before the lock, filters late notifications, then cancels and settles slots</td></tr>
+    <tr><th scope="row">rollback</th><td>emulates local rollback by truncating its in-memory turn snapshot</td><td><strong>explicitly unsupported</strong>: returns a provider request error; no provider-side rollback is invoked</td></tr>
+  </tbody>
+</table>
+</div>
+
+The rollback row is intentionally asymmetric. Cursor’s implementation removes entries
+from its local `ctx.turns` array; source inspection does not find a Cursor ACP native
+revert call in that method. That changes the adapter’s read snapshot, not necessarily
+the provider’s remote history. Grok refuses the operation explicitly. Orchestration
+revert still has its own durable events and projection cleanup (Chapter 13); neither
+adapter row should be read as a transaction across that durable model and native
+provider state.
+
+<EvidenceClaim kind="verified" title="Grok’s interruption protocol is stricter because late events are expected" refs={["grok-interrupt-race", "grok-interrupt-tests"]}>
+  `interruptTurn` records the targeted id before it takes the per-thread lock, checks
+  that the session and active turn still match, resolves waits, sends cancel, and
+  settles outstanding prompt slots. Notification handling suppresses observations
+  for ids already marked interrupted. The corresponding tests exercise cancellation
+  before late updates and interruption followed by a new turn.
+</EvidenceClaim>
+
+Cursor also serializes per-thread start/stop work and tracks prompts in flight, so a
+second prompt becomes a steer instead of a second product turn. Its completion logic
+lets only the final outstanding prompt settle the turn. The shared semantic—one
+product turn while upstream work is running—does not make the races identical.
+
+<Callout title="Design transfer: normalize outcomes, retain provider escape hatches" tone="info">
+  A meta-harness can share a transport/session kernel, but must keep provider policies
+  explicit: resume cursor schema, callback cancellation response, mode-selection
+  heuristic, late-event filtering, and rollback ownership. A generic “ACP supports
+  it” checkbox is too weak to make a recovery or UX promise.
+</Callout>
+
+## Evidence boundaries and useful tests
+
+The pinned tests cover model/mode setup, mid-turn steering, cancellation, callback
+responses, and a regression where notification consumers accidentally died when the
+`startSession` caller fiber ended. They do not prove that an arbitrary real Cursor or
+Grok server will expose the same optional ACP capabilities, extension payloads, or
+remote-history semantics. Those are server/version-dependent integrations.
+
+<SourceList ids={[
+  "acp-client-typed-surface",
+  "acp-runtime-startup",
+  "acp-runtime-prompt-cancel",
+  "acp-runtime-event-queue",
+  "cursor-acp-spawn",
+  "cursor-session-mode-selection",
+  "cursor-extension-callbacks",
+  "cursor-steering-and-rollback",
+  "cursor-adapter-tests",
+  "grok-acp-runtime-support",
+  "grok-extension-callbacks",
+  "grok-interrupt-race",
+  "grok-rollback-unsupported",
+  "grok-interrupt-tests",
+  "provider-runtime-ingestion"
+]} />
