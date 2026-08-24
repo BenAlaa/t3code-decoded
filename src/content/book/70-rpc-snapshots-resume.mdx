@@ -1,0 +1,200 @@
+---
+slug: rpc-snapshots-resume
+order: 70
+number: "7"
+kind: chapter
+part: Part II · Boot and connect
+partOrder: 2
+title: HTTP, WebSocket RPC, snapshots, and resume
+shortTitle: RPC and resume
+summary: Typed contracts span HTTP and Effect RPC, while snapshot, bounded catch-up, buffered live delivery, and client watermarks repair connection races.
+status: source-checked
+gates: [sources, interaction]
+objectives:
+  - Separate domain schemas, RPC definitions, transport serialization, and handlers.
+  - Simulate the attach-before-snapshot resume algorithm and its gap cutoff.
+  - Explain which layer owns coalescing, deduplication, and reconnection.
+keywords: [Effect RPC, WebSocket, HTTP, snapshot, cursor, replay, synchronization]
+sourceAreas: [packages/contracts/src/orchestration.ts, packages/contracts/src/rpc.ts, packages/contracts/src/environmentHttp.ts, apps/server/src/ws.ts, packages/client-runtime/src]
+visuals: [contract stack, animated resume interleaver, cursor decision lab]
+updatedAt: 2026-08-24
+---
+
+import Callout from "../../components/Callout.astro";
+import EvidenceClaim from "../../components/EvidenceClaim.astro";
+import Figure from "../../components/Figure.astro";
+import FlowLab from "../../components/FlowLab.astro";
+import Mermaid from "../../components/Mermaid.astro";
+import ScenarioLab from "../../components/ScenarioLab.astro";
+import SourceExcerpt from "../../components/SourceExcerpt.astro";
+import SourceList from "../../components/SourceList.astro";
+
+The server is active, but a client still needs two different kinds of truth:
+authoritative state it can load now and a live stream that will not miss what changes
+while that load is happening. T3 Code splits that job across typed HTTP endpoints,
+typed Effect RPC methods, and a deliberately ordered snapshot/catch-up/live protocol.
+
+## Four layers, one contract boundary
+
+<Figure number="7.1" title="From domain schema to bytes and back" hint="do not collapse these layers" caption="Domain schemas define decoded values; HTTP and RPC declarations bind those values to operations; server handlers implement them; Effect RPC and its JSON serialization layer own the WebSocket envelope; client runtime turns sessions into durable subscriptions." textEquivalent="Contracts contain domain snapshot and event schemas. A typed environment HTTP API and typed Effect RPC groups refer to those schemas. Server HTTP and WebSocket handlers implement the operations. The WebSocket route authenticates a session and installs Effect RPC's JSON protocol. The client creates one protocol session and replaces subscriptions when that session changes." sources={["orchestration-snapshot-contracts", "orchestration-rpc-schema-map", "rpc-orchestration-definitions", "environment-http-contracts", "ws-route-json-protocol", "client-rpc-session", "client-rpc-subscriptions"]}>
+  <Mermaid id="typed-transport-stack" label="T3 typed transport stack" chart={`flowchart LR
+    S[domain schemas] --> H[environment HTTP API]
+    S --> R[Effect RPC definitions]
+    H --> HI[HTTP handlers]
+    R --> WI[WebSocket handlers]
+    WI --> J[Effect RPC JSON protocol]
+    J <--> C[client RPC session]
+    C --> D[session-aware subscriptions]
+    HI <--> L[HTTP snapshot loader]
+    L --> D`} />
+</Figure>
+
+The schema map does not specify a hand-written WebSocket frame such as
+`{type, requestId, payload}`. Effect RPC owns that protocol envelope and the route
+provides JSON serialization. This book therefore documents typed operations and
+observable stream items, not a fabricated wire format.
+
+<EvidenceClaim kind="verified" title="HTTP and WebSocket are complementary" refs={["environment-http-contracts", "orchestration-http-snapshots", "rpc-orchestration-definitions"]}>
+  HTTP exposes authoritative shell and thread snapshot reads alongside other
+  environment APIs. WebSocket RPC exposes unary commands and long-lived shell/thread
+  subscriptions. The client may seed from HTTP and pass that snapshot sequence into
+  a WebSocket subscription instead of downloading the same state again.
+</EvidenceClaim>
+
+The two transports share decoded command schemas, but not every policy step. HTTP
+normalizes and dispatches directly. The WebSocket path additionally owns startup
+queueing, bootstrap compensation, origin attribution, and selected archive/settle
+follow-ups. “Same contract type” therefore does not mean interchangeable handler
+semantics.
+
+## Capabilities make synchronization evolvable
+
+The first RPC session caches `server.getConfig`. Besides environment, providers,
+settings, and observability data, the response advertises whether the connected
+server supports shell and thread completion markers and thread snapshot pagination.
+Clients gate newer behavior on those flags rather than assuming version equality.
+
+One WebSocket session attempt explicitly disables internal transport retries. A
+higher connection supervisor owns replacement sessions, backoff, lifecycle wakeups,
+and target changes; `subscribeDynamic` switches each durable subscription to the
+current session. Keeping retry ownership outside the raw protocol attempt prevents
+two independent retry loops from fighting each other.
+
+## Attach live first
+
+The central race is simple: if the server reads a snapshot and only then subscribes
+to live events, an event committed between those operations appears in neither
+result. T3 Code reverses the first two actions: subscribe into a scope-bound buffer,
+then inspect authoritative state.
+
+<SourceExcerpt id="thread-resume-race" focus={[1394, 1401, 1408, 1412, 1415, 1418, 1421, 1424, 1428, 1433, 1438, 1441, 1445, 1446, 1451, 1468, 1475]} note="The thread stream attaches a filtered live subscription before replay or snapshot work, computes a bounded gap against the global event head, and falls back to a snapshot when the cursor cannot be safely replayed." />
+
+<FlowLab id="snapshot-catchup-live" title="Interleave snapshot, catch-up, and live events" prompt="Move through the protocol once. The buffer is attached before the database read so events committed during synchronization have somewhere to wait." steps={[
+  { label: "Attach", title: "Subscribe live into a scope-bound buffer", detail: "The shell or selected thread stream is attached before any snapshot query or persisted replay. New commits can now queue while synchronization reads run.", actor: "WebSocket handler", sourceIds: ["ws-shell-resume", "ws-thread-subscription", "orchestration-thread-stream-contract"], tone: "transport" },
+  { label: "Capture head", title: "Freeze the replay boundary", detail: "When an afterSequence cursor exists, the handler reads the latest global orchestration sequence and computes head − cursor. Replay is bounded to that captured head rather than chasing a moving tail.", actor: "OrchestrationEngine", sourceIds: ["ws-shell-resume", "ws-thread-subscription"], tone: "durable" },
+  { label: "Choose base", title: "Replay a bounded gap or replace with a snapshot", detail: "A cursor from 0 through 1,000 events behind replays persisted events. A cursor ahead of the head, more than 1,000 behind, or absent takes the fresh snapshot path.", actor: "resume decision", sourceIds: ["ws-resume-gap-cap", "ws-shell-resume", "ws-thread-subscription", "orchestration-http-snapshots"], tone: "runtime" },
+  { label: "Catch up", title: "Emit state through the captured head", detail: "Shell catch-up coalesces projection refetches by aggregate. Thread catch-up scans the global range but emits only matching thread-detail events.", actor: "RPC stream", sourceIds: ["ws-shell-coalescing", "ws-shell-resume"], tone: "runtime" },
+  { label: "Synchronize", title: "Place the completion marker behind buffered work", detail: "When negotiated, synchronized is offered into the same queue as live input. It cannot overtake an event waiting in the shell coalescing window or thread buffer.", actor: "live buffer", sourceIds: ["ws-shell-coalescing", "ws-advertised-capabilities"], tone: "transport" },
+  { label: "Drain live", title: "Continue from the hot stream", detail: "Buffered and future live events flow after the base state. Client reducers drop any event whose sequence is not greater than their watermark, removing overlap between replay and live delivery.", actor: "client runtime", sourceIds: ["client-shell-convergence", "client-thread-convergence", "client-rpc-subscriptions"], tone: "client" }
+]} />
+
+## The cursor decision is intentionally bounded
+
+<ScenarioLab id="resume-cursor-decisions" title="Choose a resume cursor" prompt="Compare the server's actual decision and the client convergence consequence." scenarios={[
+  {
+    label: "No cursor",
+    title: "Send a fresh snapshot, then buffered live input",
+    summary: "A client without usable local data has no sequence to resume from, so the stream establishes a new authoritative base.",
+    facts: ["Thread snapshots may be windowed only when pagination was negotiated.", "The snapshot carries its sequence watermark.", "A requested completion marker follows all buffered work that belongs before it."],
+    sourceIds: ["orchestration-snapshot-contracts", "ws-shell-resume", "ws-advertised-capabilities"],
+    tone: "safe"
+  },
+  {
+    label: "Gap ≤ 1,000",
+    title: "Replay persisted events through the captured head",
+    summary: "A non-negative gap at or below the cap avoids replacing already loaded state.",
+    facts: ["afterSequence is the global orchestration sequence, not a thread-local counter.", "Unrelated aggregate events count toward the thread replay gap.", "Overlapping live events are harmless only because the client deduplicates by sequence."],
+    sourceIds: ["ws-resume-gap-cap", "ws-shell-resume", "ws-thread-subscription", "orchestration-thread-stream-contract"],
+    tone: "safe"
+  },
+  {
+    label: "Gap > 1,000",
+    title: "Reset from a fresh snapshot",
+    summary: "The cap avoids decoding an unbounded global range only to discard nearly all events for one thread.",
+    facts: ["A truncated replay would silently omit relevant thread events, so truncation is not used.", "turnLimit affects the fallback snapshot window, not the replay count.", "The fresh snapshot replaces loaded thread history on the client."],
+    sourceIds: ["ws-resume-gap-cap", "ws-thread-subscription", "orchestration-snapshot-contracts", "client-thread-convergence"],
+    tone: "warning"
+  },
+  {
+    label: "Cursor ahead",
+    title: "Treat the cursor as invalid and reset",
+    summary: "A negative gap means the client watermark is ahead of this server's authoritative event head, such as after switching or restoring an environment.",
+    facts: ["The server sends a snapshot rather than accepting impossible history.", "Client snapshot application replaces the sequence watermark and loaded thread history.", "The new snapshot becomes the current subscription baseline."],
+    sourceIds: ["ws-shell-resume", "ws-thread-subscription", "client-thread-convergence"],
+    tone: "failure"
+  }
+]} />
+
+## Shell and thread streams optimize different projections
+
+<div class="table-scroll" tabindex="0" role="region" aria-label="Shell and thread stream differences">
+<table class="comparison">
+  <caption class="sr-only">Comparison of shell and thread-detail stream behavior</caption>
+  <thead><tr><th>Concern</th><th>Shell stream</th><th>Thread-detail stream</th></tr></thead>
+  <tbody>
+    <tr><td>Projection</td><td>project/thread summaries for navigation</td><td>one thread's messages, activities, turns, plans, checkpoints, and session detail</td></tr>
+    <tr><td>Live optimization</td><td>50 ms / 512-input window; last event per aggregate triggers a current-shell refetch</td><td>filtered detail events stream without shell coalescing</td></tr>
+    <tr><td>Replay cutoff</td><td>global gap 0…1,000</td><td>global gap 0…1,000, then filter to the requested thread</td></tr>
+    <tr><td>Fallback</td><td>fresh shell snapshot</td><td>fresh thread snapshot, optionally windowed by negotiated <code>turnLimit</code></td></tr>
+  </tbody>
+</table>
+</div>
+
+<Callout title="A hot buffer is not a durable queue" tone="warning">
+  The event store makes catch-up possible, but each live subscription buffer is an
+  unbounded in-memory queue bound to that stream's scope. Process loss clears it.
+  Reconnection converges by persisted replay or a fresh snapshot—not by restoring
+  the old queue. Chapter 12 compares this with the mobile durable outbox.
+</Callout>
+
+The `threadSequence` attached to an older-page snapshot is a thread-scoped merge
+watermark for pagination. It is not the `afterSequence` subscription cursor. The
+client can park a page read ahead of its live state until that watermark arrives,
+while its subscription continues to advance on the global sequence.
+
+<EvidenceClaim kind="verified" title="A sequence acknowledgement is not provider completion" refs={["ws-dispatch-handler", "ws-command-entry-policy", "command-commit-acknowledgement"]}>
+  A successful dispatch response reports the committed orchestration sequence. The
+  provider reactor and its external work occur after that transaction, so the
+  acknowledgement proves durable command acceptance—not a completed harness turn.
+</EvidenceClaim>
+
+<EvidenceClaim kind="verified" title="The synchronized marker closes a race, not the connection" refs={["ws-shell-coalescing", "ws-advertised-capabilities", "client-rpc-subscriptions"]}>
+  It tells a negotiating client that base-state and buffered catch-up work are now
+  applied, so the projection may move from synchronizing to live. The stream remains
+  open for future events and will be replaced when the supervisor installs another
+  RPC session.
+</EvidenceClaim>
+
+<SourceList ids={[
+  "orchestration-snapshot-contracts",
+  "orchestration-thread-stream-contract",
+  "orchestration-rpc-schema-map",
+  "rpc-orchestration-definitions",
+  "environment-http-contracts",
+  "orchestration-http-snapshots",
+  "ws-authenticated-session",
+  "ws-shell-coalescing",
+  "ws-advertised-capabilities",
+  "ws-resume-gap-cap",
+  "ws-command-entry-policy",
+  "ws-dispatch-handler",
+  "ws-shell-resume",
+  "ws-thread-subscription",
+  "ws-route-json-protocol",
+  "command-commit-acknowledgement",
+  "client-rpc-session",
+  "client-rpc-subscriptions",
+  "client-shell-convergence",
+  "client-thread-convergence",
+  "thread-state-runtime"
+]} />

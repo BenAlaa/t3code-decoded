@@ -1,0 +1,185 @@
+---
+slug: cli-bootstrap
+order: 50
+number: "5"
+kind: chapter
+part: Part II · Boot and connect
+partOrder: 2
+title: The `npx t3` bootstrap path
+shortTitle: CLI bootstrap
+summary: The published package resolves commands and configuration, locates its copied web client, and hands one readonly ServerConfig value to the layered runtime.
+status: source-checked
+gates: [sources]
+objectives:
+  - Trace npm's executable entry through command selection and server launch.
+  - Apply the real CLI, environment, desktop-bootstrap, and default precedence rules.
+  - Distinguish bundled JavaScript, copied web assets, and native external dependencies.
+keywords: [npx t3, CLI, ServerConfig, bootstrap, static assets, npm package]
+sourceAreas: [apps/server/src/bin.ts, apps/server/src/cli, apps/server/scripts/cli.ts, apps/server/vite.config.ts]
+visuals: [package exploder, interactive bootstrap stepper, configuration scenario resolver]
+updatedAt: 2026-08-24
+---
+
+import Callout from "../../components/Callout.astro";
+import EvidenceClaim from "../../components/EvidenceClaim.astro";
+import Figure from "../../components/Figure.astro";
+import FlowLab from "../../components/FlowLab.astro";
+import Mermaid from "../../components/Mermaid.astro";
+import ScenarioLab from "../../components/ScenarioLab.astro";
+import SourceExcerpt from "../../components/SourceExcerpt.astro";
+import SourceList from "../../components/SourceList.astro";
+
+`npx t3` looks like one command, but it crosses three distinct systems: npm
+selects a published executable, the Effect CLI selects a command and resolves
+configuration, and the server runtime acquires the services described in Chapter 6.
+Keeping those stages separate makes several otherwise surprising behaviors obvious.
+
+## What npm actually installs
+
+The package is named `t3`, exposes `dist/bin.mjs` as the `t3` executable, and
+publishes only `dist`. That directory is deliberately more than one JavaScript file.
+
+<div class="table-scroll" tabindex="0" role="region" aria-label="Published CLI artifact anatomy">
+<table class="comparison">
+  <caption class="sr-only">Artifacts inside or beside the published T3 CLI bundle</caption>
+  <thead><tr><th>Artifact</th><th>How it gets there</th><th>Why it remains distinct</th></tr></thead>
+  <tbody>
+    <tr><td><code>dist/bin.mjs</code></td><td>bundled from <code>src/bin.ts</code></td><td>the npm executable and command graph</td></tr>
+    <tr><td><code>dist/service-launcher.mjs</code></td><td>second bundle entry</td><td>standalone managed-update trial and handoff process</td></tr>
+    <tr><td><code>dist/client/*</code></td><td>copied from the completed web build</td><td>static web application served by the CLI</td></tr>
+    <tr><td>selected <code>node_modules</code></td><td>kept external by policy</td><td>native binaries/loaders must exist on the real filesystem</td></tr>
+  </tbody>
+</table>
+</div>
+
+<Figure number="5.1" title="Published package exploder" hint="build edges are not runtime calls" caption="The server build waits for the web build, bundles the CLI and service launcher, copies the web output, and leaves the native dependency closure external. Publish then asserts that the required executable, launcher, and client entry exist." textEquivalent="The source CLI and service launcher become separate files in dist. The web build is copied to dist/client. Native packages remain in installed node_modules. package.json maps the t3 executable to dist/bin.mjs and publishes only dist." sources={["cli-package-surface", "cli-bundle-policy", "cli-web-bundle", "cli-publish-assertions", "cli-native-dependency-boundary", "service-launcher-trial-handoff"]}>
+  <Mermaid id="cli-package-artifacts" label="T3 CLI package artifact graph" chart={`flowchart LR
+    B[apps/server/src/bin.ts] -->|bundle| CLI[dist/bin.mjs]
+    L[src/service-launcher.ts] -->|bundle| SL[dist/service-launcher.mjs]
+    W[apps/web/dist] -->|copy| UI[dist/client]
+    N[native dependency closure] -->|external| NM[node_modules]
+    CLI --> P[npm package: t3]
+    SL --> P
+    UI --> P
+    NM -.installed beside.-> P`} />
+</Figure>
+
+<EvidenceClaim kind="verified" title="The web client is a required publish artifact, not an inlined UI" refs={["cli-build-dependency", "cli-web-bundle", "cli-publish-assertions", "server-route-composition"]}>
+  A local build warns and continues when `apps/web/dist` is absent. The publish path is stricter: it refuses to publish without the copied client entry and service launcher. At runtime the browser still crosses HTTP and WebSocket boundaries.
+</EvidenceClaim>
+
+## One entry, several command meanings
+
+<SourceExcerpt id="cli-entry-command" focus={[23, 24, 28, 34, 43, 47, 48, 50, 51, 52, 53, 60, 66, 67, 70]} note="Bare t3 uses the root handler; start and serve are explicit subcommands. Connect is always registered: builds without public cloud configuration install a hidden handler that returns an explanatory failure." />
+
+Bare `t3` and `t3 start` both call `runServerCommand` with normal browser
+presentation. `t3 serve` is not merely an alias for `--no-browser`: it requests
+headless presentation and forces cwd auto-bootstrap off so a service can start
+without inventing project state.
+
+<SourceExcerpt id="cli-serve-semantics" focus={[21, 23, 26, 28, 30, 31, 32, 33]} note="The command choice can override later configuration. Headless startup wins over a no-browser input, and serve explicitly disables cwd project bootstrap." />
+
+<FlowLab id="cli-bootstrap-path" title="Follow `npx t3` into the runtime" prompt="Use Previous/Next or select a stage; the moving token stops where ownership changes." steps={[
+  { label: "Resolve", title: "npm selects the published executable", detail: "The package bin map points the t3 command at dist/bin.mjs. The copied client and launcher are sibling runtime artifacts, not source-tree assumptions.", actor: "npm", sourceIds: ["cli-package-surface", "cli-publish-assertions"], tone: "transport" },
+  { label: "Dispatch", title: "The Effect CLI selects a handler", detail: "Bare, start, serve, auth, pair, project, service, hidden __service-preflight, triage, and connect share one typed command graph. Connect is functional or hidden-unavailable according to the compiled cloud configuration.", actor: "src/bin.ts", sourceIds: ["cli-root-dispatch", "cli-service-preflight-command", "cli-command-semantics"], tone: "runtime" },
+  { label: "Resolve config", title: "Inputs collapse into one ServerConfig", detail: "Each field selects from the channels that actually apply to it; the resolver also creates required directories and constructs one readonly service value.", actor: "cli/config.ts", sourceIds: ["cli-config-channels", "cli-config-resolver"], tone: "durable" },
+  { label: "Locate UI", title: "Development and packaged clients diverge", detail: "A dev URL disables eager staticDir resolution. Loopback requests redirect to the development server; other eligible requests may still lazily locate the built client. Without a dev URL, lookup is eager.", actor: "config + HTTP", sourceIds: ["static-dir-resolution", "static-and-dev-serving"], tone: "client" },
+  { label: "Launch", title: "Configuration becomes an Effect service", detail: "runServerCommand provides the resolved ServerConfig to runServer. Layer acquisition now owns the process lifetime and registers activation-aware roots.", actor: "cli/server.ts", sourceIds: ["cli-command-semantics", "server-activation-barrier"], tone: "runtime" },
+  { label: "Prepare", title: "The listener and parked roots reach the activation boundary", detail: "Presentation is registered behind the same gate. Startup waits for the listener and auxiliary roots, prepares the launcher trial, publishes welcome, and then activates.", actor: "server startup", sourceIds: ["startup-authoritative-sequence", "activation-fork-parked"], tone: "runtime" },
+  { label: "Present", title: "Presentation mode chooses how access is exposed", detail: "Web browser presentation resolves a pairing target and honors noBrowser; desktop resolves its base URL. Headless output alone reads the bound port, combines it with configured host policy, and prints a credential, fragment URL, and QR code.", actor: "startup presentation", sourceIds: ["startup-browser-target", "startup-headless-access"], tone: "transport" }
+]} />
+
+## Configuration precedence is field-specific
+
+The common helper selects the first present `Option`, but callers supply different
+subsets of channels and defaults. Mode and port consult CLI, environment, desktop
+bootstrap, and a default; dev URL has CLI/environment inputs; cwd uses CLI/process
+cwd; presentation comes from the selected command. “CLI always wins” is therefore
+directionally useful, not a complete specification.
+
+<SourceExcerpt id="cli-config-precedence" focus={[244, 245, 246, 247, 248, 250, 253, 254, 255, 256, 257, 262, 265, 273, 274, 275, 279]} note="Mode and port use CLI → environment → desktop bootstrap → default. Base directory treats CLI or T3CODE_HOME as explicit before consulting the desktop bootstrap envelope." />
+
+<ScenarioLab id="cli-resolution-cases" title="Resolve four startup configurations" prompt="Choose an input set and inspect the winning channel and downstream consequence." scenarios={[
+  {
+    label: "Web defaults",
+    title: "Prefer 3773, then ask the OS for an ephemeral port",
+    summary: "With no explicit mode or port, the CLI uses web mode and tries the default once before reserving an OS-assigned loopback port.",
+    facts: ["cwd defaults to the invoking process and is normalized to an absolute path.", "Browser presentation is enabled by default.", "cwd project auto-bootstrap defaults on in web mode.", "An undefined host becomes the concrete loopback bind 127.0.0.1 in both platform implementations."],
+    sourceIds: ["cli-config-resolver", "available-port-selection", "server-path-layout", "server-platform-layers"],
+    tone: "safe"
+  },
+  {
+    label: "CLI beats env",
+    title: "Explicit flags win their fields",
+    summary: "A CLI mode, port, host, or base directory is selected before the corresponding environment and bootstrap values.",
+    facts: ["Precedence is evaluated independently per field.", "An explicit base directory changes how state paths are derived.", "Supplying a dev URL disables eager static lookup; non-loopback fallback may still resolve built assets lazily."],
+    sourceIds: ["cli-config-channels", "cli-config-resolver", "server-path-layout"],
+    tone: "neutral"
+  },
+  {
+    label: "Desktop bootstrap",
+    title: "The parent can inject one-time process configuration",
+    summary: "When no higher-precedence value exists, a bootstrap envelope supplies mode, port, host, T3 home, telemetry descriptors, and presentation-related settings.",
+    facts: ["The bootstrap envelope is read only when a bootstrap fd is configured.", "The Electron parent normally chooses a port before placing it in that envelope.", "Standalone CLI desktop-mode fallback is exactly port 3773; desktop defaults to loopback host and no browser."],
+    sourceIds: ["cli-config-resolver", "cli-config-channels", "desktop-backend-port-selection", "desktop-bootstrap-envelope"],
+    tone: "warning"
+  },
+  {
+    label: "Headless serve",
+    title: "The command overrides presentation intent",
+    summary: "Serve forces headless output and disables automatic cwd project creation even if ordinary web defaults would enable it.",
+    facts: ["No browser is opened.", "The output uses the listener's actual port, not only the configured fallback.", "The pairing credential is placed in the URL fragment."],
+    sourceIds: ["cli-command-semantics", "startup-headless-access"],
+    tone: "safe"
+  }
+]} />
+
+<Callout title="Do not flatten the desktop path" tone="warning">
+  The Electron parent can scan sequentially and supplies its chosen port with other
+  process metadata in the bootstrap envelope. The CLI resolver's own standalone
+  desktop fallback is exactly the default port. Keep those two owners distinct.
+</Callout>
+
+## State paths and client selection
+
+The resolver derives paths only after the base directory and dev URL are known,
+creates the cwd and server directories, loads persisted observability endpoints, and
+then returns the effective readonly `ServerConfig` value. A dev URL enables a
+loopback redirect and disables eager static lookup; a non-redirected eligible request
+can still resolve built assets lazily. Without a dev URL, lookup eagerly checks the
+compiled-adjacent `client` directory before the monorepo fallback. If neither has an
+index, the catch-all route returns HTTP 503 instead of an application shell.
+
+<EvidenceClaim kind="verified" title="Pairing secrets stay out of the initial request path and query" refs={["startup-headless-access", "startup-pairing-fragment", "client-pairing-fragment-strip"]}>
+  Startup output constructs `/pair#token=…`. URL fragments are not sent in the HTTP request; the browser client extracts and removes the fragment before exchanging the credential in Chapter 8.
+</EvidenceClaim>
+
+<SourceList ids={[
+  "cli-package-surface",
+  "cli-root-dispatch",
+  "cli-service-preflight-command",
+  "cli-command-semantics",
+  "cli-config-channels",
+  "cli-config-resolver",
+  "available-port-selection",
+  "desktop-backend-port-selection",
+  "desktop-bootstrap-envelope",
+  "server-path-layout",
+  "static-dir-resolution",
+  "cli-build-dependency",
+  "cli-web-bundle",
+  "cli-bundle-policy",
+  "cli-publish-assertions",
+  "cli-native-dependency-boundary",
+  "service-launcher-trial-handoff",
+  "static-and-dev-serving",
+  "server-platform-layers",
+  "server-route-composition",
+  "server-activation-barrier",
+  "startup-authoritative-sequence",
+  "activation-fork-parked",
+  "startup-browser-target",
+  "startup-headless-access",
+  "startup-pairing-fragment",
+  "client-pairing-fragment-strip"
+]} />

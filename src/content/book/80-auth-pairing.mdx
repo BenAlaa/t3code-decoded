@@ -1,0 +1,267 @@
+---
+slug: auth-pairing
+order: 80
+number: "8"
+kind: chapter
+part: Part II · Boot and connect
+partOrder: 2
+title: Pairing, credentials, TTLs, and scopes
+shortTitle: Pairing and auth
+summary: Short-lived bootstrap grants establish trust, durable signed sessions carry scopes, DPoP binds selected tokens to a key, and WebSocket tickets adapt a current session to an upgrade URL.
+status: source-checked
+gates: [sources, interaction]
+objectives:
+  - Distinguish bootstrap grants, steady-state sessions, DPoP proofs, and WebSocket tickets.
+  - Apply credential precedence, lifetime, one-use, and scope rules exactly.
+  - Identify replay and revocation boundaries without overstating the implementation.
+keywords: [pairing, authentication, scopes, session, DPoP, WebSocket ticket]
+sourceAreas: [packages/contracts/src/auth.ts, apps/server/src/auth, apps/web/src/environments/primary/auth.ts, apps/web/src/hostedPairing.ts, packages/client-runtime/src/connection/onboarding.ts, packages/client-runtime/src/authorization]
+visuals: [credential ladder, lifetime ledger, authentication decision lab]
+updatedAt: 2026-08-24
+---
+
+import Callout from "../../components/Callout.astro";
+import EvidenceClaim from "../../components/EvidenceClaim.astro";
+import Figure from "../../components/Figure.astro";
+import FlowLab from "../../components/FlowLab.astro";
+import Mermaid from "../../components/Mermaid.astro";
+import ScenarioLab from "../../components/ScenarioLab.astro";
+import SourceExcerpt from "../../components/SourceExcerpt.astro";
+import SourceList from "../../components/SourceList.astro";
+
+Pairing is not the authentication mechanism used for every request. It is a trust
+bootstrap: a short-lived or process-injected credential is exchanged for a
+SQLite-backed session. Ordinary HTTP traffic presents that session as a cookie,
+Bearer token, or DPoP-bound token. WebSocket upgrades can present a short-lived
+ticket that points back to the same current session row.
+
+## The advertised policy describes posture
+
+The server derives an authentication descriptor from runtime mode and whether its
+bind host is remotely reachable.
+
+<div class="table-scroll" tabindex="0" role="region" aria-label="Authentication policy derivation">
+<table class="comparison">
+  <caption class="sr-only">Authentication policy and bootstrap methods by runtime posture</caption>
+  <thead><tr><th>Runtime posture</th><th>Advertised policy</th><th>Bootstrap methods</th></tr></thead>
+  <tbody>
+    <tr><td>desktop, local-only host</td><td><code>desktop-managed-local</code></td><td>desktop bootstrap</td></tr>
+    <tr><td>desktop, remotely reachable host</td><td><code>remote-reachable</code></td><td>desktop bootstrap + one-time token</td></tr>
+    <tr><td>web/server, local-only host</td><td><code>loopback-browser</code></td><td>one-time token</td></tr>
+    <tr><td>web/server, remotely reachable host</td><td><code>remote-reachable</code></td><td>one-time token</td></tr>
+  </tbody>
+</table>
+</div>
+
+All four environment-server posture rows advertise browser-cookie, Bearer, and DPoP session methods. The contract
+also defines `unsafe-no-auth`, but the policy implementation does not produce it at
+the pinned revision. A descriptor is capability and posture metadata; it is not an
+authorization bypass.
+
+<EvidenceClaim kind="verified" title="The hosted static app is a client surface, not another server posture" refs={["hosted-static-auth-boundary", "hosted-pairing-url", "hosted-pairing-registration", "hosted-bearer-onboarding", "hosted-clerk-provider", "managed-relay-auth-provider", "managed-relay-dpop-authorization"]}>
+  A hosted pairing URL carries the backend host in its query and the one-time grant in
+  its fragment. The hosted client strips that fragment and registers the remote
+  environment with a Bearer session. Clerk authentication to T3 Connect is a separate
+  issuer; a managed-relay authorization later obtains its own DPoP-bound environment
+  session. Chapter 35 follows that cloud and relay path without conflating it with the
+  four environment-server rows above.
+</EvidenceClaim>
+
+<Figure number="8.1" title="Credential ladder and enforcement points" hint="arrows exchange, derive, or verify credentials" caption="Browser, plain-token, and DPoP token exchanges establish sessions differently. The DPoP exchange validates an initial proof before binding the issued token; later requests carry a separate token-bound proof. A WebSocket can use a ticket or direct request authentication, and RPC scopes are still enforced per method." textEquivalent="Mode and bind host produce an environment authentication descriptor. A desktop bootstrap seed or one-time pairing grant enters a browser-session exchange, plain Bearer token exchange, or DPoP token exchange. The DPoP token endpoint verifies a proof without an access-token hash, then issues a token bound to the proof key. Later DPoP requests verify a proof bound to the access token, method, and URL. HTTP authenticates the session, then an endpoint checks a scope where required. An authenticated session may mint a five-minute WebSocket ticket containing a session id. The WebSocket upgrade verifies the ticket and reloads the current session row; when no ticket is supplied it can instead authenticate the upgrade request directly. The RPC authorization map checks every method's required scope." sources={["auth-contracts", "auth-policy-derivation", "auth-session-exchange", "auth-http-exchange", "auth-request-precedence", "auth-pairing-ticket-upgrade", "websocket-ticket-session", "dpop-validation", "rpc-authorization-scopes"]}>
+  <Mermaid id="auth-credential-ladder" label="T3 authentication credential ladder" chart={`flowchart LR
+    P[mode + bind host] --> D[auth descriptor]
+    B[desktop bootstrap seed] --> X{exchange shape}
+    O[one-time pairing grant] --> X
+    X --> C[browser cookie session]
+    X --> T[Bearer session]
+    X --> I[verify token-endpoint DPoP proof]
+    I --> K[DPoP-bound signed session]
+    C --> H[HTTP session authentication]
+    T --> H
+    K --> Q[verify per-request DPoP proof] --> H
+    H --> S[endpoint scope check where required]
+    H --> W[issue WS ticket]
+    W --> U[verify ticket + reload session]
+    H -.direct upgrade without ticket.-> V["/ws authenticated session"]
+    U --> V
+    V --> R[per-method RPC scope map]
+    D -.advertises methods.-> X`} />
+</Figure>
+
+## Credential lifetime and replay ledger
+
+The classes differ in storage, duration, and consumption semantics. “Token” alone is
+too vague to reason about their security properties.
+
+<div class="table-scroll" tabindex="0" role="region" aria-label="Credential lifetime and replay ledger">
+<table class="comparison">
+  <caption class="sr-only">Credential storage, default lifetime, and replay behavior</caption>
+  <thead><tr><th>Credential</th><th>Storage / binding</th><th>Default lifetime / acceptance window</th><th>Use behavior</th></tr></thead>
+  <tbody>
+    <tr><td>desktop bootstrap seed</td><td>in-memory map; trusted process handoff</td><td>24 hours</td><td>unbounded reuse while process state survives</td></tr>
+    <tr><td>ordinary pairing link</td><td>plaintext credential in SQLite row</td><td>5 minutes</td><td>exactly one successful atomic consume</td></tr>
+    <tr><td>development startup link</td><td>plaintext credential in SQLite row</td><td>24 hours</td><td>exactly one successful atomic consume</td></tr>
+    <tr><td>normal startup link</td><td>plaintext credential in SQLite row</td><td>5 minutes</td><td>exactly one successful atomic consume</td></tr>
+    <tr><td>browser or Bearer session</td><td>server-signed token + SQLite session row</td><td>30 days</td><td>reusable until expiry or revocation</td></tr>
+    <tr><td>DPoP access session</td><td>signed token with a <code>jkt</code> claim + SQLite session row; bound to a P-256 key</td><td>1 hour</td><td>requires a valid token-bound proof per request</td></tr>
+    <tr><td>DPoP proof</td><td>signed JWT + exclusive replay-marker file</td><td>5-minute acceptance window; 5-second future tolerance; no <code>exp</code> claim</td><td>one use for each thumbprint + <code>jti</code></td></tr>
+    <tr><td>WebSocket ticket</td><td>server-signed ticket containing session id; row reloaded</td><td>5 minutes</td><td>the pinned issue/verify path records no one-use state</td></tr>
+  </tbody>
+</table>
+</div>
+
+<EvidenceClaim kind="verified" title="One-time consumption is a database race, not a UI convention" refs={["pairing-grant-consumption", "pairing-sqlite-consumption"]}>
+  Persisted grants use a conditional SQLite update so two exchanges cannot both win.
+  The process-local desktop seed is a different class: it deliberately retains
+  unbounded uses so a trusted desktop renderer can establish a fresh session after a
+  reload.
+</EvidenceClaim>
+
+<Callout title="Pairing rows contain the credential itself" tone="warning">
+  Ordinary pairing tokens are persisted verbatim rather than as a one-way digest.
+  Short lifetime and atomic one-use consumption or revocation are implemented; OS
+  access control over `state.sqlite` remains security-sensitive. Avoid describing the
+  credential as hashed or implying that SQLite setup explicitly hardens its file mode.
+</Callout>
+
+## Scopes are capabilities, not roles
+
+The contract defines eight independent scopes. A standard client receives five:
+`orchestration:read`, `orchestration:operate`, `terminal:operate`, `review:write`,
+and `relay:read`. The administrative set adds `access:read`, `access:write`, and
+`relay:write`.
+
+<div class="table-scroll" tabindex="0" role="region" aria-label="Authentication scope profiles and delegation rules">
+<table class="comparison">
+  <caption class="sr-only">How pairing and exchange paths select environment scopes</caption>
+  <thead><tr><th>Path</th><th>Scope result</th><th>Expansion rule</th></tr></thead>
+  <tbody>
+    <tr><td>desktop bootstrap seed</td><td>administrative set</td><td>seeded by the trusted desktop process</td></tr>
+    <tr><td>ordinary one-time link</td><td>standard set unless the issuer supplied another set</td><td>issuance policy owns the grant</td></tr>
+    <tr><td>startup link</td><td>administrative set</td><td>created by server startup</td></tr>
+    <tr><td>browser-session exchange</td><td>the complete grant set</td><td>the browser path does not request a narrower subset</td></tr>
+    <tr><td>Bearer or DPoP token exchange</td><td>requested subset, or the grant set by default</td><td>cannot add a scope absent from the grant</td></tr>
+    <tr><td>session delegates another pairing link</td><td>nonempty, unique requested subset</td><td>issuer needs <code>access:write</code> and must hold every delegated scope</td></tr>
+  </tbody>
+</table>
+</div>
+
+<EvidenceClaim kind="verified" title="Administrative is a scope profile, not a bypass bit" refs={["auth-contracts", "pairing-grant-ttls", "pairing-grant-consumption", "auth-session-exchange", "auth-pairing-ticket-upgrade", "auth-delegated-scopes"]}>
+  Every resulting session still reaches endpoint and RPC authorization checks. The
+  profiles determine which capabilities a session can satisfy; they do not disable
+  authorization.
+</EvidenceClaim>
+
+## One exchange, then steady-state authentication
+
+<FlowLab id="pairing-to-rpc" title="Follow a client from pairing link to authorized RPC" prompt="Use Previous/Next or select a boundary. Each transition changes the credential class or enforcement owner." steps={[
+  { label: "Advertise", title: "The server publishes posture and supported methods", detail: "Mode and bind host select a policy. The descriptor tells clients which bootstrap and session methods this environment accepts.", actor: "EnvironmentAuthPolicy", sourceIds: ["auth-contracts", "auth-policy-derivation"], tone: "client" },
+  { label: "Issue grant", title: "A bootstrap credential establishes initial trust", detail: "Desktop may receive a process-injected seed. Other pairing flows create a persisted one-time link with scopes, subject, expiry, and optional proof-key binding; consumption must present the same verified key thumbprint when that binding exists.", actor: "PairingGrantStore", sourceIds: ["pairing-grant-ttls", "pairing-grant-consumption"], tone: "durable" },
+  { label: "Strip fragment", title: "The browser removes the pairing secret from its visible URL", detail: "Startup constructs /pair#token=…. The client reads the fragment and immediately replaces browser history before it exchanges the credential.", actor: "web auth client", sourceIds: ["startup-pairing-fragment", "client-pairing-fragment-strip"], tone: "client" },
+  { label: "Consume", title: "The grant is atomically consumed", detail: "A persisted one-time grant has one winner. Requested token scopes must be a subset of the grant; delegated pairing scopes must likewise be held by the issuing session.", actor: "EnvironmentAuth", sourceIds: ["pairing-sqlite-consumption", "auth-session-exchange", "auth-delegated-scopes"], tone: "durable" },
+  { label: "Issue session", title: "The exchange selects a session shape", detail: "Browser exchange inherits the full grant. Token exchange may narrow it. DPoP token exchange first verifies a proof without an access token to hash, then issues a one-hour signed token whose jkt claim binds the key; ordinary cookie and Bearer sessions normally last 30 days.", actor: "SessionStore", sourceIds: ["auth-session-exchange", "auth-http-exchange", "session-default-ttls", "session-issue-verification", "auth-session-row-shape", "dpop-validation"], tone: "durable" },
+  { label: "Authenticate", title: "Steady-state HTTP verifies token and current server state", detail: "Verification checks signature, expiry, row existence, and revocation. A DPoP-authenticated request separately checks the bound key, method, URL, access-token hash, time, signature, and replay marker.", actor: "HTTP auth layer", sourceIds: ["auth-request-precedence", "session-issue-verification", "dpop-validation", "dpop-replay-record"], tone: "transport" },
+  { label: "Upgrade", title: "A short-lived ticket adapts the session to WebSocket", detail: "The ticket carries a session id and timestamps—not scopes. Upgrade verification reloads the row's current method, subject, scopes, expiry, and revocation state.", actor: "WebSocket upgrade", sourceIds: ["auth-pairing-ticket-upgrade", "websocket-ticket-session"], tone: "transport" },
+  { label: "Authorize", title: "Every RPC method maps to a required scope", detail: "The authenticated socket captures its session and scopes; a centralized exhaustive map selects the scope checked before each handler runs.", actor: "RpcAuthorization", sourceIds: ["ws-authenticated-session", "rpc-authorization-scopes"], tone: "runtime" }
+]} />
+
+<Callout title="Consumption and issuance are not one transaction" tone="warning">
+  The conditional SQLite update makes one-time grant consumption race-safe. Session
+  issuance happens afterward as a separate operation. If issuance fails after the
+  consume succeeds, no compensation restores that grant; the client needs a fresh
+  pairing credential.
+</Callout>
+
+## Credential selection has no fallback after selection
+
+<SourceExcerpt id="auth-credential-precedence" focus={[592, 593, 594, 595, 596, 598, 602, 607, 608, 612, 617, 624, 629, 630, 631]} note="HTTP selects cookie, then Bearer, then DPoP. If the selected credential fails verification or binding rules, authentication fails; a lower-priority credential is not attempted." />
+
+<ScenarioLab id="authentication-decisions" title="Resolve an authentication attempt" prompt="Choose a representative request and inspect the exact selection, replay, and revocation boundary." scenarios={[
+  {
+    label: "Cookie + Bearer",
+    title: "The cookie is selected first",
+    summary: "Credential choice is `cookie ?? Bearer ?? DPoP`; coexistence does not create a fallback chain.",
+    facts: ["A valid cookie wins over a Bearer header.", "An invalid cookie does not fall back to that Bearer token.", "A normal cookie plus a DPoP Authorization header is rejected; DPoP authorization must carry the selected proof-bound token."],
+    sourceIds: ["auth-request-precedence"],
+    tone: "warning"
+  },
+  {
+    label: "DPoP replay",
+    title: "The second proof use is rejected",
+    summary: "After cryptographic and request-binding checks, the server records a durable exclusive marker for the key thumbprint and `jti`.",
+    facts: ["For an access-token-authenticated request, the proof binds method, normalized URL, and access-token hash; the initial token-exchange proof has no access token to hash.", "The proof timestamp must be recent and not more than five seconds in the future.", "A repeated thumbprint + jti cannot create the marker again."],
+    sourceIds: ["dpop-validation", "dpop-replay-record"],
+    tone: "failure"
+  },
+  {
+    label: "WS ticket replay",
+    title: "The ticket is single-purpose, not single-use",
+    summary: "The pinned five-minute ticket issue/verify path records no one-use state, so another presentation can verify while its parent session remains valid.",
+    facts: ["Ticket claims contain only version, kind, session id, issue time, and expiry.", "Each verification reloads the current SQLite session row.", "Expiry or session revocation blocks a new upgrade."],
+    sourceIds: ["websocket-ticket-session", "session-revocation"],
+    tone: "warning"
+  },
+  {
+    label: "Revoke session",
+    title: "New authentication fails; an existing socket keeps its captured scopes",
+    summary: "Revocation updates the row and active-session bookkeeping, so later HTTP verification, ticket verification, and upgrades reject the session. An already-open socket does not reload that row per RPC.",
+    facts: ["The WebSocket handler captured the authenticated session and scope array at upgrade.", "The revocation path does not signal that socket to close at this revision.", "The socket can keep using its captured authority until the transport otherwise closes."],
+    sourceIds: ["session-revocation", "session-issue-verification", "websocket-ticket-session", "auth-pairing-ticket-upgrade", "ws-authenticated-session"],
+    tone: "failure"
+  }
+]} />
+
+<SourceExcerpt id="websocket-ticket-verification" focus={[785, 793, 797, 802, 807, 817, 821, 828, 834, 839, 844, 850]} note="The ticket's signed claims identify a session. Verification checks ticket time, then reloads the session row and returns its current method, subject, scopes, expiry, and revocation status." />
+
+<EvidenceClaim kind="documented" title="The auth guide overstates the ticket payload" refs={["auth-doc-ticket-overclaim", "websocket-ticket-session"]}>
+  The internal guide says a WebSocket ticket carries scopes. Executable code wins at
+  this revision: the ticket carries `sid` and timestamps, and verification reloads
+  scopes from the SQLite session row. The resulting socket is scoped; the ticket
+  itself is not a scope-bearing snapshot.
+</EvidenceClaim>
+
+<EvidenceClaim kind="inference" title="Durable DPoP replay markers appear to accumulate" refs={["dpop-replay-record", "dpop-validation"]}>
+  The pinned implementation creates exclusive `dpop-proof-*` marker files. A
+  repository-wide source search found no cleanup path for those markers. That is an
+  absence-of-code inference, not an upstream guarantee; a later revision may add
+  retention or garbage collection.
+</EvidenceClaim>
+
+The browser cookie is set `HttpOnly`, `SameSite=Lax`, and path `/`; the code does not
+set an explicit `Secure` attribute. That is one environment-server session shape,
+not the credential used by every remote client. Direct hosted pairing stores a
+Bearer environment session, while the managed-relay path later establishes a
+distinct DPoP-bound environment session. Chapter 35 follows those remote boundaries.
+
+<SourceList ids={[
+  "auth-contracts",
+  "auth-policy-derivation",
+  "auth-session-exchange",
+  "auth-request-precedence",
+  "auth-pairing-ticket-upgrade",
+  "pairing-grant-ttls",
+  "pairing-grant-consumption",
+  "pairing-sqlite-consumption",
+  "session-default-ttls",
+  "session-issue-verification",
+  "websocket-ticket-session",
+  "session-revocation",
+  "auth-http-exchange",
+  "auth-delegated-scopes",
+  "ws-authenticated-session",
+  "rpc-authorization-scopes",
+  "server-secret-store",
+  "dpop-replay-record",
+  "dpop-validation",
+  "startup-pairing-fragment",
+  "client-pairing-fragment-strip",
+  "hosted-static-auth-boundary",
+  "hosted-pairing-url",
+  "hosted-pairing-registration",
+  "hosted-bearer-onboarding",
+  "hosted-clerk-provider",
+  "managed-relay-auth-provider",
+  "managed-relay-dpop-authorization",
+  "auth-session-row-shape",
+  "auth-doc-ticket-overclaim"
+]} />
