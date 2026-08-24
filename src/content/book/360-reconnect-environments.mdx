@@ -1,0 +1,310 @@
+---
+slug: reconnect-environments
+order: 360
+number: "36"
+kind: chapter
+part: "Part VII · Reach and ship"
+partOrder: 7
+title: "Reconnect, environments, notifications, and version skew"
+shortTitle: Reachability recovery
+summary: "T3 Code recovers reachability one environment at a time: a registry leases a single supervisor and RPC session per environment, projections reconcile independently after a new generation, background work follows declared demand, notifications wake attention rather than synchronize state, and capability plus exact-version recovery makes skew explicit."
+status: source-checked
+gates: [sources, interaction]
+objectives:
+  - Distinguish a connection attempt, a session lease, a retry supervisor, and environment-scoped projections.
+  - Explain why a reconnect is not evidence that a shell or thread has synchronized.
+  - Trace the awareness relay and APNs path without treating a notification as authoritative state delivery.
+  - Choose capability checks, exact-version guidance, and server-update paths that remain safe under version skew.
+keywords: [reconnect, environment, generation, lease, supervisor, cache, background, APNs, notifications, awareness relay, version skew, self-update]
+sourceAreas: [packages/client-runtime/src/connection, packages/client-runtime/src/state, apps/mobile/src/connection, apps/mobile/src/features/agent-awareness, infra/relay/src/agentActivity, packages/contracts/src/environment.ts, apps/web/src/versionSkew.ts, apps/server/src/cloud]
+visuals: [environment recovery boundary, reachability and notification recovery lab]
+updatedAt: 2026-08-24
+---
+
+import Callout from "../../components/Callout.astro";
+import EvidenceClaim from "../../components/EvidenceClaim.astro";
+import Figure from "../../components/Figure.astro";
+import Mermaid from "../../components/Mermaid.astro";
+import ReachabilityRecoveryLab from "../../components/ReachabilityRecoveryLab.astro";
+import SourceExcerpt from "../../components/SourceExcerpt.astro";
+import SourceList from "../../components/SourceList.astro";
+
+A remote client does not have one global connection to “T3 Code.” It has a
+catalog of environments, and each environment is a separate authority with its
+own endpoint, credentials, session, caches, shell, threads, and failure history.
+That is the unit of recovery.
+
+The distinction prevents two tempting but incorrect shortcuts:
+
+1. a new socket is not proof that a shell or thread is current; and
+2. a notification is not a state update merely because it mentions a thread.
+
+Both are **signals to begin or focus reconciliation**. The environment server
+remains the authority, and the client becomes current through a new session plus
+the normal snapshot/subscription paths.
+
+<Callout title="Reachable, connected, and synchronized are different claims" tone="warning">
+  “Reachable” says an endpoint may be attempted. “Connected” says an RPC lease
+  completed its initial configuration. “Shell live” and “thread live” say their
+  separate projection streams completed synchronization. Preserve the distinction
+  in state, UI, and retry policy; otherwise a green transport indicator can
+  accidentally certify stale cached work as current.
+</Callout>
+
+## 1. The catalog is a map of authorities, not a pool of interchangeable servers
+
+The shared runtime loads persisted targets into a map keyed by `EnvironmentId`.
+The registry holds environment-scoped service scopes and a per-environment lease
+lock. Starting the runtime acquires supervisors for persisted targets, but a caller
+asking to run an operation still resolves the specific environment at that moment.
+This is the boundary that lets a phone or browser display several environments
+without cross-wiring their sessions.
+
+<SourceExcerpt id="reconnect-environment-registry" focus={[156, 159, 160, 171, 247, 251, 253, 262, 273, 276, 280, 282, 285, 287]} note="The registry stores service scopes by EnvironmentId, serializes acquisition for that id, reuses an equivalent scope, and replaces only a changed entry's scoped supervisor." />
+
+An environment id must travel with an object reference. The contracts make this
+concrete for projects and threads: a `ScopedThreadRef` is `(environmentId,
+threadId)`, not a thread id that can be looked up globally. A superficially
+similar repository or a reused thread-shaped identifier in another environment
+does not authorize a merge.
+
+<SourceExcerpt id="reconnect-scoped-environment-refs" focus={[86, 87, 88, 89, 90, 91, 121, 122, 123, 127, 128, 129, 130]} note="The descriptor and scoped project/thread contracts preserve EnvironmentId as part of the address." />
+
+### Multi-environment presentation is a merge of views, not truth
+
+The client can combine shell summaries from every catalog entry into one sidebar,
+connection list, or “needs attention” count. That is a presentation merge. Each
+input remains owned by its environment's cache and its own snapshot/stream state.
+Do not de-duplicate two threads because their labels or Git remotes look alike,
+and do not use an environment A session to repair environment B cache.
+
+This constraint is useful even when a user has one desktop server exposed through
+direct LAN, relay, and SSH-assisted routes: access and launch can differ while the
+saved environment identity decides which runtime scope owns recovery. [Chapter 34](../access-transports/)
+separates access from authority; this chapter follows the recovery consequence.
+
+<Figure number="36.1" title="Recovery stays inside one environment boundary" hint="solid arrows carry authoritative synchronization; dashed arrows are attention or presentation paths" caption="A catalog holds separate environment entries. Each entry receives one scoped supervisor, which creates a succession of connection generations and at most one active RPC lease. Shell and selected-thread synchronizers use that lease but retain their own cache and live status. A presentation layer may combine summaries without merging underlying records. The awareness relay and APNs can signal a target environment/thread, after which the normal supervisor and projection synchronizers establish current state." textEquivalent="The catalog contains Environment A and Environment B. Each has a separate supervisor, session generations, shell cache, and thread cache. Both can contribute summary information to one user interface, but their authoritative state does not merge. An awareness relay sends an APNs notification containing an environment and thread route. The notification causes the client to navigate and synchronize that environment; it is not itself a state snapshot." sources={["reconnect-environment-registry", "reconnect-supervisor-active-lease", "reconnect-supervisor-generation-loop", "reconnect-shell-authoritative-refresh", "reconnect-thread-snapshot-epoch", "reconnect-scoped-environment-refs", "awareness-notification-navigation"]}>
+  <Mermaid id="reconnect-environment-boundary" label="Environment-scoped recovery and notification path" chart={`flowchart LR
+    C[Environment catalog] --> A[Environment A scope]
+    C --> B[Environment B scope]
+    A --> AS[one supervisor]
+    B --> BS[one supervisor]
+    AS --> AL[session generation / lease]
+    BS --> BL[session generation / lease]
+    AL --> AC[(A shell + thread caches)]
+    BL --> BC[(B shell + thread caches)]
+    AC --> UI[combined presentation]
+    BC --> UI
+    ENV[Environment A projection] -. signed awareness publish .-> R[relay]
+    R -. APNs attention signal .-> N[mobile route: A + thread]
+    N --> AS
+    AS --> AC`} />
+</Figure>
+
+## 2. One supervisor owns retry; a session performs one attempt
+
+The terms describe deliberately different responsibilities.
+
+| Layer | Owns | Does not own |
+|---|---|---|
+| Connection attempt / RPC session | one prepared endpoint, transport, initial configuration, probe, and close signal | retry ladder or another session after close |
+| Environment supervisor | desired state, network/lifecycle inputs, the current lease, generation, backoff, and replacement | shell or thread reducer semantics |
+| Environment shell/thread state | cached snapshot, synchronization status, sequence/cursor rules, and domain errors | raw transport creation or independent retry loops |
+| UI component | selection and presentation | a socket, timer, or RPC client |
+
+The supervisor clears the prepared connection and session together when a lease
+ends. A successful attempt publishes one `connected` state with its generation,
+then monitors either the session close or a wakeup probe. The main loop advances
+the generation only for an established attempt; offline releases a lease and waits
+for a signal rather than consuming retry attempts.
+
+<SourceExcerpt id="reconnect-supervisor-active-lease" focus={[490, 496, 562, 573, 575, 576, 579, 582, 587, 615]} note="A successful attempt publishes one active prepared/session lease and clears it when the monitored attempt finishes." />
+
+<SourceExcerpt id="reconnect-supervisor-generation-loop" focus={[643, 645, 668, 669, 679, 681, 686, 687, 741, 751]} note="The supervisor advances generation only after establishment, waits while offline, and owns the retry/backoff loop." />
+
+There can therefore be **one reconnect owner per environment**, not one per
+panel, route, subscription, or command. A second retry loop is harmful: it can
+race a close against a new session, reset backoff inconsistently, or attach a
+subscription to a lease that another loop is about to discard. Domain streams wait
+for the supervisor's replacement session; expected domain failures can be handled
+without declaring the transport dead.
+
+<EvidenceClaim kind="verified" title="Generation is a lease boundary, not a global data version" refs={["reconnect-supervisor-active-lease", "reconnect-supervisor-generation-loop", "reconnect-shell-authoritative-refresh", "reconnect-thread-snapshot-epoch"]}>
+  A connection generation tells callers that a new established session replaced
+  an old lease. It does not order shell and thread content across environments and
+  does not make cached projection data live. Each domain must still establish its
+  own snapshot/stream boundary on that session.
+</EvidenceClaim>
+
+## 3. Reconciliation follows the replacement lease, domain by domain
+
+The shell starts from a cache when available, but caches are presentation
+continuity—not an authority handoff. On a new subscription session, the shell
+loader obtains an authoritative HTTP snapshot before attempting cursor resume.
+If that refresh fails, it omits the cached cursor so the socket fallback sends a
+complete snapshot. A later `synchronized` marker is what upgrades a retained
+snapshot to live when that protocol feature is available.
+
+<SourceExcerpt id="reconnect-shell-authoritative-refresh" focus={[138, 141, 143, 145, 151, 158, 167, 169, 187, 193, 197, 200, 202, 203, 206, 221, 223, 229, 231, 243, 244]} note="A new shell session refreshes an authoritative snapshot; a cached cursor is not reused when that refresh failed, and a synchronization marker controls the live status." />
+
+Thread detail has the same separation, with an additional history race. A fresh
+thread snapshot replaces all loaded history and advances a local history epoch.
+An older-page request captured before that epoch cannot merge afterward. The rule
+is intentionally local to a scoped thread: it protects one detail window without
+pretending to establish a global event order across all threads or environments.
+
+<SourceExcerpt id="reconnect-thread-snapshot-epoch" focus={[212, 217, 230, 232, 237, 240, 255, 261, 263, 294, 296, 297, 303, 316, 320, 321, 330, 331, 332, 334, 335, 336, 337]} note="Thread synchronization keeps status separate, resets session-bound capabilities on disconnect, and increments history epoch when a fresh snapshot replaces the loaded window." />
+
+The safe recovery order is therefore:
+
+1. retain the selected `(environmentId, threadId)` address and any cache marked
+   cached;
+2. let that environment's supervisor establish or retain a healthy lease;
+3. let shell and thread factories attach to the replacement session;
+4. replace or resume using their snapshot/sequence rules; and
+5. only then present the relevant projection as live.
+
+No step says “replay every command because the connection returned.” Commands
+resolve their current environment runtime at execution time. Durable command and
+outbox semantics belong to [Chapter 24](../permissions-and-input/) and
+[Chapter 33](../mobile-client-continuity/); reconnect supplies reachability, not
+permission to duplicate intent.
+
+## 4. Background work has demand and policy, not a hidden always-on connection
+
+The phone reports client activity for each registered environment. Its baseline
+report includes visibility, focus, recent interaction, app state, and declared
+background scopes; retained subscriptions add only known scope types such as
+diagnostics or VCS status, reference-counted per environment. This lets the server
+choose what remains useful while the app is backgrounded without equating
+“installed” with “keep every stream alive.”
+
+<SourceExcerpt id="reconnect-mobile-background-demand" focus={[44, 52, 56, 58, 60, 64, 66, 68, 72, 74, 77, 87, 89, 90, 102, 106, 107, 111]} note="The mobile reporter declares active/background context and environment-scoped retained demand; reports are coalesced and periodically refreshed by the platform layer." />
+
+<SourceExcerpt id="reconnect-mobile-background-scopes" focus={[24, 27, 31, 34, 39, 42, 45, 52, 60, 63, 66, 70, 72, 75, 78, 79, 80]} note="Retained background scopes are keyed by environment and reference-counted from observable subscriptions rather than inferred from a general connection." />
+
+This is a policy boundary. A background report can help the server decide whether
+to retain an eligible activity, but it does not authorize an arbitrary client
+timer, guarantee OS execution time, or make a notification channel a durable
+subscription. The current mobile reporter does have its own reporting cadence;
+that operational mechanism is not a reason for UI or labs to create autonomous
+reconnect timers.
+
+## 5. Awareness relay → APNs is an attention path, not state synchronization
+
+When agent-awareness publishing is enabled and relay credentials exist, the
+environment reads its projected thread and project shell, derives a deliberately
+small awareness state, signs a short-lived environment proof, and publishes it to
+the relay. The server skips an unchanged projected state. These are useful
+suppression and privacy properties: the payload is not a transcript, and the
+relay does not need a client to pretend that every provider stream event is a push
+notification.
+
+<SourceExcerpt id="awareness-relay-signal-filter" focus={[69, 72, 75, 83, 85, 90, 97, 102, 119, 122, 128, 129, 130, 131]} note="The server filters publish-worthy orchestration events and sanitizes projected awareness state before it leaves the environment." />
+
+<SourceExcerpt id="awareness-relay-projected-publish" focus={[345, 349, 355, 363, 371, 389, 400, 408, 412, 418, 420, 426]} note="A projected thread state is signed for the relay and an unchanged projected state is suppressed." />
+
+The relay's APNs work is delivery work. It may queue, succeed, or report a
+failure; iOS may also throttle delivery. A device registration is not treated as
+locally enabled merely because notification permission exists: the mobile module
+records whether the relay actually accepted the registration. It briefly collapses
+bursty re-registration, yet preserves a later registration/replay opportunity so
+foreground reconciliation can repair drifted Live Activity presentation.
+
+<SourceExcerpt id="awareness-apns-delivery-policy" focus={[143, 145, 153, 156, 164, 165, 168, 169, 177, 181, 186, 194, 198, 213, 216, 250, 256, 259, 291, 297, 300, 303, 306, 309, 315, 325]} note="The relay gates alert kinds by preferences and transitions, suppresses baseline/replayed alerts, and applies a minimum Live Activity update interval while preserving attention and terminal transitions." />
+
+<SourceExcerpt id="awareness-mobile-registration-gate" focus={[69, 71, 72, 73, 74, 75, 76, 77, 80, 85, 86, 90]} note="Mobile distinguishes relay-accepted registration from local settings and documents a short re-registration dedupe window plus replay-based foreground repair." />
+
+<Callout title="Notification fallback is ordinary convergence" tone="info">
+  A late or missing notification should not induce a second shadow state machine.
+  When the user opens the app—or the system otherwise wakes it—the existing
+  environment supervisor, snapshots, and subscriptions reconcile current state.
+  Push improves attention and deep-linking; it is not the only path to truth.
+</Callout>
+
+The notification response consumer protects the route boundary too. It validates
+the deep link, deduplicates a delivered response identifier, and only navigates.
+It does not mutate a thread from untrusted notification data. Once routed, the
+selected environment's normal state runtime establishes what remains pending,
+completed, or deleted.
+
+<SourceExcerpt id="awareness-notification-navigation" focus={[37, 41, 44, 47, 49, 57, 63, 72, 74, 76, 82, 84, 90, 95, 97, 99, 102, 103]} note="Notification data is normalized into an internal thread route, and an already-handled response id is ignored before navigation." />
+
+<ReachabilityRecoveryLab id="signal-is-not-state" />
+
+## 6. Capability and exact-version recovery solve different kinds of skew
+
+The environment descriptor contains a server version and capability record.
+Optional capability keys allow a newer client to hide or avoid a command that an
+older server never implemented; for example, an absent settlement or pinning
+capability means the client does not optimistically send that command. This is
+feature-level compatibility, not a claim that every pair of versions behaves the
+same.
+
+<SourceExcerpt id="reconnect-capability-descriptor" focus={[31, 34, 37, 41, 48, 50, 51, 53, 56, 58, 61, 64, 67, 70, 73, 77, 82, 86, 90, 91]} note="The contracts encode optional feature capabilities alongside the environment's exact server-version descriptor." />
+
+For broader incompatibility, the web compares normalized exact client and server
+version strings and stores dismissals per environment plus that version pair. It
+then chooses guidance from the advertised update capability: boot service/respawn,
+desktop-managed update, or manual relaunch. A dismissal is scoped to that observed
+pair, so a changed environment version can surface a new warning.
+
+<SourceExcerpt id="reconnect-version-skew-guidance" focus={[21, 26, 29, 31, 39, 42, 52, 54, 57, 65, 71, 72, 76, 82, 83, 86, 115, 122, 127, 130]} note="Version mismatch is an exact normalized comparison; update guidance comes from advertised server capability and dismissals include environment plus both versions." />
+
+When a launcher-managed server can self-update, it requires an exact target
+version, stages that pinned runtime, runs a preflight, and only then asks the
+launcher to activate it. The update naturally closes the old connection; the same
+environment supervisor handles the involuntary close and re-establishes the lease.
+Do not make the transport layer a process manager merely to disguise that restart.
+
+<SourceExcerpt id="reconnect-exact-version-update" focus={[30, 33, 57, 64, 67, 72, 78, 82, 87, 88, 93, 103, 144, 145, 152, 171, 172, 185, 190]} note="Server self-update advertises only supported management modes, rejects non-exact targets, preflights the staged runtime, and hands activation to the launcher." />
+
+<EvidenceClaim kind="verified" title="Skew recovery stays explicit" refs={["reconnect-capability-descriptor", "reconnect-version-skew-guidance", "reconnect-exact-version-update"]}>
+  Capability absence suppresses a feature-specific request. Exact-version mismatch
+  communicates broader divergence and chooses a supported update/relaunch path.
+  Neither check converts cached client state into server truth, and neither is a
+  substitute for re-synchronizing after a server restart.
+</EvidenceClaim>
+
+## 7. The compact rule set
+
+Keep these rules together when extending any client surface:
+
+1. Address every cache, operation, notification route, and selection with its
+   environment.
+2. Give each environment one supervisor and let that supervisor own session
+   replacement and retry policy.
+3. Treat connection generation as a session-lease boundary, then let shell and
+   thread state independently become live.
+4. Merge multi-environment summaries in presentation only; do not blend their
+   authorities or caches.
+5. Declare background demand narrowly and accept that OS delivery is policy,
+   not a durable stream.
+6. Treat relay/APNs activity as an attention signal; navigate and synchronize
+   afterward.
+7. Gate new features by capability, surface exact-version skew honestly, and
+   recover a server update through the ordinary reconnect owner.
+
+That model is modest by design. It does not promise exactly-once notification
+delivery, a global merged event log, or a perpetual mobile socket. It does make
+the important recovery path legible: one environment, one lease owner, current
+state re-established from the authority.
+
+<SourceList ids={[
+  "reconnect-environment-registry",
+  "reconnect-scoped-environment-refs",
+  "reconnect-supervisor-active-lease",
+  "reconnect-supervisor-generation-loop",
+  "reconnect-shell-authoritative-refresh",
+  "reconnect-thread-snapshot-epoch",
+  "reconnect-mobile-background-demand",
+  "reconnect-mobile-background-scopes",
+  "awareness-relay-signal-filter",
+  "awareness-relay-projected-publish",
+  "awareness-apns-delivery-policy",
+  "awareness-mobile-registration-gate",
+  "awareness-notification-navigation",
+  "reconnect-capability-descriptor",
+  "reconnect-version-skew-guidance",
+  "reconnect-exact-version-update"
+]} />

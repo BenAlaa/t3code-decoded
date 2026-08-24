@@ -1,0 +1,240 @@
+---
+slug: distribution-artifacts
+order: 370
+number: "37"
+kind: chapter
+part: "Part VII · Reach and ship"
+partOrder: 7
+title: "Distribution: artifacts, channels, and what actually ships"
+shortTitle: Distribution artifacts
+summary: "T3 Code distributes several deliberately different products: an npm CLI that contains a bundled web client, platform-specific Electron installers built from a staged closure, a release-controlled hosted web channel, store binaries plus fingerprint-gated mobile OTAs, and checksum-pinned AUR packages derived from the published Linux AppImage. The release matrix—not every target the builder knows—defines what is actually shipped."
+status: source-checked
+gates: [sources, interaction]
+objectives:
+  - Identify the concrete artifact and publication boundary for CLI, desktop, hosted web, mobile, and AUR delivery.
+  - Trace how the npm CLI embeds the web renderer and why its exact version publishes before the GitHub Release.
+  - Separate the desktop builder's supported platform targets from the four artifacts release CI currently produces.
+  - Explain release-controlled hosted channels and fingerprint-gated mobile updates without calling either an arbitrary-commit deployment.
+  - Follow a marketing download link and an AUR package back to a named GitHub Release asset.
+keywords: [distribution, npm, CLI, Electron, DMG, AppImage, NSIS, GitHub Releases, Vercel, Expo, EAS, fingerprint, AUR, stable, nightly]
+sourceAreas: [apps/server/package.json, apps/server/scripts/cli.ts, scripts/build-desktop-artifact.ts, .github/workflows/release.yml, .github/workflows/mobile-eas-production.yml, apps/web/vercel.ts, apps/marketing/src, packaging/aur]
+visuals: [distribution artifact map, interactive artifact factory]
+updatedAt: 2026-08-24
+---
+
+import ArtifactFactoryLab from "../../components/ArtifactFactoryLab.astro";
+import Callout from "../../components/Callout.astro";
+import EvidenceClaim from "../../components/EvidenceClaim.astro";
+import Figure from "../../components/Figure.astro";
+import Mermaid from "../../components/Mermaid.astro";
+import SourceExcerpt from "../../components/SourceExcerpt.astro";
+import SourceList from "../../components/SourceList.astro";
+
+“T3 Code release” does not name one file. It is a coordinated set of artifacts with
+different consumers, packaging closures, update mechanisms, and trust boundaries:
+an npm executable, desktop installers, a hosted web deployment, native mobile
+builds and JavaScript updates, and an Arch package that repackages a release asset.
+The important question is therefore not “what command builds T3 Code?” but **which
+artifact is this consumer actually receiving, and what gate certified it?**
+
+<Callout title="Builder capability is not shipping policy" tone="warning">
+  `build-desktop-artifact.ts` has platform/target configuration for macOS, Linux,
+  and Windows, and its naming accepts an architecture. That is a construction
+  capability. The checked release workflow currently schedules four desktop lanes:
+  macOS arm64, macOS x64, Linux x64, and Windows x64. The Windows arm64 entry is
+  commented out. Do not turn a latent builder option into a claim that users can
+  download that artifact.
+</Callout>
+
+## 1. One source revision fans out into several delivery contracts
+
+The monorepo can produce a server/CLI bundle, a web build, desktop process output,
+and mobile app output, but their distribution boundaries diverge quickly. The CLI is
+an npm package named `t3`; desktop is an Electron-builder product with installer and
+updater side files; the hosted web app is a channel alias; mobile has native-store
+binaries and compatible OTA bundles; the AUR packages consume a published AppImage
+rather than independently publishing a desktop build.
+
+The release workflow first resolves stable versus nightly metadata, pins all later
+jobs to its chosen ref, and gives the channel a version, tag, npm dist-tag, and
+“latest” policy. Quality, relay configuration, desktop builds, and resource-monitor
+artifacts feed into CLI publication. Only a successful npm publication unlocks the
+GitHub Release. A successful GitHub Release then unlocks the AUR handoff and hosted
+web deploy. This is dependency ordering, not an assertion that all downstream
+consumer updates happen simultaneously.
+
+<Figure number="37.1" title="One revision, several artifact contracts" hint="solid arrows describe published or deployed products; dashed arrows are dependency gates" caption="A pinned release ref builds the web and server output. The CLI package embeds the web output and publishes to npm before GitHub Release publication. Desktop jobs stage desktop, server, web, dependencies, native resources, and platform packaging into four currently active installer lanes; their files are attached to GitHub Releases. The same release gates an AUR workflow that checksum-pins the released Linux AppImage, while hosted web deploys to the chosen latest or nightly channel. Mobile CI separately reconciles store builds and publishes an OTA only when a matching native fingerprint exists." textEquivalent="A release starts from a pinned source revision. Web output is copied into the CLI package, which publishes to npm. Desktop builds create macOS arm64 and x64 DMGs, a Linux x64 AppImage, and a Windows x64 NSIS installer, then those files go to GitHub Releases. AUR reads the Linux AppImage and digest from that release. Hosted web deploys one release-controlled latest or nightly channel. Mobile store binaries and OTA updates take their own EAS path; OTA requires a matching native fingerprint." sources={["distribution-cli-contract", "distribution-cli-bundles-web", "distribution-desktop-artifact-contract", "distribution-release-matrix", "distribution-cli-before-release", "distribution-mobile-fingerprint-publish", "distribution-aur-selection"]}>
+  <Mermaid id="distribution-artifact-map" label="Distribution artifacts and gates" chart={`flowchart TB
+    REF[Pinned release ref] --> WEB[Web build]
+    REF --> SERVER[Server / CLI bundle]
+    WEB --> CLI[dist/client inside npm t3]
+    SERVER --> CLI
+    CLI -->|publish exact version| NPM[npm dist-tag]
+    REF --> DESKTOP[Stage desktop + server + web + deps]
+    WEB --> DESKTOP
+    SERVER --> DESKTOP
+    DESKTOP --> MACA[macOS arm64 DMG]
+    DESKTOP --> MACX[macOS x64 DMG]
+    DESKTOP --> LINUX[Linux x64 AppImage]
+    DESKTOP --> WIN[Windows x64 NSIS]
+    NPM -. release gate .-> GH[GitHub Release]
+    MACA --> GH
+    MACX --> GH
+    LINUX --> GH
+    WIN --> GH
+    GH --> AUR[AUR stable / nightly metadata]
+    GH -. release gate .-> HOSTED[Hosted web channel alias]
+    REF --> MOBILE[Store reconciliation]
+    MOBILE -->|matching fingerprint only| OTA[Production OTA]`} />
+</Figure>
+
+<EvidenceClaim kind="verified" title="The release graph encodes compatibility ordering" refs={["distribution-release-workflow", "distribution-release-publish-dag", "distribution-cli-build-publish", "release-exact-version-invariant"]}>
+  The release workflow makes `publish_cli` depend on successful preflight, quality,
+  and desktop builds, and makes GitHub Release publication depend on that CLI job.
+  The release operations guide calls out the corresponding exact-version invariant.
+  It is an ordering guard for products that need to agree on a release version—not a
+  two-phase commit across npm, GitHub, Vercel, Expo, and AUR.
+</EvidenceClaim>
+
+## 2. The npm artifact is a server executable plus an embedded renderer
+
+`apps/server/package.json` declares a public executable: `t3` resolves to
+`./dist/bin.mjs`, and npm publishes only `dist`. The CLI build first runs the server
+bundle, then looks for `apps/web/dist`. When that web output exists it is copied into
+`apps/server/dist/client`; development icon replacements are applied there as a
+post-copy product adjustment. That means the npm artifact can carry both the server
+entrypoints and a renderer payload—rather than downloading the web product at
+install time.
+
+<SourceExcerpt id="distribution-cli-contract" focus={[1, 2, 3, 8, 9, 10, 11, 12, 13, 14, 15, 16]} note="The server package names the `t3` executable and limits npm's published payload to `dist`." />
+
+<SourceExcerpt id="distribution-cli-bundles-web" focus={[151, 154, 158, 160, 162, 164, 166, 168, 169, 171, 173]} note="The CLI build creates the server bundle, copies the web distribution into `dist/client` when present, and logs the resulting composition." />
+
+The build step can warn and continue if `apps/web/dist` is missing. Publication is
+stricter: before it rewrites temporary publish metadata it verifies
+`dist/bin.mjs`, `dist/service-launcher.mjs`, and `dist/client/index.html`. The
+publish path then resolves workspace catalog/override dependencies into an npm-ready
+manifest, applies publish icon overrides, invokes package publication with the
+selected dist-tag/version, and restores the original local metadata and icons in
+its release finalizer. That restore is a workspace-cleanliness guarantee; it does
+not undo an already completed npm publication.
+
+<EvidenceClaim kind="verified" title="Bundling a UI and publishing a CLI are two separate gates" refs={["distribution-cli-package", "distribution-cli-build-publish", "distribution-cli-bundle-config", "distribution-cli-before-release"]}>
+  The CLI build can skip a missing web directory, while the publish command rejects
+  a missing `dist/client/index.html`. Release CI runs a web build before the CLI
+  build and publishes the CLI only after release quality/build dependencies succeed.
+  This turns a permissive local build convenience into a stricter release contract.
+</EvidenceClaim>
+
+## 3. Desktop packaging constructs a closure, then CI selects four lanes
+
+The desktop artifact builder does more than wrap `apps/desktop`. It requires emitted
+desktop, resource, and server directories; verifies that the server bundle is
+self-contained enough for its runtime needs; requires the embedded
+`server/dist/client/index.html`; applies channel-appropriate web branding; and
+stages Electron output, resources, server output, production dependencies, patches,
+and platform-specific native materials into a temporary application tree.
+
+The platform split matters. macOS and Linux package a merged application tree. The
+Windows packaging path deliberately keeps desktop main-process dependencies in
+`app.asar` and builds a separate server `asar` sidecar; it also carries the
+Windows-to-WSL server support needed by that product. This is an implementation
+choice about runtime resolution and payload shape, not a claim that every desktop
+consumer launches a local WSL server.
+
+<SourceExcerpt id="distribution-desktop-artifact-contract" focus={[2070, 2072, 2073, 2075, 2077, 2079, 2081, 2084, 2087, 2091, 2095, 2102]} note="The builder fixes product/artifact naming, packed resources, update publication configuration, and macOS packaging/protocol settings." />
+
+<SourceExcerpt id="distribution-desktop-linux-windows-targets" focus={[2134, 2136, 2140, 2143, 2148, 2153, 2160, 2164, 2166, 2170]} note="Linux receives its executable/protocol/desktop configuration; Windows receives NSIS/differential-package and executable/signing configuration." />
+
+`electron-builder` receives an explicit platform flag, architecture, and
+`--publish never`; packaging jobs upload their artifacts, then the release job merges
+the relevant updater manifests and attaches DMGs, ZIPs, AppImages, EXEs, blockmaps,
+and YAML manifests to GitHub Releases. The builder’s macOS `dmg` target includes a
+ZIP updater artifact, which explains why a GitHub Release can have more files than
+the user-facing installer matrix names.
+
+### Shipped matrix vs. possible matrix
+
+| Release CI entry | Product installer target | Status in inspected workflow |
+|---|---|---|
+| macOS arm64 | DMG (plus updater ZIP) | active |
+| macOS x64 | DMG (plus updater ZIP) | active |
+| Linux x64 | AppImage | active |
+| Windows x64 | NSIS installer | active |
+| Windows arm64 | NSIS configuration is structurally possible | **commented out; not shipped** |
+
+<SourceExcerpt id="distribution-release-matrix" focus={[357, 358, 359, 360, 361, 362, 363, 364, 365, 366, 367, 368, 369, 370, 371, 372, 373, 374, 375, 376, 377, 378, 379, 380, 381, 382, 383, 384, 385, 386, 387, 388, 389, 390, 391, 392, 393, 394, 395]} note="Release CI declares four active desktop builds and leaves the Windows arm64 entry commented out." />
+
+<Callout title="A file name is part of the product contract" tone="info">
+  Artifact names include version and architecture. Marketing and AUR do not search
+  for an abstract “Linux build”; they resolve the expected suffix or exact
+  `T3-Code-<version>-x86_64.AppImage` name. Renaming an artifact can therefore
+  break downstream distribution even when the Electron package itself is valid.
+</Callout>
+
+## 4. Hosted web and mobile use channels, but their compatibility gates differ
+
+The hosted web app deliberately disables Vercel’s normal Git deployment trigger.
+Release CI performs the deployment, chooses `latest` for stable or `nightly` for a
+nightly release, and aliases the deployment to that channel domain. The public router
+uses a long-lived secure cookie to route `app.t3.codes` requests to the selected
+channel origin. Thus “latest” is a release result, not necessarily the newest source
+commit in the repository.
+
+Mobile has a separate production workflow. It runs from Linux because its Expo
+fingerprint needs to match the build environment, reconciles store builds when the
+declared mobile version needs one, and publishes an OTA only for each platform with
+at least one completed production build matching the current native fingerprint.
+The mobile config explicitly uses the fingerprint runtime-version policy: native
+dependencies, config plugins, and patches participate in the compatibility identity.
+
+<SourceExcerpt id="distribution-mobile-fingerprint-publish" focus={[263, 267, 270, 272, 274, 276, 279, 281, 283, 285]} note="The production OTA path checks for a finished build whose fingerprint matches before it publishes a platform update." />
+
+<EvidenceClaim kind="verified" title="A hosted alias and an OTA are not interchangeable channel mechanisms" refs={["distribution-hosted-router", "distribution-release-publish-dag", "distribution-mobile-production-workflow", "distribution-mobile-eas-profiles", "distribution-mobile-app-config", "distribution-mobile-fingerprint-publish"]}>
+  Hosted web is an explicitly release-controlled Vercel alias with Git deployment
+  disabled. Mobile store binaries follow EAS profiles and store submission paths;
+  OTAs have a further per-platform native-fingerprint gate. Neither code path says
+  a normal source push can overwrite every user’s running client.
+</EvidenceClaim>
+
+## 5. Download resolution and AUR both trust named release assets
+
+The marketing download page fetches the latest GitHub Release and maps cards by
+asset suffix: arm64/x64 DMGs, an x64 Windows `.exe`, and an x86_64 AppImage. If the
+asset lookup or fetch fails, cards fall back to the releases page rather than
+inventing a direct URL. Mobile cards are intentionally different: they point to the
+App Store and Google Play, not a GitHub asset.
+
+<SourceExcerpt id="distribution-download-resolution" focus={[93, 96, 101, 105, 107, 113, 117, 120, 124, 128, 130]} note="The marketing page resolves expected desktop suffixes against the latest GitHub Release and falls back to the release index on errors." />
+
+The AUR workflow begins only after GitHub Release publication. Its release script
+accepts either a stable semver tag or the prescribed nightly tag pattern; selects
+`t3code-bin` or `t3code-nightly-bin` accordingly; reads the exact AppImage digest
+from that GitHub Release; reads the LICENSE at the same tag; edits the matching
+PKGBUILD; validates it with `namcap` and `makepkg`; then pushes only if its AUR SSH
+credential exists. A missing key is intentionally a “validated, not published” end
+state.
+
+<SourceExcerpt id="distribution-aur-selection" focus={[9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 21, 22, 24, 25, 26, 28, 30, 31, 33, 34, 37, 40, 43]} note="The AUR release script chooses a stable or nightly package from the tag and obtains the exact AppImage digest from that release before changing package metadata." />
+
+<EvidenceClaim kind="verified" title="AUR is an integrity-checked downstream package, not a parallel Electron build" refs={["distribution-aur-workflow", "distribution-aur-release-script", "distribution-aur-stable-package", "distribution-aur-nightly-package", "distribution-download-resolution", "distribution-marketing-release-fetch"]}>
+  The AUR script derives its source and SHA-256 from a named GitHub Release asset,
+  then runs package validation. The marketing page independently resolves user
+  download links from the latest release asset list. Both consumers therefore make
+  artifact names and release attachment completeness observable boundaries.
+</EvidenceClaim>
+
+## Work the artifact factory
+
+Choose a delivery lane below and advance it one gate at a time. The desktop lane is
+useful for testing the crucial distinction: the builder can describe Windows arm64,
+but the final gate reports that the inspected release matrix does not activate it.
+
+<ArtifactFactoryLab id="distribution-gates" />
+
+The durable reading rule is: **source builds components; packaging assembles a
+consumer-specific closure; release policy selects and publishes a subset; channel and
+platform compatibility gates decide what a particular client may receive.** Treating
+those as one step hides the real failure boundaries.
+
+<SourceList ids={["distribution-root-build-scripts", "distribution-cli-package", "distribution-cli-contract", "distribution-cli-build-publish", "distribution-cli-bundles-web", "distribution-cli-bundle-config", "distribution-desktop-build-config", "distribution-desktop-artifact-contract", "distribution-desktop-linux-windows-targets", "distribution-desktop-stage-pipeline", "distribution-release-workflow", "distribution-release-artifact-matrix", "distribution-release-matrix", "distribution-release-publish-dag", "distribution-cli-before-release", "distribution-mobile-production-workflow", "distribution-mobile-eas-profiles", "distribution-mobile-app-config", "distribution-mobile-fingerprint-publish", "distribution-hosted-router", "distribution-marketing-release-fetch", "distribution-marketing-download-page", "distribution-download-resolution", "distribution-aur-workflow", "distribution-aur-release-script", "distribution-aur-selection", "distribution-aur-stable-package", "distribution-aur-nightly-package", "release-operations-guide", "release-exact-version-invariant"]} />
