@@ -1,0 +1,110 @@
+---
+slug: runtime-topologies
+order: 40
+number: "4"
+kind: chapter
+part: Part I · Boundaries and vocabulary
+partOrder: 1
+title: Runtime topologies and technology placement
+shortTitle: Runtime topologies
+summary: The same contracts appear in several process graphs; local CLI, hosted web, Electron, and mobile move ownership without moving repository execution off the environment server.
+status: source-checked
+gates: [sources]
+objectives:
+  - Draw the process and trust boundary for every execution client.
+  - Separate product UI families from delivery and publication shapes.
+  - Explain technology placement as verified mechanics or explicitly labeled inference.
+keywords: [topology, Effect, SQLite, React, Electron, Expo, Astro]
+sourceAreas: [apps/server, apps/web, apps/desktop, apps/mobile, apps/marketing]
+visuals: [topology switcher, technology placement matrix]
+updatedAt: 2026-08-24
+---
+
+import Callout from "../../components/Callout.astro";
+import EvidenceClaim from "../../components/EvidenceClaim.astro";
+import ScenarioLab from "../../components/ScenarioLab.astro";
+import SourceList from "../../components/SourceList.astro";
+
+There is no single “T3 Code process.” The invariant is an environment server that
+owns authoritative repository/provider execution. What changes by product shape is
+who launches that server, where the renderer runs, how it reaches the endpoint, and
+which device-local systems surround the shared semantics.
+
+<ScenarioLab id="runtime-topologies" title="Move the same thread through four topologies" prompt="Select a delivery shape to see process and trust ownership." scenarios={[
+  {
+    label: "npx t3",
+    title: "One CLI process serves API and copied web assets",
+    summary: "The published npm package starts the local server and serves a web build copied into its distribution.",
+    facts: ["Browser and server communicate over loopback HTTP/WebSocket.", "Repository, provider, Git, files, and PTY stay in the server process/environment.", "Closing the foreground server ends the local environment unless a managed launcher owns it."],
+    sourceIds: ["cli-web-bundle", "server-composition"],
+    tone: "safe"
+  },
+  {
+    label: "Hosted web",
+    title: "Static React client connects to registered environments",
+    summary: "The hosted app has no colocated repository server; cloud identity and pairing resolve remote environment endpoints.",
+    facts: ["Application traffic ultimately targets the environment endpoint.", "The hosted page never receives local filesystem authority merely by loading.", "Browser history and hosted authentication are selected at runtime."],
+    sourceIds: ["web-runtime-selection", "architecture-boundary"],
+    tone: "neutral"
+  },
+  {
+    label: "Electron",
+    title: "Main process supervises renderer and backend pool",
+    summary: "Electron bundles the web renderer and manages primary/WSL servers, SSH, exposure, preview, native menus, telemetry, and updates.",
+    facts: ["The renderer receives a curated contextBridge API, not raw Node.", "Server bootstrap and resource-control channels cross dedicated file descriptors.", "Desktop can own several backend processes while each remains its own environment authority."],
+    sourceIds: ["desktop-app-assembly", "desktop-native-boundary"],
+    tone: "warning"
+  },
+  {
+    label: "Mobile",
+    title: "React Native is remote-only but not merely a web wrapper",
+    summary: "Expo clients reuse connection/state semantics and implement native feed, terminal, share, persistence, notification, and OTA behavior.",
+    facts: ["No provider or T3 server is bundled on the phone.", "Offline task intent is a device-local durable outbox.", "iOS and Android capability edges differ."],
+    sourceIds: ["mobile-app-distribution", "mobile-offline-outbox", "mobile-notification-capability"],
+    tone: "neutral"
+  }
+]} />
+## Technology placement, not mythology
+
+<div class="table-scroll" tabindex="0" role="region" aria-label="Technology placement and consequences">
+<table class="comparison">
+  <caption class="sr-only">Where major technologies are used and the observable consequence of their placement</caption>
+  <thead><tr><th>Technology</th><th>Placement</th><th>Verified consequence</th></tr></thead>
+  <tbody>
+    <tr><td>Effect + Schema</td><td>contracts, server services/scopes, client runtime</td><td>runtime-decoded boundaries, typed failure channels, scoped child resources, composable layers</td></tr>
+    <tr><td>SQLite</td><td>environment server</td><td>one transactional event/projection/accepted-receipt store plus indexed query models</td></tr>
+    <tr><td>React</td><td>shared web renderer</td><td>one UI serves local browser, hosted app, and Electron with runtime-specific composition</td></tr>
+    <tr><td>Electron</td><td>desktop main/preload</td><td>OS/backend/update/preview authority stays outside the sandboxed renderer</td></tr>
+    <tr><td>React Native + Expo</td><td>iOS/Android</td><td>native persistence, navigation, modules, stores, and OTA use a separate release domain</td></tr>
+    <tr><td>Ghostty</td><td>WASM on web; native modules on mobile</td><td>terminal semantics are shared conceptually while rendering/input paths remain platform-specific</td></tr>
+    <tr><td>Astro</td><td>marketing site</td><td>download/publication pages build independently of the React product client</td></tr>
+  </tbody>
+</table>
+</div>
+
+<EvidenceClaim kind="inference" title="Why these placements are coherent" refs={["server-composition", "web-runtime-selection", "desktop-app-assembly", "mobile-package", "marketing-site-runtime"]}>
+  The code proves where each technology is used and the boundaries it creates. Unless an upstream decision record says otherwise, explanations of *why*—for example, minimizing remote authority or preserving native scrolling—are architectural inference, not quoted maintainer intent.
+</EvidenceClaim>
+
+## Marketing is the fifth delivery shape, not a fifth client
+
+The independent Astro marketing site discovers stable downloads and links to app
+stores. It does not load `client-runtime`, connect to environments, or render thread
+state. Counting it clarifies release/distribution ownership; placing it in the
+execution topology would confuse publication with control.
+
+<Callout title="Preview of version domains" tone="warning">
+  Server, contracts, web, and desktop release in a lockstep version domain. Mobile's store version/build number and native fingerprint form another. The same architecture can therefore be compatible at the contract level while its packages show different version strings.
+</Callout>
+
+<SourceList ids={[
+  "server-composition",
+  "cli-web-bundle",
+  "web-runtime-selection",
+  "desktop-app-assembly",
+  "desktop-native-boundary",
+  "mobile-package",
+  "mobile-app-distribution",
+  "mobile-offline-outbox",
+  "marketing-site-runtime"
+]} />

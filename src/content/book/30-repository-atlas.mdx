@@ -1,0 +1,118 @@
+---
+slug: repository-atlas
+order: 30
+number: "3"
+kind: chapter
+part: Part I · Boundaries and vocabulary
+partOrder: 1
+title: Repository and dependency atlas
+shortTitle: Repository atlas
+summary: The monorepo is a product graph—five apps, shared contracts and runtime packages, protocol bridges, remote infrastructure, native modules, and release machinery.
+status: source-checked
+gates: [sources]
+objectives:
+  - Map repository folders to runtime and distribution responsibilities.
+  - Distinguish dependency edges from process and protocol boundaries.
+  - Understand how the source inventory is reproduced from the pinned Git object.
+keywords: [monorepo, packages, apps, dependencies, build graph, inventory]
+sourceAreas: [apps, packages, infra, native, scripts, pnpm-workspace.yaml]
+visuals: [monorepo dependency flow, package atlas, reproducible inventory]
+updatedAt: 2026-08-24
+---
+
+import Callout from "../../components/Callout.astro";
+import EvidenceClaim from "../../components/EvidenceClaim.astro";
+import Figure from "../../components/Figure.astro";
+import FlowLab from "../../components/FlowLab.astro";
+import Mermaid from "../../components/Mermaid.astro";
+import SourceList from "../../components/SourceList.astro";
+import SourceSnapshot from "../../components/SourceSnapshot.astro";
+
+The repository is large enough that folder-by-folder reading obscures the design.
+Treat it as a directed product graph: contracts define the language, runtime
+packages implement reusable algorithms, apps choose a process topology, and
+infrastructure/native/build layers complete delivery.
+
+<SourceSnapshot />
+
+These counts are not hand-maintained marketing numbers. `source:check` enumerates
+tracked files at the locked Git commit, applies versioned extension and test-path
+rules, and counts lines from Git objects. Assets and the `.repos` reference clones
+are excluded; generated protocol source remains part of the implementation surface.
+
+## The atlas
+
+<div class="table-scroll" tabindex="0" role="region" aria-label="T3 Code monorepo area atlas">
+<table class="comparison">
+  <caption class="sr-only">Major repository areas and what they build or own</caption>
+  <thead><tr><th>Area</th><th>Primary output</th><th>Architectural role</th></tr></thead>
+  <tbody>
+    <tr><td><code>apps/server</code></td><td>published <code>t3</code> CLI/server</td><td>execution authority, persistence, HTTP/WS, providers, workspace services</td></tr>
+    <tr><td><code>apps/web</code></td><td>React browser bundle</td><td>local, hosted, and Electron-renderer product UI</td></tr>
+    <tr><td><code>apps/desktop</code></td><td>Electron application</td><td>backend ownership, WSL/SSH, exposure, preview, native IPC, updater</td></tr>
+    <tr><td><code>apps/mobile</code></td><td>Expo iOS/Android apps</td><td>remote-native UI, durable outbox/share, native terminal/diff, notifications</td></tr>
+    <tr><td><code>apps/marketing</code></td><td>Astro/Vercel static site</td><td>download and publication surface, separate from product web</td></tr>
+    <tr><td><code>packages/contracts</code></td><td>Effect schemas/types</td><td>canonical product, RPC, auth, provider, usage, and relay vocabulary</td></tr>
+    <tr><td><code>packages/client-runtime</code></td><td>non-visual client library</td><td>connection, RPC, snapshot/cursor state, caches, capability logic</td></tr>
+    <tr><td><code>packages/effect-*</code></td><td>protocol bridges</td><td>typed Codex app-server and ACP clients</td></tr>
+    <tr><td><code>packages/ssh</code> / <code>tailscale</code></td><td>reachability libraries</td><td>remote launch/forward and endpoint provisioning</td></tr>
+    <tr><td><code>infra/relay</code></td><td>Cloudflare Worker/control plane</td><td>identity, tunnel allocation, connection credentials, agent awareness</td></tr>
+    <tr><td><code>native</code></td><td>Rust/native artifacts</td><td>Ghostty VT and resource monitoring</td></tr>
+    <tr><td><code>scripts</code> / <code>packaging</code> / <code>.github</code></td><td>artifacts and releases</td><td>versioning, signing, installers, CI, stores, AUR, hosted aliases</td></tr>
+  </tbody>
+</table>
+</div>
+
+## Dependency is not the same as deployment
+
+<Figure number="3.1" title="Typed product graph" hint="solid: package/build · dotted: separately deployed control plane" caption="This deliberately heterogeneous map distinguishes shared-package imports and build/copy edges from the relay's separately deployed control-plane relationship. The npm server package copies the already-built web output as static assets." textEquivalent="Contracts feed the server, shared client runtime, web, desktop, and mobile by package dependency. The client runtime feeds web and mobile. Web has a build-order and copy edge into the server distribution and also becomes the Electron renderer and hosted app. The server and web are packaged into local CLI and desktop shapes. Relay infrastructure is separately deployed and connected by a control-plane relationship, not a package dependency." sources={["pnpm-workspace", "contracts-package", "client-runtime-package", "cli-build-dependency", "cli-web-bundle", "desktop-package", "mobile-package"]}>
+  <Mermaid id="typed-product-graph" label="T3 Code monorepo build dependency graph" chart={`flowchart LR
+    C[packages/contracts] --> S[apps/server]
+    C --> R[packages/client-runtime]
+    R --> W[apps/web]
+    R --> M[apps/mobile]
+    C --> D[apps/desktop]
+    W --> S
+    W --> D
+    S --> N[npm t3: server + copied web]
+    S --> D
+    X[effect-acp / codex bridge] --> S
+    H[ssh / tailscale / shared] --> S
+    H --> D
+    I[infra/relay] -.control plane.-> S`} />
+</Figure>
+
+The arrow from web to server is a build edge: `apps/server` copies `apps/web/dist`
+into its published client directory. At runtime, a browser still communicates with
+the server over authenticated HTTP/WebSocket boundaries. Likewise, Electron imports
+shared code and bundles a server, but its renderer remains isolated behind preload
+IPC.
+
+<FlowLab id="contract-shipping" title="Follow one contract into a shipped surface" prompt="Move through the build graph; notice where shared code stops and a process boundary begins." steps={[
+  { label: "Define", title: "Contracts establish the canonical language", detail: "Effect schemas describe domain commands, RPC methods, provider runtime events, authentication, capabilities, and query shapes before any product chooses a renderer or process topology.", actor: "packages/contracts", sourceIds: ["contracts-package"], tone: "durable" },
+  { label: "Reuse", title: "Client runtime implements non-visual behavior", detail: "Connection supervision, RPC sessions, caches, snapshot reconciliation, sequence cursors, and capability logic are shared without importing a browser or native UI.", actor: "packages/client-runtime", sourceIds: ["client-runtime-package"], tone: "client" },
+  { label: "Render", title: "The web application binds behavior to React", detail: "Runtime selection composes local, hosted, and desktop-renderer contexts around the same route tree; this is still build-time reuse, not server co-location.", actor: "apps/web", sourceIds: ["web-runtime-selection"], tone: "client" },
+  { label: "Package", title: "The server distribution copies a completed web build", detail: "The npm package depends on the web build and copies static output into its client directory so one CLI can serve both API and assets.", actor: "apps/server build", sourceIds: ["cli-web-bundle"], tone: "transport" },
+  { label: "Execute", title: "Runtime communication crosses HTTP and WebSocket boundaries", detail: "Once launched, the browser is a client and the environment server is the trusted executor. A dependency edge has become a protocol and authority boundary.", actor: "deployed environment", sourceIds: ["architecture-boundary", "server-composition"], tone: "runtime" }
+]} />
+
+<EvidenceClaim kind="inference" title="The repository optimizes for one canonical language, not one process" refs={["contracts-package", "client-runtime-package", "server-composition"]}>
+  Shared schemas and state algorithms reduce semantic drift across products. The cost is coordinated versioning and capability-skew handling; sharing a package does not erase the security or process boundary.
+</EvidenceClaim>
+
+<Callout title="Generated and reference code" tone="warning">
+  The `.repos` directory contains synchronized reference repositories and is not T3 Code production ownership. Generated protocol source inside first-party packages is included because it ships and constrains runtime behavior. The atlas always states which category a number uses.
+</Callout>
+
+<SourceList ids={[
+  "root-workspace-manifest",
+  "pnpm-workspace",
+  "contracts-package",
+  "client-runtime-package",
+  "cli-web-bundle",
+  "cli-build-dependency",
+  "desktop-package",
+  "mobile-package",
+  "resource-monitor-crate",
+  "marketing-site-runtime"
+]} />

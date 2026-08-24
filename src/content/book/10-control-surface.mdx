@@ -1,0 +1,106 @@
+---
+slug: control-surface
+order: 10
+number: "1"
+kind: chapter
+part: Part I · Boundaries and vocabulary
+partOrder: 1
+title: Control surface, not agent brain
+shortTitle: The ownership boundary
+summary: For each environment, T3 Code authoritatively coordinates repository and provider execution without replacing a provider's model loop, native context, or authentication.
+status: source-checked
+gates: [sources]
+objectives:
+  - Draw the ownership boundary between client, T3 server, provider adapter, and provider CLI.
+  - Explain why multi-harness support is an adapter problem rather than a shared agent implementation.
+  - Identify the server services that make T3 Code more than a terminal wrapper.
+keywords: [control surface, harness, ownership, server, provider adapter]
+sourceAreas: [docs/internals/overview.md, apps/server/src/server.ts, apps/server/src/provider/Services/ProviderAdapter.ts]
+visuals: [ownership matrix, server capability assembly]
+updatedAt: 2026-08-24
+---
+
+import Callout from "../../components/Callout.astro";
+import DecisionGrid from "../../components/DecisionGrid.astro";
+import EvidenceClaim from "../../components/EvidenceClaim.astro";
+import SourceExcerpt from "../../components/SourceExcerpt.astro";
+import SourceList from "../../components/SourceList.astro";
+
+The product's cleanest architectural sentence is: **each T3 environment is a
+server-authoritative control plane around replaceable coding-agent runtimes.**
+
+Clients are thin with respect to trusted workspace execution—not small programs.
+They express intent and render projected state, while Electron and mobile still own
+substantial native behavior. For the selected environment, the server owns
+repository-facing orchestration. A provider runtime owns its model/tool loop. The
+adapter and `ProviderService` divide live protocol behavior from persisted session
+binding and recovery state.
+
+<SourceExcerpt id="architecture-boundary" focus={[5, 6, 7, 8, 16, 20, 21, 24]} note="This boundary explains both remote access and multi-provider support. A remote client changes the transport to the same server; a new harness changes the adapter below it." />
+
+## Six ownership layers
+
+<div class="table-scroll" tabindex="0" role="region" aria-label="Ownership boundary comparison">
+<table class="comparison">
+  <caption class="sr-only">Ownership of durable, runtime, provider-native, client-local, and workspace state</caption>
+  <thead><tr><th>Owner</th><th>Owns</th><th>Does not own</th></tr></thead>
+  <tbody>
+    <tr><td>T3 domain</td><td>durable project/thread history, lifecycle intent, messages, activities, proposed plans, checkpoint metadata, query projections</td><td>live process objects, provider-native memory, every transient UI signal</td></tr>
+    <tr><td>ProviderService + session directory</td><td>instance routing and persisted binding, cwd, model/runtime payload, continuation cursor, status</td><td>native cursor meaning or provider reasoning</td></tr>
+    <tr><td>Provider adapter</td><td>live process/session object, native protocol, cursor interpretation, approval/input mapping, canonical event translation</td><td>cross-provider product policy or durable projections</td></tr>
+    <tr><td>Provider runtime</td><td>model/tool loop, native conversation/context, compaction, provider account authentication</td><td>T3's multi-environment UI, checkpoint model, or product lifecycle</td></tr>
+    <tr><td>Client shell</td><td>navigation, presentation, caches, device settings; mobile drafts and durable outbox; Electron OS integrations</td><td>authoritative environment thread history or remote workspace execution</td></tr>
+    <tr><td>Selected environment</td><td>workspace files, provider processes, Git, PTYs, server SQLite/files/settings/secrets</td><td>other environments supervised by the same client</td></tr>
+  </tbody>
+</table>
+</div>
+
+<EvidenceClaim kind="verified" title="One client can supervise more than one server authority" refs={["client-environment-registry", "architecture-boundary"]}>
+  “The server is authoritative” applies per environment. The shared client registry can keep several environment descriptors and merge their projected work into one product surface.
+</EvidenceClaim>
+
+## A normalized, deliberately bounded seam
+
+<SourceExcerpt id="provider-adapter-core" focus={[47, 51, 52, 57, 64, 71]} note="The common lifecycle is start, send, and interrupt. The adapter returns Effect values so failures and dependencies remain typed, while provider-specific protocols stay outside orchestration." />
+
+<SourceExcerpt id="provider-adapter-stream" focus={[131, 132, 134]} note="Every implementation emits the same ProviderRuntimeEvent stream. This is the upward-facing seam that keeps the projector and clients provider-agnostic." />
+
+The contract is not a promise of feature equality. Its lifecycle, interaction,
+history, rollback, feedback, and event-stream surface is deliberately bounded, but
+not tiny. At this revision, the separate common capability object only describes
+session model switching; other semantic differences
+are expressed by adapter behavior, errors, and provider presentation. Uniform
+orchestration is achieved by **normalizing at the boundary**, not by pretending the
+providers are identical.
+
+<EvidenceClaim kind="verified" title="The capability object is smaller than the adapter contract" refs={["provider-adapter-capabilities", "provider-adapter-contract"]}>
+  Capability discovery currently advertises only in-session model switching. The actual adapter seam also covers session lifecycle, turns, approvals, structured input, history, rollback, feedback, shutdown, and canonical events.
+</EvidenceClaim>
+
+## Why the server is the real product kernel
+
+<SourceExcerpt id="server-runtime-core" focus={[353, 354, 360, 366, 370, 380, 391, 400, 407, 416]} note="This is actual layer composition rather than an import list: authorization, managed remote endpoints, provider runtime, event ingestion, command reactions, and the server dependency graph are wired into one owned runtime." />
+
+<DecisionGrid items={[
+  { label: "Decision", title: "Keep workspace authority server-side", text: "A phone can supervise the same environment as desktop because remote repository, provider, Git, and PTY operations remain behind that environment's server." },
+  { label: "Decision", title: "Keep provider complexity at the edge", text: "The orchestration core speaks canonical commands and events; Codex/Claude/ACP/OpenCode quirks remain inside adapters." },
+  { label: "Trade-off", title: "The server becomes a large trust boundary", text: "Remote authentication and per-method scopes matter because one socket fronts shells, files, Git, and autonomous coding agents." },
+  { label: "Trade-off", title: "Capabilities can diverge", text: "A common product model still needs explicit answers for provider-only features, resume semantics, plan events, usage, and approvals." }
+]} />
+
+<Callout title="Terminology that prevents confusion" tone="success">
+  In this book, **agent** is a provider-owned coding runtime or subagent, **provider adapter** is its T3 integration, **client** is a T3 product surface, and **environment** is one running T3 server plus the machine/state it exposes. Calling all four “the agent” hides the architecture.
+</Callout>
+
+## Source trail
+
+<SourceList ids={[
+  "maintainer-product-constraints",
+  "architecture-boundary",
+  "provider-adapter-contract",
+  "provider-adapter-capabilities",
+  "server-composition",
+  "client-environment-registry",
+  "desktop-native-boundary",
+  "mobile-local-state-cleanup"
+]} />

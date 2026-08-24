@@ -1,0 +1,117 @@
+---
+slug: domain-vocabulary
+order: 20
+number: "2"
+kind: chapter
+part: Part I · Boundaries and vocabulary
+partOrder: 1
+title: Environment, project, thread, turn, and session
+shortTitle: Domain vocabulary
+summary: The entities share a UI, but they have different identity, cardinality, ownership, and restart behavior.
+status: source-checked
+gates: [sources]
+objectives:
+  - Distinguish product work items from provider and transport sessions.
+  - Understand which entity owns workspace, provider selection, history, and lifecycle.
+  - Separate durable thread state from ephemeral liveness and live plan progress.
+keywords: [environment, project, thread, turn, session, entity model]
+sourceAreas: [packages/contracts/src/environment.ts, packages/contracts/src/orchestration.ts, packages/contracts/src/providerRuntime.ts]
+visuals: [entity relationship table, lifecycle scenario lab]
+updatedAt: 2026-08-24
+---
+
+import Callout from "../../components/Callout.astro";
+import EvidenceClaim from "../../components/EvidenceClaim.astro";
+import ScenarioLab from "../../components/ScenarioLab.astro";
+import SourceList from "../../components/SourceList.astro";
+
+T3 Code's screens place projects, threads, turns, and provider sessions close
+together, but none are synonyms. The clean model starts with an **environment**:
+one running T3 server plus the machine and capabilities it exposes. A client can
+hold several environment descriptors and merge their work into one view.
+
+## The entity ladder
+
+<div class="table-scroll" tabindex="0" role="region" aria-label="T3 Code entity ownership and cardinality">
+<table class="comparison">
+  <caption class="sr-only">Identity, parent, durable contents, and lifecycle for the main T3 Code entities</caption>
+  <thead><tr><th>Entity</th><th>Parent / cardinality</th><th>What it carries</th><th>Important boundary</th></tr></thead>
+  <tbody>
+    <tr><td>Environment</td><td>client catalog → many</td><td>server identity, label, platform, version, capabilities, authenticated endpoint</td><td>one authority for the execution context it exposes; one physical host may expose several</td></tr>
+    <tr><td>Project</td><td>environment → many</td><td>workspace root, repository identity, scripts, presentation metadata</td><td>a discovered/configured root, not a task</td></tr>
+    <tr><td>Thread</td><td>project → many</td><td>workspace selection, provider instance/model/modes, messages, activities, plans, checkpoints, lifecycle</td><td>the durable product work item</td></tr>
+    <tr><td>Turn</td><td>thread → ordered many</td><td>one user request, provider lifecycle, generated assistant/tool activity, usage, checkpoint ordinal</td><td>a lifecycle episode, not necessarily a provider process</td></tr>
+    <tr><td>Provider session</td><td>thread → current binding</td><td>instance, cwd, model/runtime payload, continuation state, live adapter object when running</td><td>binding can survive; the live object cannot and may later be created from continuation state</td></tr>
+    <tr><td>Connection session</td><td>environment target → one attempt/lease</td><td>authenticated socket, capabilities, generation, sequence cursor</td><td>transport lifetime; reconnect replaces it without replacing the thread</td></tr>
+  </tbody>
+</table>
+</div>
+
+The thread is where product concepts converge. It identifies a project and
+workspace, remembers the chosen provider instance and modes, and projects messages,
+activities, proposed plans, checkpoints, and a summary of provider runtime state.
+The provider's live session object remains outside that aggregate.
+
+<EvidenceClaim kind="verified" title="Not everything in a thread summary is durable" refs={["orchestration-shell-summary", "ephemeral-agent-liveness"]}>
+  Background-agent liveness and live plan progress are convenience folds for the current process. They appear beside durable lifecycle and message state but intentionally disappear on restart.
+</EvidenceClaim>
+
+## Similar names, different restart behavior
+
+<ScenarioLab id="identity-survival" title="Which identity survives?" prompt="Select a disruption and inspect which layers change." scenarios={[
+  {
+    label: "Socket reconnect",
+    title: "Transport is replaced; domain identity stays",
+    summary: "A new RPC session and connection lease can resume the same environment and thread.",
+    facts: ["Environment, project, and thread IDs are unchanged.", "The client may resume after a sequence cursor or request an authoritative snapshot.", "The provider process does not restart merely because the phone changed networks."],
+    sourceIds: ["environment-descriptor", "thread-state-runtime"],
+    tone: "safe"
+  },
+  {
+    label: "Server restart",
+    title: "Durable state returns; live objects do not",
+    summary: "SQLite and filesystem state survive, while queues, PubSub, adapter objects, liveness, and active socket leases are gone.",
+    facts: ["A persisted provider binding may later supply a continuation cursor.", "Projected starting/running sessions are reconciled because no live adapter session exists.", "Ephemeral agent liveness is rebuilt only from new runtime events."],
+    sourceIds: ["orchestration-shell-summary", "ephemeral-agent-liveness", "startup-provider-reconciliation", "provider-session-recovery"],
+    tone: "warning"
+  },
+  {
+    label: "New turn",
+    title: "The thread stays; the lifecycle advances",
+    summary: "A turn adds ordered user/provider facts to the same work item and may reuse its provider continuation.",
+    facts: ["The user message and turn-start intent form one event batch for an existing thread.", "Provider selection and compatibility decide whether the existing session can continue.", "Checkpoint turn count advances independently of connection lifetime."],
+    sourceIds: ["existing-turn-decider", "orchestration-entities"],
+    tone: "neutral"
+  }
+]} />
+
+Startup and lazy recovery are two separate transitions. On boot, projected
+`starting` or `running` sessions that have no live adapter entry are settled as an
+error. A later routed operation may use the persisted binding and continuation
+cursor to create or resume a new adapter session; the old in-memory object itself is
+never resurrected.
+## A vocabulary rule for the rest of the book
+
+When the text says **session**, it qualifies the owner: provider session, RPC
+session, browser auth session, or desktop backend process. When it says **task**, it
+means either the durable product work item—a thread—or explicitly a provider-emitted
+task/subagent activity. This avoids importing one harness's internal vocabulary into
+the cross-provider domain model.
+
+<Callout title="Keep the cardinalities in mind" tone="success">
+  One client can supervise many environments. One environment exposes many projects. One project has many threads. One thread has many turns but only a current provider binding. Reconnect, resume, and restart act on different rungs of that ladder.
+</Callout>
+
+<SourceList ids={[
+  "environment-descriptor",
+  "client-environment-registry",
+  "orchestration-entities",
+  "orchestration-shell-summary",
+  "orchestration-command-catalog",
+  "provider-session-vocabulary",
+  "provider-runtime-vocabulary",
+  "provider-session-binding",
+  "provider-session-recovery",
+  "startup-provider-reconciliation",
+  "ephemeral-agent-liveness"
+]} />
