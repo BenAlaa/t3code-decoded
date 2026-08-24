@@ -1,0 +1,70 @@
+---
+slug: how-to-read
+order: 1
+kind: front
+part: Start here
+partOrder: 0
+title: How to read a changing system
+shortTitle: Reading guide
+summary: The evidence rules, source labels, revision contract, and reading paths used throughout the book.
+status: source-checked
+gates: [sources]
+objectives:
+  - Distinguish verbatim source, abridged source, diagrams, and interpretation.
+  - Choose a linear, feature-first, or implementation-first reading path.
+  - Understand what the pinned revision does and does not promise.
+keywords: [evidence, source references, revision, reading path]
+sourceAreas: [sources/t3code.lock.json, sources/excerpts.manifest.json]
+visuals: [evidence legend]
+updatedAt: 2026-08-24
+---
+
+import Callout from "../../components/Callout.astro";
+import EvidenceClaim from "../../components/EvidenceClaim.astro";
+import SourceExcerpt from "../../components/SourceExcerpt.astro";
+import SourceSnapshot from "../../components/SourceSnapshot.astro";
+
+This is a field guide to a moving codebase. It therefore treats provenance as part of the interface, not a footnote.
+
+<SourceSnapshot />
+
+## Four evidence labels
+
+1. **Verified behavior** is backed by executable code, a test, schema, migration, or workflow at the pinned revision.
+2. **Documented intent** reports what a maintainer document says without silently upgrading prose into runtime behavior.
+3. **Inference** names a design consequence derived from cited evidence. The sources prove the inputs; the book owns the interpretation.
+4. **Future / proposed** is explicitly unshipped. A builder capability, community request, or future-work paragraph is never called a supported feature.
+
+Exact source cards are a separate presentation device. Their code is read directly
+from the locked Git object—not the possibly dirty working tree—and shows real line
+numbers, a visible checksum prefix, and an immutable GitHub permalink.
+
+<SourceExcerpt id="orchestration-rpc-methods" focus={[27, 28, 34, 35]} note="The book's source cards use the repository's actual line positions. These eight RPC names are the public orchestration surface on the pinned revision, not a reconstructed list." />
+
+<EvidenceClaim kind="inference" title="Why source lock beats a link to main" refs={["orchestration-rpc-methods"]}>
+  A stable source lock makes an explanation reproducible. It does not make it permanently current; later editions must deliberately refresh and review the evidence.
+</EvidenceClaim>
+
+## Three reading paths
+
+### Linear: follow one task
+
+Start with **The request trace**, then read the numbered chapters in order. This follows a user action from client state through authenticated RPC, commands, events, provider I/O, checkpoints, and back to every UI.
+
+### Architecture-first: map then zoom
+
+Open **The complete system map**, choose a layer, and follow its cross-links. This is useful when you already know event sourcing, provider protocols, or Electron/React Native and want the unfamiliar seams.
+
+### Transfer-first: design another orchestrator
+
+Read the ownership model, adapter boundary, domain kernel, connection runtime, and final transfer guide. Those chapters separate reusable patterns from choices that only make sense for T3 Code's bring-your-own-subscription model.
+
+<Callout title="Freshness rule" tone="warning">
+  The live repository moves quickly. A source link with `fa219001d` is intentionally historical and stable. A link to `main` may be newer, but it cannot prove what this edition read. The book prefers reproducibility over silently chasing HEAD.
+</Callout>
+
+## Status words
+
+- **Draft**: structured and cited, but still awaiting a second source pass.
+- **Source checked**: claims and diagrams have been reconciled to the pinned checkout.
+- **Verified**: source checked, link checked, and reviewed in the end-to-end narrative.
