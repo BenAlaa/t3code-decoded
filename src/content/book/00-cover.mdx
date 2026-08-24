@@ -1,0 +1,38 @@
+---
+slug: cover
+order: 0
+kind: front
+part: Start here
+partOrder: 0
+title: T3 Code Decoded
+shortTitle: Cover
+summary: A source-grounded, end-to-end field guide to T3 Code's control plane, provider adapters, clients, remote access, and distribution system.
+status: source-checked
+gates: [sources]
+objectives: []
+keywords: [T3 Code, architecture, agent harness, control plane]
+sourceAreas: [apps/server, apps/web, apps/desktop, apps/mobile, packages/contracts]
+visuals: [book cover]
+updatedAt: 2026-08-24
+---
+
+import BookCover from "../../components/BookCover.astro";
+import Callout from "../../components/Callout.astro";
+
+<BookCover />
+
+<Callout title="Edition contract" tone="success">
+  This edition is locked to [`pingdotgg/t3code@fa219001d`](https://github.com/pingdotgg/t3code/tree/fa219001dc2f14cfd9c7774c2c03c153359144be). “Shipped,” “supported,” and “implemented” always mean that revision unless a dated release or roadmap note says otherwise.
+</Callout>
+
+## What this book is trying to make obvious
+
+T3 Code is easy to mistake for an agent. It is more useful—and more technically
+interesting—to see it as a **control surface and execution boundary around several
+independent agent runtimes**. Providers own their model loops and native context.
+T3 owns durable orchestration history and query projections, coordinates workspace
+operations, and gives clients shared semantics with deliberate platform-specific
+capabilities. Some delivery and side-effect machinery remains intentionally
+ephemeral; the book marks those seams instead of calling all server state durable.
+
+That division of ownership is the spine of the book. Every later module connects back to it.

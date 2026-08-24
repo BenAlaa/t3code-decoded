@@ -1,0 +1,122 @@
+---
+slug: architecture-map
+order: 3
+kind: front
+part: Start here
+partOrder: 0
+title: The complete system map
+shortTitle: System map
+summary: A spatial map that separates client surfaces, transport, transactional state, hot delivery, side effects, provider routing, and external execution.
+status: source-checked
+gates: [sources]
+objectives:
+  - Locate every major package at its runtime boundary.
+  - See which edges carry commands, events, provider-native protocol, or filesystem effects.
+keywords: [architecture map, components, packages, boundaries]
+sourceAreas: [apps/server, packages/contracts, packages/client-runtime, apps/web, apps/desktop, apps/mobile, apps/marketing, infra/relay]
+visuals: [interactive layer map, ownership table]
+updatedAt: 2026-08-24
+---
+
+import Callout from "../../components/Callout.astro";
+import EvidenceClaim from "../../components/EvidenceClaim.astro";
+import Figure from "../../components/Figure.astro";
+import LayerMap from "../../components/LayerMap.astro";
+import Mermaid from "../../components/Mermaid.astro";
+import SourceList from "../../components/SourceList.astro";
+
+For a selected environment, authoritative repository and provider execution occurs
+behind that environment's server boundary. A client can supervise several such
+environments, while Electron and mobile also own device-local storage, navigation,
+notifications, preview, update, and operating-system integrations.
+
+<Figure number="0.1" title="Architecture map · durability and ownership bands" hint="linked nodes open the chapters already authored" caption="The queue, decision step, PubSub, and reactors are deliberately outside the transactional band. SQLite query projections and committed live events reach clients through different read paths." textEquivalent="Clients use authenticated HTTP for snapshots and query pages and WebSocket RPC for commands and live subscriptions. A serialized in-memory queue invokes a persistence- and provider-I/O-free decision layer that still reads the clock and creates UUIDs. That decision happens before events, SQL projections, and accepted receipts commit together. A hot PubSub then feeds best-effort reactors and live subscribers. Provider work routes through ProviderService, an instance registry, and one provider adapter before reaching the five native harnesses." sources={["architecture-boundary", "event-engine-runtime", "decider-effect-dependencies", "orchestration-transaction", "ws-thread-subscription", "provider-turn-reactor", "provider-event-routing"]}>
+  <LayerMap layers={[
+    { label: "Delivery", tone: "client", nodes: [{ label: "Local CLI + web" }, { label: "Hosted web" }, { label: "Electron" }, { label: "iOS / Android" }, { label: "Marketing publication" }] },
+    { label: "Reachability", tone: "transport", nodes: [{ label: "Loopback / bearer" }, { label: "Tailscale endpoint" }, { label: "T3 Connect tunnel" }, { label: "Desktop SSH forward" }] },
+    { label: "Shared client", tone: "client", nodes: [{ label: "Connection registry" }, { label: "Supervisor + one-attempt RPC" }, { label: "State factories + caches" }] },
+    { label: "Trust boundary", tone: "transport", boundary: true, nodes: [{ label: "HTTP auth + snapshots" }, { label: "WebSocket commands + live" }, { label: "Scopes + typed contracts", slug: "control-surface" }] },
+    { label: "Coordination", tone: "runtime", nodes: [{ label: "Serialized command queue" }, { label: "In-memory command model" }] },
+    { label: "Decision", tone: "runtime", nodes: [{ label: "Invariant planning" }, { label: "Clock + UUID Effects" }, { label: "No persistence / provider I/O" }] },
+    { label: "Transaction", tone: "durable", nodes: [{ label: "Event log" }, { label: "SQL projections" }, { label: "Accepted receipt" }] },
+    { label: "Post-commit", tone: "runtime", nodes: [{ label: "Hot event PubSub" }, { label: "Best-effort reactors" }, { label: "Live subscription" }] },
+    { label: "Read side", tone: "durable", nodes: [{ label: "Snapshot query" }, { label: "Bounded replay" }, { label: "Keyset pages + watermarks" }] },
+    { label: "Work services", tone: "external", nodes: [{ label: "Git + checkpoints" }, { label: "Files + assets" }, { label: "PTY terminals" }, { label: "Preview + MCP + VCS" }] },
+    { label: "Provider route", tone: "runtime", nodes: [{ label: "ProviderService" }, { label: "Instance registry" }, { label: "ProviderAdapter", slug: "control-surface" }] },
+    { label: "Harnesses", tone: "external", nodes: [{ label: "Codex" }, { label: "Claude" }, { label: "Cursor" }, { label: "Grok" }, { label: "OpenCode" }] }
+  ]} />
+</Figure>
+
+## Two return paths, one write path
+
+<Figure number="0.2" title="Intent goes down; snapshots and events come back" hint="dashed arrows cross a non-durable delivery seam" caption="The adapter stops provider-native shapes from leaking upward. Snapshot queries read SQL projections; live subscriptions consume the post-commit event stream. A crash after commit but before a reactor side effect is a real recovery gap." textEquivalent="A client sends a typed command by WebSocket. The in-memory queue calls the decision layer before the SQL boundary, then atomically commits events, SQL projections, and an accepted receipt. After commit, a hot event bus independently feeds live subscribers and provider reactors. A reactor routes through ProviderService and an adapter to a harness. Canonical harness events return through runtime ingestion and re-enter the command queue. Separately, authenticated HTTP reads authoritative SQLite snapshots for initial and reconnect synchronization." sources={["decider-effect-dependencies", "orchestration-transaction", "hot-reactor-no-replay", "thread-state-runtime", "ws-thread-subscription", "provider-runtime-event-union", "provider-runtime-ingestion"]}>
+  <Mermaid id="intent-state-flow" label="Intent and state flow across T3 Code layers" chart={`flowchart TB
+    C[Local/hosted/Electron web · mobile] -->|typed command| W[WebSocket RPC + scope]
+    W --> Q[Serialized in-memory queue]
+    Q --> D[Decision: invariants + clock/UUID Effects]
+    D -->|then enter SQL transaction| S[(Events + SQL projections + accepted receipt)]
+    S -.->|post-commit publish| B[Hot event PubSub]
+    B -.->|best effort; not replayed| R[Provider command reactor]
+    R --> V[ProviderService + instance registry]
+    V --> A[Provider adapter]
+    A --> P[Codex · Claude · Cursor · Grok · OpenCode]
+    P -->|native notifications| A
+    A -->|canonical runtime events| I[Runtime ingestion]
+    I -->|internal commands| Q
+    B -.->|committed live events| L[WebSocket subscription]
+    L --> C
+    S --> H[Authenticated HTTP snapshot query]
+    H --> C`} />
+</Figure>
+
+The downward path is imperative: “start this turn,” “accept this approval,” “revert
+this checkpoint.” The upward path is descriptive: assistant deltas, activities,
+plans, usage, session state, and changed-file summaries. The adapter is where each
+harness's vocabulary becomes the canonical provider-runtime vocabulary.
+
+<EvidenceClaim kind="verified" title="Durability stops before side-effect delivery" refs={["orchestration-transaction", "hot-reactor-no-replay"]}>
+  Event append, SQL projection updates, and an accepted command receipt are atomic. Publication to reactors happens afterwards through memory. A committed intent can therefore survive while its provider or filesystem side effect is lost across a crash.
+</EvidenceClaim>
+
+## Three UI families, four execution clients, five delivery shapes
+
+`apps/web` serves three roles: the browser UI copied into the npm CLI, the hosted
+product UI, and the Electron renderer. Electron and React Native add very different
+native systems around shared connection/state semantics. The marketing Astro site
+is the fifth delivery shape, but it is a publication surface—not an execution
+client.
+
+<div class="table-scroll" tabindex="0" role="region" aria-label="Cross-surface capability comparison">
+<table class="comparison">
+  <caption class="sr-only">Cross-surface capability comparison for local web, hosted web, Electron, iOS, and Android</caption>
+  <thead><tr><th>Capability</th><th>Local web</th><th>Hosted web</th><th>Electron</th><th>iOS</th><th>Android</th></tr></thead>
+  <tbody>
+    <tr><td>Environment server</td><td>CLI-owned</td><td>remote</td><td>managed local/WSL</td><td>remote</td><td>remote</td></tr>
+    <tr><td>Terminal renderer</td><td>Ghostty WASM</td><td>Ghostty WASM</td><td>Ghostty WASM</td><td>native Ghostty</td><td>native Ghostty VT</td></tr>
+    <tr><td>Offline new-task intent</td><td>—</td><td>—</td><td>—</td><td>durable outbox</td><td>durable outbox</td></tr>
+    <tr><td>Environment provisioning</td><td>primary/pair</td><td>pair/relay</td><td>primary, WSL, SSH</td><td>pair/relay</td><td>pair/relay</td></tr>
+    <tr><td>Distinctive native edge</td><td>local browser</td><td>cloud identity</td><td>preview, updates, OS IPC</td><td>APNs, Live Activities, share</td><td>share, widgets</td></tr>
+  </tbody>
+</table>
+</div>
+
+<Callout title="What remote does not change" tone="success">
+  A phone does not run Codex and the hosted web app does not proxy repository traffic. Each selected environment keeps provider processes, workspace files, Git, PTYs, and authoritative orchestration state behind its own server. A client may merge several environments, and its native shell still owns device-local concerns.
+</Callout>
+
+## Source trail
+
+<SourceList ids={[
+  "architecture-boundary",
+  "rpc-group",
+  "server-composition",
+  "provider-adapter-contract",
+  "client-connection-directory",
+  "cli-web-bundle",
+  "web-runtime-selection",
+  "desktop-app-assembly",
+  "mobile-app-distribution",
+  "marketing-site-runtime",
+  "desktop-native-boundary",
+  "mobile-offline-outbox"
+]} />

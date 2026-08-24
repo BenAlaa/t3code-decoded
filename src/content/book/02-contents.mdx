@@ -1,0 +1,97 @@
+---
+slug: contents
+order: 2
+kind: front
+part: Start here
+partOrder: 0
+title: Contents and learning route
+shortTitle: Contents
+summary: "The complete ordered reading route: establish ownership, then trace the durable control plane, adapters, work lifecycle, clients, remote paths, shipping system, and architectural synthesis."
+status: source-checked
+gates: [sources, links, editorial]
+objectives:
+  - See why the order follows runtime causality instead of repository folders.
+  - Understand the scope of every completed part and its visual explanations.
+keywords: [contents, chapters, roadmap, learning path]
+sourceAreas: [BOOK_PLAN.md]
+visuals: [chapter roadmap]
+updatedAt: 2026-08-24
+---
+
+import Callout from "../../components/Callout.astro";
+
+The old book introduced several keystone concepts long after depending on them. This edition orders the material by **causal distance from one user request**. The repository atlas remains available as reference, but it does not dictate the story.
+
+## Start here
+
+- **How to read a changing system** — evidence, revision, and reading paths.
+- **The complete system map** — the same architecture in spatial form.
+- **One request, every boundary** — a step-through trace before the zoomed chapters.
+
+## Part I · Boundaries and vocabulary
+
+1. Control surface, not agent brain
+2. Environment · project · thread · turn · session
+3. Repository and dependency atlas
+4. Runtime topologies and technology choices
+
+## Part II · Boot and connect
+
+5. The `npx t3` bootstrap path
+6. Server composition and execution boundary
+7. Effect RPC, subscriptions, and wire contracts
+8. Pairing, scopes, credentials, and WebSocket upgrade
+
+## Part III · The durable domain kernel
+
+9. Commands and invariants
+10. Events, receipts, and idempotency
+11. Projection tables and read models
+12. Post-commit reactors: serialized handling without durable delivery
+13. SQLite, files, settings, secrets, migrations, and recovery
+
+## Part IV · Five harnesses, one product model
+
+14. The `ProviderAdapter` contract
+15. Drivers, instances, registries, and multi-instance routing
+16. Codex through app-server JSON-RPC
+17. Claude through the Agent SDK
+18. Cursor and Grok through ACP
+19. OpenCode and the normalization matrix
+20. Two usage systems: live context telemetry and transcript accounting
+
+## Part V · The work lifecycle
+
+21. Project discovery and `t3.json`
+22. Current checkout vs isolated worktrees
+23. Start, stream, steer, interrupt, settle
+24. Permission modes, approvals, and structured input
+25. Threads, provider tasks, plans, skills, and subagents
+26. Who owns context, compaction, and memory
+27. Hidden-ref checkpoints, diffs, and revert
+28. Terminals, files, previews, MCP, VCS, and pull requests
+
+## Part VI · Client architectures: shared semantics, platform edges
+
+29. The shared client runtime
+30. Web routes, state, and rendering performance
+31. Composer, work log, review, and sidebar lifecycle
+32. Desktop: Electron, IPC, server ownership, browser, SSH
+33. Mobile: React Native, persistence, outbox, sharing, notifications
+
+## Part VII · Reach and ship
+
+34. Primary, paired bearer, Tailscale endpoints, and SSH access
+35. T3 Connect: OAuth, DPoP, relay, and tunnel
+36. Reconnect, multi-environment state, notifications, version skew
+37. Distribution artifacts: CLI, hosted app, desktop, mobile, marketing, and AUR
+38. Release graph, three update systems, and observability/privacy
+
+## Part VIII · Synthesis
+
+39. Six complete traces: ownership, convergence, and failure boundaries
+40. Decisions, trade-offs, limitations, and an honest roadmap
+
+<Callout title="A plan is not a promise">
+  `BOOK_PLAN.md` is the authoring contract for this repository. Product roadmap claims inside the book use a stricter split: shipped code, explicit maintainer future work, and community ideas are three different categories.
+</Callout>
