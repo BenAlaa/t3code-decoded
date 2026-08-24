@@ -1,0 +1,268 @@
+---
+interface Props { id: string; }
+
+const { id } = Astro.props;
+if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(id)) {
+  throw new Error("ContextOwnershipLab requires a stable kebab-case id.");
+}
+const labId = `context-ownership-${id}`;
+---
+
+<section class="context-ownership-lab" data-context-ownership-lab data-context-ownership-ready="initializing" aria-labelledby={`${labId}-title`}>
+  <header class="ownership-head">
+    <span>Interactive ownership ledger</span>
+    <h3 id={`${labId}-title`}>Ask what survives before calling it memory</h3>
+    <p>Select a teaching event. The ledger identifies authority, durable records, and the narrow recovery claim; it never simulates a model or invents a provider prompt.</p>
+  </header>
+
+  <div class="ownership-tabs" role="tablist" aria-label="Context ownership teaching events">
+    <button type="button" role="tab" id={`${labId}-turn`} aria-selected="true" aria-controls={`${labId}-panel`} data-ownership-event="turn">1. Send a turn</button>
+    <button type="button" role="tab" id={`${labId}-compact`} aria-selected="false" aria-controls={`${labId}-panel`} data-ownership-event="compact">2. Provider reports compaction</button>
+    <button type="button" role="tab" id={`${labId}-restart`} aria-selected="false" aria-controls={`${labId}-panel`} data-ownership-event="restart">3. Server restarts</button>
+    <button type="button" role="tab" id={`${labId}-missing`} aria-selected="false" aria-controls={`${labId}-panel`} data-ownership-event="missing">4. Native session missing</button>
+    <button type="button" role="tab" id={`${labId}-client`} aria-selected="false" aria-controls={`${labId}-panel`} data-ownership-event="client">5. Client reconnects</button>
+  </div>
+
+  <article class="ownership-panel" id={`${labId}-panel`} role="tabpanel" aria-labelledby={`${labId}-turn`} tabindex="0">
+    <div class="ownership-summary">
+      <p class="ownership-kicker" data-ownership-kicker>Event 1 of 5 · live provider work begins</p>
+      <h4 data-ownership-title>A provider receives a turn in its own native session</h4>
+      <p data-ownership-copy>T3 constructs the visible current-turn payload. The provider-native session owns the accumulated conversation context and private compaction state.</p>
+    </div>
+
+    <div class="ownership-ledger-wrap" tabindex="0" role="region" aria-label="Context ownership restart ledger">
+      <table>
+        <thead><tr><th scope="col">Record</th><th scope="col">Authoritative owner</th><th scope="col">This event</th><th scope="col">After server restart</th></tr></thead>
+        <tbody data-ownership-rows>
+          <tr><th scope="row">Accumulated native context</th><td>provider-native session</td><td>T3's explicit request enters provider-owned history</td><td>provider-specific resume only</td></tr>
+          <tr><th scope="row">T3 thread history</th><td>T3 orchestration</td><td>message/activity projection may commit</td><td>durable product record reloads</td></tr>
+          <tr><th scope="row">Resume cursor</th><td>provider shape; T3 persists binding</td><td>adapter may return/update it</td><td>same adapter receives opaque cursor</td></tr>
+          <tr><th scope="row">Context telemetry</th><td>provider emits; T3 latest-selects</td><td>only if a usable event arrives</td><td>latest retained activity may render</td></tr>
+          <tr><th scope="row">Client cache/draft/outbox</th><td>client surface</td><td>surface-specific local state</td><td>not a provider prompt or server authority</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="ownership-boundary" data-ownership-boundary>
+      <strong>Boundary statement</strong>
+      <p>T3 constructs and records the visible request around a turn. It does not own or serialize the provider's accumulated hidden conversation context.</p>
+    </div>
+
+    <div class="ownership-sources" data-ownership-sources aria-label="Source IDs">
+      <code>context-current-turn-payload</code><code>provider-session-contract</code>
+    </div>
+  </article>
+
+  <p class="sr-only" role="status" aria-live="polite" aria-atomic="true" data-ownership-status>Selected event: Send a turn.</p>
+
+  <noscript><p class="ownership-noscript">This interactive ledger needs JavaScript. The complete static recovery reference follows.</p></noscript>
+  <details class="ownership-static" open>
+    <summary>Static ownership and restart reference</summary>
+    <div class="ownership-static-scroll" tabindex="0" role="region" aria-label="Static context ownership reference">
+      <table>
+        <thead><tr><th scope="col">Question</th><th scope="col">Answer at the pinned revision</th></tr></thead>
+        <tbody>
+          <tr><th scope="row">Who owns exact model prompt context?</th><td>T3 constructs the visible current-turn request; the selected provider's native session owns accumulated conversation context and hidden provider state.</td></tr>
+          <tr><th scope="row">What does T3 persist to attempt continuation?</th><td>A provider/instance-bound runtime record with an opaque resume cursor, runtime/session metadata, plus separate thread projections.</td></tr>
+          <tr><th scope="row">What does compaction add to T3?</th><td>A normalized <code>context-compaction</code> activity when an adapter reports a compacted provider thread; no generic T3 summary/prompt replacement is established.</td></tr>
+          <tr><th scope="row">What is the context meter?</th><td>The newest valid provider-reported context-window activity available in the bounded thread snapshot, not a prompt archive, aggregate usage total, or cost ledger.</td></tr>
+          <tr><th scope="row">Is there universal long-term memory?</th><td>No such cross-provider T3 subsystem is established by the inspected generic contracts/service paths. This is an audited inference, not a claim about native provider features.</td></tr>
+          <tr><th scope="row">What about local drafts/outbox/cache?</th><td>Client-owned resilience/presentation state. It is deliberately deferred to Chapter 33 and cannot replace provider-session recovery.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </details>
+</section>
+
+<script>
+  type EventKey = "turn" | "compact" | "restart" | "missing" | "client";
+  type LedgerRow = [string, string, string, string];
+  interface EventView {
+    kicker: string;
+    title: string;
+    copy: string;
+    boundary: string;
+    sources: string[];
+    rows: LedgerRow[];
+  }
+
+  const views: Record<EventKey, EventView> = {
+    turn: {
+      kicker: "Event 1 of 5 · live provider work begins",
+      title: "A provider receives a turn in its own native session",
+      copy: "T3 constructs the visible current-turn payload. The provider-native session owns the accumulated conversation context and private compaction state.",
+      boundary: "T3 constructs and records the visible request around a turn. It does not own or serialize the provider's accumulated hidden conversation context.",
+      sources: ["context-current-turn-payload", "context-codex-turn-input", "provider-session-contract"],
+      rows: [
+        ["Accumulated native context", "provider-native session", "T3's explicit request enters provider-owned history", "provider-specific resume only"],
+        ["T3 thread history", "T3 orchestration", "message/activity projection may commit", "durable product record reloads"],
+        ["Resume cursor", "provider shape; T3 persists binding", "adapter may return/update it", "same adapter receives opaque cursor"],
+        ["Context telemetry", "provider emits; T3 latest-selects", "only if a usable event arrives", "latest retained activity may render"],
+        ["Client cache/draft/outbox", "client surface", "surface-specific local state", "not a provider prompt or server authority"],
+      ],
+    },
+    compact: {
+      kicker: "Event 2 of 5 · provider reports compaction",
+      title: "Compaction changes provider context; T3 records the observation",
+      copy: "Codex and Claude adapter paths can emit a canonical compacted thread state. Ingestion records a context-compaction activity rather than generating a universal summary.",
+      boundary: "A compaction activity is provenance: it says the provider reported compaction. It does not reveal the exact native summary or make T3 history a replacement prompt.",
+      sources: ["context-memory-codex-compaction", "context-memory-claude-compaction", "context-memory-compaction-ingestion"],
+      rows: [
+        ["Accumulated native context", "provider-native session", "provider applies its native compaction semantics", "only provider knows resulting context"],
+        ["T3 thread history", "T3 orchestration", "adds context-compaction activity", "record remains product-visible provenance"],
+        ["Resume cursor", "provider shape; T3 persists binding", "may remain provider's continuation handle", "not converted into T3 summary data"],
+        ["Context telemetry", "provider emits; T3 latest-selects", "may report pre/post capacity snapshot", "latest valid activity only"],
+        ["Client cache/draft/outbox", "client surface", "may display activity", "does not possess compacted prompt"],
+      ],
+    },
+    restart: {
+      kicker: "Event 3 of 5 · live server session is gone",
+      title: "T3 reloads its record, then asks the same adapter to resume",
+      copy: "A compatible active session can be adopted; otherwise recovery needs a persisted binding and cursor. The adapter decides what that cursor can recover upstream.",
+      boundary: "Reloading the durable thread is not a replay of native prompt context. A cursor enables an attempt at same-provider continuation, subject to the provider's own history/session availability.",
+      sources: ["provider-session-binding", "provider-service-session-recovery", "provider-reactor-session-continuity"],
+      rows: [
+        ["Accumulated native context", "provider-native session", "live process/session may be gone", "provider may reopen native history from cursor"],
+        ["T3 thread history", "T3 orchestration", "no new prompt copy is created", "messages, activities, plans, session projection reload"],
+        ["Resume cursor", "provider shape; T3 persists binding", "read from runtime row", "same provider adapter receives opaque value"],
+        ["Context telemetry", "provider emits; T3 latest-selects", "hot update stream ends", "last retained usable observation can still render"],
+        ["Client cache/draft/outbox", "client surface", "independent of server process", "cache can catch up; it cannot recover provider context"],
+      ],
+    },
+    missing: {
+      kicker: "Event 4 of 5 · provider says the native session is missing",
+      title: "A missing native session is not repaired from displayed history",
+      copy: "Provider behavior controls the fallback. The inspected OpenCode path starts fresh after a confirmed not-found; it can fork only an adopted native session when a directory changed.",
+      boundary: "T3's durable record still explains prior work to the person, but the generic server layer does not reconstruct a provider-native prompt from that record.",
+      sources: ["opencode-resume-adoption", "opencode-resume-tests", "provider-service-session-recovery"],
+      rows: [
+        ["Accumulated native context", "provider-native session", "confirmed native session is absent", "fresh provider session may start by adapter policy"],
+        ["T3 thread history", "T3 orchestration", "prior record remains intact", "continues as product history, not prompt reconstruction"],
+        ["Resume cursor", "provider shape; T3 persists binding", "provider rejects/cannot find target", "not a cross-provider or transcript fallback"],
+        ["Context telemetry", "provider emits; T3 latest-selects", "no new valid update is implied", "old reading is telemetry, not recovery evidence"],
+        ["Client cache/draft/outbox", "client surface", "may show prior history or a draft", "cannot prove/restore native session"],
+      ],
+    },
+    client: {
+      kicker: "Event 5 of 5 · a screen reconnects",
+      title: "A client catches up to T3 state, not to a model's hidden prompt",
+      copy: "The shared client runtime can seed its event-subscription afterSequence from a cached snapshot for catch-up. Mobile drafts and outbox remain separate client-local delivery state.",
+      boundary: "A cached snapshot and a delivery outbox help the interface recover. They remain below the server/provider authority boundary and are not long-term prompt memory.",
+      sources: ["context-client-snapshot-cache", "context-client-event-cursor", "context-mobile-drafts", "context-mobile-outbox-storage"],
+      rows: [
+        ["Accumulated native context", "provider-native session", "not carried by the reconnecting client", "remains provider-owned"],
+        ["T3 thread history", "T3 orchestration", "client reloads snapshot and events", "server remains authority"],
+        ["Resume cursor", "provider shape; T3 persists binding", "not a client event cursor", "server/provider recovery is separate"],
+        ["Context telemetry", "provider emits; T3 latest-selects", "screen may render retained latest activity", "no new provider observation is invented"],
+        ["Client cache/draft/outbox", "client surface", "cache/drafts/retry queue can survive locally", "detailed client behavior belongs to Chapter 33"],
+      ],
+    },
+  };
+
+  document.querySelectorAll<HTMLElement>("[data-context-ownership-lab]").forEach((lab) => {
+    if (lab.dataset.contextOwnershipReady === "true") return;
+    try {
+      const tabs = [...lab.querySelectorAll<HTMLButtonElement>("[data-ownership-event]")];
+      const kicker = lab.querySelector<HTMLElement>("[data-ownership-kicker]");
+      const title = lab.querySelector<HTMLElement>("[data-ownership-title]");
+      const copy = lab.querySelector<HTMLElement>("[data-ownership-copy]");
+      const boundary = lab.querySelector<HTMLElement>("[data-ownership-boundary] p");
+      const rows = lab.querySelector<HTMLTableSectionElement>("[data-ownership-rows]");
+      const sources = lab.querySelector<HTMLElement>("[data-ownership-sources]");
+      const status = lab.querySelector<HTMLElement>("[data-ownership-status]");
+      const panel = lab.querySelector<HTMLElement>("[role=tabpanel]");
+      const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+      let initialized = false;
+
+      const render = (eventKey: EventKey) => {
+        const view = views[eventKey];
+        if (!view) return;
+        if (kicker) kicker.textContent = view.kicker;
+        if (title) title.textContent = view.title;
+        if (copy) copy.textContent = view.copy;
+        if (boundary) boundary.textContent = view.boundary;
+        if (rows) {
+          rows.replaceChildren(...view.rows.map((row) => {
+            const tr = document.createElement("tr");
+            const heading = document.createElement("th");
+            heading.scope = "row";
+            heading.textContent = row[0];
+            tr.append(heading, ...row.slice(1).map((text) => {
+              const td = document.createElement("td");
+              td.textContent = text;
+              return td;
+            }));
+            return tr;
+          }));
+        }
+        if (sources) {
+          sources.replaceChildren(...view.sources.map((id) => {
+            const code = document.createElement("code");
+            code.textContent = id;
+            return code;
+          }));
+        }
+        tabs.forEach((tab) => {
+          const selected = tab.dataset.ownershipEvent === eventKey;
+          tab.setAttribute("aria-selected", String(selected));
+          tab.tabIndex = selected ? 0 : -1;
+          if (selected && panel) panel.setAttribute("aria-labelledby", tab.id);
+        });
+        if (status) status.textContent = `Selected event: ${view.title}.`;
+        if (initialized && panel && !reducedMotion.matches) {
+          panel.animate(
+            [
+              { opacity: 0.58, transform: "translateY(4px)" },
+              { opacity: 1, transform: "translateY(0)" },
+            ],
+            { duration: 160, easing: "ease-out" },
+          );
+        }
+        initialized = true;
+      };
+
+      tabs.forEach((tab, index) => {
+        tab.addEventListener("click", () => render(tab.dataset.ownershipEvent as EventKey));
+        tab.addEventListener("keydown", (event) => {
+          if (!["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Home", "End"].includes(event.key)) return;
+          event.preventDefault();
+          const backwards = event.key === "ArrowLeft" || event.key === "ArrowUp";
+          const nextIndex = event.key === "Home"
+            ? 0
+            : event.key === "End"
+              ? tabs.length - 1
+              : (index + (backwards ? -1 : 1) + tabs.length) % tabs.length;
+          const next = tabs[nextIndex];
+          next?.focus();
+          if (next) render(next.dataset.ownershipEvent as EventKey);
+        });
+      });
+      render("turn");
+      lab.dataset.contextOwnershipReady = "true";
+    } catch {
+      lab.dataset.contextOwnershipReady = "error";
+    }
+  });
+</script>
+
+<style>
+  .context-ownership-lab { margin: 2rem 0; overflow: hidden; border: 1px solid var(--line); border-radius: .9rem; background: var(--paper-raised); color: var(--ink); }
+  .ownership-head { padding: 1.25rem 1.25rem .6rem; } .ownership-head > span, .ownership-kicker { color: var(--ink-soft); font: 700 .73rem/1.2 ui-monospace, monospace; letter-spacing: .06em; text-transform: uppercase; }
+  .ownership-head h3 { margin: .35rem 0; font-size: 1.25rem; } .ownership-head p { margin: 0; color: var(--ink-soft); }
+  .ownership-tabs, .ownership-panel { display: none; }
+  .context-ownership-lab[data-context-ownership-ready="true"] .ownership-tabs { display: flex; }
+  .context-ownership-lab[data-context-ownership-ready="true"] .ownership-panel { display: block; }
+  .context-ownership-lab[data-context-ownership-ready="true"] .ownership-static, .context-ownership-lab[data-context-ownership-ready="true"] .ownership-noscript { display: none; }
+  .ownership-tabs { gap: .45rem; overflow-x: auto; padding: .85rem 1.25rem; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+  .ownership-tabs button { flex: 0 0 auto; border: 1px solid var(--line); border-radius: .45rem; padding: .45rem .6rem; background: var(--paper); color: var(--ink); font: inherit; cursor: pointer; }
+  .ownership-tabs button[aria-selected="true"], .ownership-tabs button:hover, .ownership-tabs button:focus-visible { border-color: var(--signal); background: var(--signal-soft); outline: none; }
+  .ownership-panel { padding: 1.1rem 1.25rem 1.25rem; } .ownership-summary h4 { margin: .28rem 0; font-size: 1.15rem; } .ownership-summary p:last-child { margin: 0; color: var(--ink-soft); }
+  .ownership-ledger-wrap, .ownership-static-scroll { margin-top: 1rem; overflow-x: auto; border: 1px solid var(--line); border-radius: .55rem; } .ownership-ledger-wrap:focus-visible, .ownership-static-scroll:focus-visible { outline: 2px solid var(--signal); outline-offset: 2px; }
+  .context-ownership-lab table { width: 100%; min-width: 47rem; border-collapse: collapse; font-size: .87rem; } .context-ownership-lab th, .context-ownership-lab td { padding: .6rem; border: 1px solid var(--line); text-align: left; vertical-align: top; } .context-ownership-lab thead th { background: var(--paper-muted); } .context-ownership-lab tbody th { min-width: 10rem; }
+  .ownership-boundary { margin-top: 1rem; border-left: 3px solid var(--signal); padding: .7rem .8rem; background: var(--paper-muted); } .ownership-boundary strong { font-size: .84rem; } .ownership-boundary p { margin: .25rem 0 0; }
+  .ownership-sources { display: flex; flex-wrap: wrap; gap: .4rem; margin-top: .8rem; } .ownership-sources code { padding: .22rem .35rem; border-radius: .28rem; background: var(--paper-muted); color: var(--ink-soft); font-size: .75rem; }
+  .ownership-static { margin: 0 1.25rem 1.25rem; } .ownership-static summary { cursor: pointer; font-weight: 700; } .ownership-static-scroll { margin-top: .7rem; } .ownership-noscript { margin: 1rem 1.25rem; }
+  @media (max-width: 42rem) { .ownership-panel { padding-inline: .85rem; } .ownership-head { padding-inline: .85rem; } .ownership-tabs { padding-inline: .85rem; } .ownership-static { margin-inline: .85rem; } }
+  @media (prefers-reduced-motion: reduce) { .context-ownership-lab *, .context-ownership-lab *::before, .context-ownership-lab *::after { scroll-behavior: auto !important; transition: none !important; animation: none !important; } }
+  @media print { .context-ownership-lab { break-inside: avoid; border-color: #555; } .ownership-tabs, .ownership-panel, .ownership-noscript { display: none !important; } .ownership-static { display: block !important; } .ownership-static-scroll { overflow: visible; } .context-ownership-lab table { min-width: 0; font-size: 8pt; } }
+</style>

@@ -1,0 +1,26 @@
+---
+import { getSourceReference, sourceReferenceHref, sourceReferenceLabel } from "../lib/sources";
+
+interface Props {
+  kind: "verified" | "documented" | "inference" | "future";
+  title?: string;
+  refs: string[];
+}
+const { kind, title, refs } = Astro.props;
+if (refs.length === 0) throw new Error("EvidenceClaim requires at least one source reference.");
+const labels = {
+  verified: "Verified behavior",
+  documented: "Documented intent",
+  inference: "Inference",
+  future: "Future / proposed",
+};
+const sources = refs.map(getSourceReference);
+---
+
+<aside class:list={["evidence-claim", `is-${kind}`]}>
+  <div class="evidence-claim-head"><span>{labels[kind]}</span>{title && <strong>{title}</strong>}</div>
+  <div class="evidence-claim-body"><slot /></div>
+  <div class="evidence-claim-sources" aria-label="Evidence sources">
+    {sources.map((source) => <a href={sourceReferenceHref(source)} rel="noreferrer"><code>{sourceReferenceLabel(source)}</code> ↗</a>)}
+  </div>
+</aside>

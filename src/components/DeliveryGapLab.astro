@@ -1,0 +1,357 @@
+---
+import {
+  getSourceReference,
+  sourceReferenceHref,
+  sourceReferenceLabel,
+} from "../lib/sources";
+
+interface Props {
+  id?: string;
+}
+
+const { id = "post-commit-delivery-gap" } = Astro.props;
+if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(id)) {
+  throw new Error("DeliveryGapLab requires a stable kebab-case id.");
+}
+
+const phases = [
+  {
+    label: "Before commit",
+    boundary: "The SQL transaction has not committed.",
+    durable: "No accepted intent is durable yet.",
+    volatile: "Only the command worker and transaction-local writes exist.",
+    external: "No provider work has started.",
+    retry: "After restart, the client can retry and the command can execute normally.",
+    sourceId: "engine-receipt-publication-boundary",
+  },
+  {
+    label: "Transaction open",
+    boundary: "Events, projections, and the accepted receipt have been written inside one SQL transaction.",
+    durable: "A process crash rolls the uncommitted transaction back as a unit.",
+    volatile: "The proposed in-memory command model has not replaced the live model.",
+    external: "The event has not reached the hot bus.",
+    retry: "No accepted receipt survives, so the retry can decide and commit again.",
+    sourceId: "engine-receipt-publication-boundary",
+  },
+  {
+    label: "Commit returned",
+    boundary: "The event, SQL projections, and accepted receipt are durable; publication has not happened yet.",
+    durable: "Intent and its command sequence survive restart.",
+    volatile: "No durable outbox row or per-reactor cursor records pending delivery.",
+    external: "The provider has not seen the intent.",
+    retry: "The same command id returns the stored sequence and does not republish, so that retry leaves this delivery gap unrepaired.",
+    sourceId: "engine-receipt-publication-boundary",
+  },
+  {
+    label: "Hot publish",
+    boundary: "The committed event is offered to current PubSub subscribers.",
+    durable: "The domain event remains durable in SQLite.",
+    volatile: "Subscriber queues live only in this process; publication is not a recoverable job record.",
+    external: "A reactor may or may not have dequeued the event.",
+    retry: "A receipt hit still returns success without replaying reactor work.",
+    sourceId: "provider-reactor-hot-subscription",
+  },
+  {
+    label: "Turn-start observed",
+    boundary: "For a turn-start event, the provider reactor handles the event and marks its derived turn key in a volatile dedupe cache.",
+    durable: "The original intent is durable, but reactor progress is not.",
+    volatile: "The dedupe mark is made before the provider effect and disappears on restart.",
+    external: "The adapter call has not necessarily begun.",
+    retry: "Within the same process a duplicate can be suppressed even after a later failure; after restart the hot event itself is gone.",
+    sourceId: "provider-reactor-forked-send",
+  },
+  {
+    label: "Send forked",
+    boundary: "The serialized handler forks providerService.sendTurn and can return to its queue.",
+    durable: "There is still no durable side-effect attempt record.",
+    volatile: "The child fiber is outside the worker's outstanding counter.",
+    external: "Two provider sends can overlap even though handler bodies were dequeued serially.",
+    retry: "Closing the scope may interrupt the child; the worker drain does not prove that the send completed.",
+    sourceId: "provider-reactor-forked-send",
+  },
+  {
+    label: "Provider accepted",
+    boundary: "The external harness may have accepted the turn before local binding/state persistence finishes.",
+    durable: "The original intent survives, but acceptance by the harness is outside SQLite's transaction.",
+    volatile: "Local knowledge of the provider result may still be only in a running fiber.",
+    external: "The turn can continue in the harness after the server loses its exact completion point.",
+    retry: "Recovery is ambiguous: blindly repeating can duplicate work, while doing nothing can strand it.",
+    sourceId: "provider-send-binding-order",
+  },
+  {
+    label: "Runtime publish",
+    boundary: "ProviderService logs a canonical runtime event and then publishes it to another hot PubSub.",
+    durable: "The diagnostic log is best-effort and is not the orchestration recovery ledger.",
+    volatile: "Runtime ingestion has not necessarily consumed the event.",
+    external: "The harness action has occurred; its canonical result is in transit inside the process.",
+    retry: "A crash before ingestion loses this delivery; no durable runtime-event cursor replays it.",
+    sourceId: "provider-runtime-publish",
+  },
+  {
+    label: "Buffer released",
+    boundary: "Runtime ingestion invalidates a buffered entry before dispatching its internal command.",
+    durable: "No new orchestration result is durable until that internal command commits.",
+    volatile: "Dispatch interruption or failure can lose the released batch; the removed value is not restored on this path.",
+    external: "The provider result already exists outside the domain model.",
+    retry: "Re-delivery is not generally idempotent: internal command ids include a random UUID suffix.",
+    sourceId: "runtime-ingestion-buffer-dispatch",
+  },
+  {
+    label: "Result committed",
+    boundary: "The internal command re-enters the same engine and commits the provider result as domain events.",
+    durable: "The projected result and its receipt now survive restart.",
+    volatile: "Any new downstream reactor work again crosses the same commit-before-publish seam.",
+    external: "The durable model has caught up with the observed harness result.",
+    retry: "The internal command receipt protects only that generated command id; it does not repair an earlier missed hot event.",
+    sourceId: "engine-receipt-publication-boundary",
+  },
+];
+
+const resolved = phases.map(({ sourceId, ...phase }) => {
+  const source = getSourceReference(sourceId);
+  return {
+    ...phase,
+    source: {
+      label: sourceReferenceLabel(source),
+      href: sourceReferenceHref(source),
+    },
+  };
+});
+const payload = JSON.stringify(resolved).replaceAll("<", "\\u003c");
+const first = resolved[0];
+---
+
+<section class="delivery-lab" data-delivery-gap-lab aria-labelledby={`${id}-title`}>
+  <header>
+    <span>Crash-timing lab</span>
+    <h3 id={`${id}-title`}>Move the crash across the delivery seam</h3>
+    <p>Each position means “the process disappears immediately after this boundary.”</p>
+  </header>
+
+  <div class="delivery-interactive">
+    <div class="delivery-controls">
+      <button type="button" data-delivery-previous disabled>← Earlier</button>
+      <label for={`${id}-cursor`}>
+        Crash position
+        <strong data-delivery-count>1 / {resolved.length}</strong>
+      </label>
+      <button type="button" data-delivery-next>Later →</button>
+    </div>
+    <input
+      id={`${id}-cursor`}
+      data-delivery-range
+      type="range"
+      min="0"
+      max={resolved.length - 1}
+      value="0"
+      step="1"
+      aria-valuetext={first.label}
+      aria-describedby={`${id}-instructions`}
+    />
+    <p id={`${id}-instructions`} class="sr-only">
+      Use the arrow keys to move the simulated crash through the ordered phases.
+    </p>
+
+    <div class="phase-scroll" tabindex="0" role="region" aria-label="Delivery phases">
+      <ol class="phase-track">
+        {resolved.map((phase, index) => (
+          <li>
+            <button
+              type="button"
+              data-delivery-phase={index}
+              aria-current={index === 0 ? "step" : undefined}
+              tabindex={index === 0 ? 0 : -1}
+            >
+              <span>{index + 1}</span>
+              {phase.label}
+            </button>
+          </li>
+        ))}
+      </ol>
+    </div>
+
+    <p class="sr-only" role="status" aria-live="polite" aria-atomic="true" data-delivery-status>
+      Position 1 of {resolved.length}: {first.label}
+    </p>
+    <article class="crash-result" data-delivery-result>
+      <div class="result-heading">
+        <span>Crash after</span>
+        <h4 data-delivery-label>{first.label}</h4>
+      </div>
+      <p class="boundary" data-delivery-boundary>{first.boundary}</p>
+      <dl>
+        <div><dt>Durable</dt><dd data-delivery-durable>{first.durable}</dd></div>
+        <div><dt>Volatile</dt><dd data-delivery-volatile>{first.volatile}</dd></div>
+        <div><dt>External</dt><dd data-delivery-external>{first.external}</dd></div>
+        <div><dt>Retry</dt><dd data-delivery-retry>{first.retry}</dd></div>
+      </dl>
+      <a data-delivery-source href={first.source.href} rel="noreferrer"><code>{first.source.label}</code> ↗</a>
+    </article>
+  </div>
+
+  <noscript><p class="delivery-noscript">JavaScript is off; the complete ordered crash ledger remains open below.</p></noscript>
+  <details class="delivery-fallback" open>
+    <summary>All crash positions</summary>
+    <ol>
+      {resolved.map((phase) => (
+        <li>
+          <strong>{phase.label}</strong>
+          <p>{phase.boundary}</p>
+          <dl>
+            <div><dt>Durable</dt><dd>{phase.durable}</dd></div>
+            <div><dt>Volatile</dt><dd>{phase.volatile}</dd></div>
+            <div><dt>External</dt><dd>{phase.external}</dd></div>
+            <div><dt>Retry</dt><dd>{phase.retry}</dd></div>
+          </dl>
+          <a href={phase.source.href} rel="noreferrer"><code>{phase.source.label}</code> ↗</a>
+        </li>
+      ))}
+    </ol>
+  </details>
+  <script type="application/json" data-delivery-data set:html={payload}></script>
+</section>
+
+<script>
+  document.querySelectorAll<HTMLElement>("[data-delivery-gap-lab]").forEach((lab) => {
+    if (lab.dataset.deliveryReady) return;
+    lab.dataset.deliveryReady = "initializing";
+    const phases = JSON.parse(lab.querySelector("[data-delivery-data]")?.textContent ?? "[]");
+    const buttons = [...lab.querySelectorAll<HTMLButtonElement>("[data-delivery-phase]")];
+    const range = lab.querySelector<HTMLInputElement>("[data-delivery-range]");
+    const previous = lab.querySelector<HTMLButtonElement>("[data-delivery-previous]");
+    const next = lab.querySelector<HTMLButtonElement>("[data-delivery-next]");
+    let index = 0;
+
+    const setText = (selector: string, value: string) => {
+      const target = lab.querySelector(selector);
+      if (target) target.textContent = value;
+    };
+    const paint = (requested: number, focus = false) => {
+      const bounded = Math.max(0, Math.min(phases.length - 1, requested));
+      const phase = phases[bounded];
+      if (!phase) return;
+      index = bounded;
+      if (range) {
+        range.value = String(index);
+        range.setAttribute("aria-valuetext", phase.label);
+      }
+      if (previous) previous.disabled = index === 0;
+      if (next) next.disabled = index === phases.length - 1;
+      buttons.forEach((button, buttonIndex) => {
+        const active = buttonIndex === index;
+        button.toggleAttribute("aria-current", active);
+        if (active) button.setAttribute("aria-current", "step");
+        button.tabIndex = active ? 0 : -1;
+      });
+      setText("[data-delivery-count]", `${index + 1} / ${phases.length}`);
+      setText("[data-delivery-status]", `Position ${index + 1} of ${phases.length}: ${phase.label}`);
+      setText("[data-delivery-label]", phase.label);
+      setText("[data-delivery-boundary]", phase.boundary);
+      setText("[data-delivery-durable]", phase.durable);
+      setText("[data-delivery-volatile]", phase.volatile);
+      setText("[data-delivery-external]", phase.external);
+      setText("[data-delivery-retry]", phase.retry);
+      const source = lab.querySelector<HTMLAnchorElement>("[data-delivery-source]");
+      if (source) {
+        source.href = phase.source.href;
+        const code = source.querySelector("code");
+        if (code) code.textContent = phase.source.label;
+      }
+      buttons[index]?.scrollIntoView({ behavior: "auto", block: "nearest", inline: "center" });
+      if (focus) buttons[index]?.focus();
+    };
+
+    previous?.addEventListener("click", () => paint(index - 1));
+    next?.addEventListener("click", () => paint(index + 1));
+    range?.addEventListener("input", () => paint(Number(range.value)));
+    buttons.forEach((button) => {
+      button.addEventListener("click", () => paint(Number(button.dataset.deliveryPhase)));
+      button.addEventListener("keydown", (event) => {
+        let requested: number | undefined;
+        if (event.key === "ArrowRight" || event.key === "ArrowDown") requested = (index + 1) % buttons.length;
+        if (event.key === "ArrowLeft" || event.key === "ArrowUp") requested = (index - 1 + buttons.length) % buttons.length;
+        if (event.key === "Home") requested = 0;
+        if (event.key === "End") requested = buttons.length - 1;
+        if (requested === undefined) return;
+        event.preventDefault();
+        paint(requested, true);
+      });
+    });
+    lab.dataset.deliveryReady = "true";
+  });
+</script>
+
+<style>
+  .delivery-lab {
+    margin: 2.4rem 0;
+    border: 1px solid var(--line-strong);
+    border-radius: 16px;
+    overflow: hidden;
+    background: var(--paper-raised);
+    box-shadow: var(--shadow);
+    font-family: var(--font-ui);
+  }
+  header { padding: 1.15rem 1.25rem .9rem; border-bottom: 1px solid var(--line); }
+  header > span { color: var(--signal-deep); font: 750 .66rem/1 var(--font-ui); letter-spacing: .13em; text-transform: uppercase; }
+  h3 { margin: .38rem 0 .2rem; font: 750 1.24rem/1.2 var(--font-display); letter-spacing: -.02em; }
+  header p { margin: 0; color: var(--ink-soft); font: .82rem/1.5 var(--font-ui); }
+  .delivery-interactive { padding: 1rem 1.25rem 1.25rem; }
+  .delivery-controls { display: grid; grid-template-columns: auto minmax(9rem, 1fr) auto; gap: .7rem; align-items: center; }
+  .delivery-controls label { display: flex; justify-content: space-between; gap: .7rem; color: var(--ink-soft); font: 650 .74rem/1.3 var(--font-ui); }
+  .delivery-controls button {
+    min-height: 40px;
+    padding: .45rem .72rem;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: var(--paper);
+    cursor: pointer;
+    font: 700 .72rem/1 var(--font-ui);
+  }
+  .delivery-controls button:disabled { opacity: .42; cursor: not-allowed; }
+  input[type="range"] { width: 100%; margin: .8rem 0 .55rem; accent-color: var(--signal); }
+  .phase-scroll { overflow-x: auto; padding: .35rem .2rem .65rem; scrollbar-width: thin; }
+  .phase-track { min-width: 760px; display: grid; grid-template-columns: repeat(10, 1fr); gap: .32rem; margin: 0; padding: 0; list-style: none; }
+  .phase-track button {
+    width: 100%; min-height: 58px; display: grid; place-items: center; gap: .25rem;
+    padding: .42rem .25rem; border: 1px solid var(--line); border-radius: 8px;
+    background: var(--paper); color: var(--ink-soft); cursor: pointer;
+    font: 650 .62rem/1.18 var(--font-ui); text-align: center;
+    transition: border-color var(--motion-fast) var(--motion-ease), background var(--motion-fast) var(--motion-ease);
+  }
+  .phase-track button span { color: var(--ink-faint); font: 700 .58rem/1 var(--font-mono); }
+  .phase-track button[aria-current="step"] { border-color: var(--signal); background: var(--signal-soft); color: var(--ink); }
+  .crash-result { margin-top: .75rem; padding: 1rem; border-left: 4px solid var(--signal); background: var(--paper-muted); }
+  .result-heading { display: flex; align-items: baseline; gap: .5rem; }
+  .result-heading > span { color: var(--signal-deep); font: 750 .62rem/1 var(--font-ui); letter-spacing: .1em; text-transform: uppercase; }
+  h4 { margin: 0; font: 750 1.03rem/1.25 var(--font-display); }
+  .boundary { margin: .45rem 0 .8rem; color: var(--ink-soft); font: .79rem/1.5 var(--font-ui); }
+  dl { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .55rem; margin: 0 0 .75rem; }
+  dl div { padding: .65rem; border: 1px solid var(--line); background: var(--paper-raised); }
+  dt { color: var(--ink-faint); font: 750 .59rem/1 var(--font-ui); letter-spacing: .1em; text-transform: uppercase; }
+  dd { margin: .28rem 0 0; color: var(--ink); font: .72rem/1.45 var(--font-ui); }
+  .crash-result > a, .delivery-fallback a { color: var(--blue); font: 600 .66rem/1.35 var(--font-ui); }
+  .delivery-fallback { margin: 0 1.25rem 1.25rem; color: var(--ink-soft); font: .76rem/1.5 var(--font-ui); }
+  .delivery-noscript { margin: 0 1.25rem .65rem; color: var(--ink-faint); font: .7rem/1.4 var(--font-ui); }
+  .delivery-lab[data-delivery-ready="true"] .delivery-fallback { display: none; }
+  .delivery-fallback > summary { cursor: pointer; font-weight: 700; }
+  .delivery-fallback > ol { padding-left: 1.25rem; }
+  .delivery-fallback li { break-inside: avoid; margin: .85rem 0; }
+  .delivery-fallback p { margin: .2rem 0; }
+
+  @media (max-width: 620px) {
+    .delivery-controls { grid-template-columns: 1fr 1fr; }
+    .delivery-controls label { grid-column: 1 / -1; grid-row: 1; }
+    dl { grid-template-columns: 1fr; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .phase-track button { transition: none; }
+  }
+  @media print {
+    .delivery-lab { box-shadow: none; break-inside: avoid-page; }
+    .delivery-interactive, .delivery-noscript { display: none; }
+    .delivery-lab[data-delivery-ready="true"] .delivery-fallback,
+    .delivery-fallback { display: block; margin-top: 1rem; }
+    .delivery-fallback > summary { display: none; }
+    .delivery-fallback dl { grid-template-columns: 1fr 1fr; }
+  }
+</style>

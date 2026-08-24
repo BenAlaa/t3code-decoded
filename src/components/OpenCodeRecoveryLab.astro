@@ -1,0 +1,41 @@
+---
+interface Props { id: string; }
+const { id } = Astro.props;
+if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(id)) {
+  throw new Error("OpenCodeRecoveryLab requires a stable kebab-case id.");
+}
+const labId = `opencode-recovery-${id}`;
+
+const branches = [
+  { label: "No valid cursor", result: "Create", detail: "An absent, malformed, or wrong-version cursor supplies no recognized native session id, so the adapter creates a new OpenCode session without a session.get probe.", durable: "The resulting id is returned as a current-version resume cursor for the outer provider-binding persistence path." },
+  { label: "Confirmed missing", result: "Create", detail: "session.get reports a structured 404 / NotFoundError, so the stored native session is gone and a fresh session is permitted.", durable: "This is a native-context loss that is explicitly recognized, not a successful replay of old hot events." },
+  { label: "Transient probe error", result: "Fail", detail: "Authentication, transport, server, or non-404 failures propagate instead of silently creating an empty conversation.", durable: "No new cursor is minted; the existing durable binding remains the recovery clue for a later retry." },
+  { label: "Same directory", result: "Adopt", detail: "The existing session is reused after lexical/real-path comparison and its permission rules are reasserted for the current runtime mode.", durable: "The existing session id remains the cursor; upstream history remains provider-owned." },
+  { label: "Different directory", result: "Fork", detail: "The adapter asks OpenCode to fork the adopted session into the requested cwd, preserving upstream conversation history, then updates permissions.", durable: "The new fork id replaces the returned resume cursor; T3 is not copying native history into its own event log." },
+];
+const payload = JSON.stringify(branches).replaceAll("<", "\\u003c");
+---
+
+<section class="opencode-recovery-lab" data-opencode-recovery-lab data-opencode-ready="initializing" aria-labelledby={`${labId}-title`}>
+  <header><span>Interactive recovery decision</span><h3 id={`${labId}-title`}>What does an OpenCode resume cursor actually do?</h3><p>Choose an observed condition; the outcome distinguishes provider-native recovery from durable product binding.</p></header>
+  <div class="opencode-interactive">
+    <div class="controls"><label for={`${labId}-branch`}>Observed condition</label><select id={`${labId}-branch`} data-opencode-select>{branches.map((branch, index) => <option value={index}>{branch.label}</option>)}</select></div>
+    <p class="sr-only" role="status" aria-live="polite" aria-atomic="true" data-opencode-status>Selected {branches[0].label}: {branches[0].result}</p>
+    <article><span data-opencode-result>{branches[0].result}</span><h4 data-opencode-label>{branches[0].label}</h4><dl><div><dt>Adapter decision</dt><dd data-opencode-detail>{branches[0].detail}</dd></div><div><dt>Durability boundary</dt><dd data-opencode-durable>{branches[0].durable}</dd></div></dl></article>
+  </div>
+  <details class="fallback" open><summary>All resume outcomes</summary><ol>{branches.map((branch) => <li><strong>{branch.label} → {branch.result}</strong><p>{branch.detail}</p><p>{branch.durable}</p></li>)}</ol></details>
+  <noscript><p class="noscript-note">JavaScript is off; the full decision ledger remains available.</p></noscript><script type="application/json" data-opencode-data set:html={payload}></script>
+</section>
+<script>
+  document.querySelectorAll<HTMLElement>("[data-opencode-recovery-lab]").forEach((lab) => {
+    if (lab.dataset.opencodeReady === "true") return;
+    try {
+      const branches = JSON.parse(lab.querySelector("[data-opencode-data]")?.textContent ?? "[]"); const select = lab.querySelector<HTMLSelectElement>("[data-opencode-select]"); const set = (s: string, v: string) => { const n = lab.querySelector(s); if (n) n.textContent = v; }; const paint = (i: number) => { const branch = branches[i]; if (!branch) return; set("[data-opencode-status]", `Selected ${branch.label}: ${branch.result}`); set("[data-opencode-result]", branch.result); set("[data-opencode-label]", branch.label); set("[data-opencode-detail]", branch.detail); set("[data-opencode-durable]", branch.durable); };
+      select?.addEventListener("change", () => paint(Number(select.value)));
+      paint(0); lab.dataset.opencodeReady = "true";
+    } catch { lab.dataset.opencodeReady = "error"; }
+  });
+</script>
+<style>
+  .opencode-recovery-lab { margin:2rem 0; border:1px solid var(--line-strong); border-radius:14px; overflow:hidden; background:var(--paper-raised); font-family:var(--font-ui); } header { padding:1rem 1.2rem; border-bottom:1px solid var(--line); } header span { color:var(--signal-deep); font:750 .65rem/1 var(--font-ui); letter-spacing:.1em; text-transform:uppercase; } h3 { margin:.35rem 0; } header p { margin:0; color:var(--ink-soft); font-size:.82rem; } .opencode-recovery-lab:not([data-opencode-ready="true"]) .opencode-interactive { display:none; } .opencode-recovery-lab[data-opencode-ready="true"] .fallback { display:none; } .controls { display:grid; gap:.35rem; padding:1rem 1.2rem; color:var(--ink-soft); font-size:.75rem; } select { min-height:2.5rem; border:1px solid var(--line); border-radius:7px; background:var(--paper); color:var(--ink); padding:.35rem .5rem; } article { margin:0 1.2rem 1rem; padding:.9rem; border-left:4px solid var(--signal); background:var(--paper-muted); } article > span { display:inline-block; border-radius:999px; background:var(--signal-soft); color:var(--signal-deep); padding:.22rem .5rem; font-size:.66rem; font-weight:750; letter-spacing:.07em; text-transform:uppercase; } h4 { margin:.45rem 0 .6rem; } dl { display:grid; grid-template-columns:1fr 1fr; gap:.55rem; margin:0; } dl div { padding:.65rem; border:1px solid var(--line); background:var(--paper-raised); } dt { color:var(--ink-faint); font-size:.62rem; font-weight:750; letter-spacing:.08em; text-transform:uppercase; } dd { margin:.25rem 0 0; font-size:.77rem; line-height:1.45; } .fallback { margin:0 1.2rem 1.1rem; } .fallback li { margin:.7rem 0; } .fallback p { margin:.2rem 0; color:var(--ink-soft); font-size:.75rem; } .noscript-note { margin:0 1.2rem 1rem; color:var(--ink-faint); } @media (max-width:650px) { dl { grid-template-columns:1fr; } } @media (prefers-reduced-motion:reduce) { .opencode-recovery-lab *, .opencode-recovery-lab *::before, .opencode-recovery-lab *::after { scroll-behavior:auto !important; transition:none !important; animation:none !important; } } @media print { .opencode-interactive, .noscript-note { display:none !important; } .fallback { display:block !important; } .fallback summary { display:none; } }
+</style>

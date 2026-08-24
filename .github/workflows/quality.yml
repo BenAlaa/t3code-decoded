@@ -1,0 +1,91 @@
+name: Book quality
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: quality-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  metadata:
+    name: Conventional changes
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+
+    steps:
+      - name: Check out pull request history
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Validate title, body, and every commit subject
+        run: node scripts/validate-change-metadata.mjs
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+
+  book:
+    name: Validate and build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+
+    steps:
+      - name: Check out the book
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Read the canonical source lock
+        id: source-lock
+        run: node scripts/export-source-lock.mjs >> "$GITHUB_OUTPUT"
+
+      - name: Fetch the pinned T3 Code source
+        env:
+          T3CODE_COMMIT: ${{ steps.source-lock.outputs.commit }}
+        run: |
+          git init .source/t3code
+          git -C .source/t3code remote add origin https://github.com/pingdotgg/t3code.git
+          git -C .source/t3code fetch --depth=1 --no-tags origin "$T3CODE_COMMIT"
+          git -C .source/t3code checkout --detach "$T3CODE_COMMIT"
+          test "$(git -C .source/t3code rev-parse HEAD)" = "$T3CODE_COMMIT"
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24.13.1
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Verify generated excerpts against the source lock
+        run: npm run source:check
+        env:
+          T3CODE_SOURCE_DIR: ${{ github.workspace }}/.source/t3code
+
+      - name: Run tests
+        run: npm test
+
+      - name: Build the root-hosted shape
+        run: npm run build
+        env:
+          SITE_URL: https://benalaa.github.io
+
+      - name: Build the GitHub Pages shape
+        run: npm run build
+        env:
+          BASE_PATH: /t3code-decoded/
+          SITE_URL: https://benalaa.github.io

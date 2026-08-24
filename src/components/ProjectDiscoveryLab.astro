@@ -1,0 +1,66 @@
+---
+interface Props { id: string; }
+const { id } = Astro.props;
+if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(id)) {
+  throw new Error("ProjectDiscoveryLab requires a stable kebab-case id.");
+}
+const labId = `project-discovery-${id}`;
+const cases = [
+  { label: "Existing directory, valid t3.json", root: "Normalize the supplied path and verify it is a directory.", project: "A project.create command can claim this normalized root if no active project already uses it.", config: "Decode t3.json at that root; its defaultThreadEnvMode can participate only after a project-level override is absent.", identity: "If Git has a fetch remote, resolve a canonical repository identity for projection and cross-environment grouping." },
+  { label: "Missing directory, creation not requested", root: "Normalization reports that the workspace root does not exist.", project: "No project is created because the command cannot pass root validation.", config: "There is no root at which to load t3.json.", identity: "No repository identity is derived." },
+  { label: "Missing directory, creation requested", root: "The root service creates the directory recursively, verifies it, then returns the normalized path.", project: "The create command still must satisfy the one-active-project-per-normalized-root invariant.", config: "A missing t3.json is an ordinary absence, not an error.", identity: "A newly created empty directory has no Git-remote identity until it becomes a qualifying repository." },
+  { label: "Existing regular file", root: "Normalization rejects it: a workspace root must be a directory.", project: "No project projection changes.", config: "t3.json is never consulted as project configuration for this invalid root.", identity: "No identity is derived." },
+  { label: "Directory with invalid t3.json", root: "The workspace root itself remains valid.", project: "The durable project record can still exist at the root.", config: "The best-effort loader logs the read/decode problem and presents no usable file configuration, so defaults fall through.", identity: "Repository identity is independent of t3.json validity." },
+];
+const payload = JSON.stringify(cases).replaceAll("<", "\\u003c");
+---
+
+<section class="project-discovery-lab" data-project-discovery-lab data-project-discovery-ready="initializing" aria-labelledby={`${labId}-title`}>
+  <header><span>Filesystem decision explainer</span><h3 id={`${labId}-title`}>What becomes a T3 project?</h3><p>Choose one observed filesystem state. The four answers keep root validation, durable projection, checked-in configuration, and Git identity separate.</p></header>
+  <div class="project-discovery-controls">
+    <label for={`${labId}-case`}>Observed state</label>
+    <select id={`${labId}-case`} data-project-discovery-select>{cases.map((item, index) => <option value={index}>{item.label}</option>)}</select>
+  </div>
+  <p class="sr-only" role="status" aria-live="polite" aria-atomic="true" data-project-discovery-status>Selected: {cases[0].label}</p>
+  <dl class="project-discovery-answer" data-project-discovery-answer>
+    <div><dt>1. Root</dt><dd data-project-discovery-root>{cases[0].root}</dd></div>
+    <div><dt>2. Project</dt><dd data-project-discovery-project>{cases[0].project}</dd></div>
+    <div><dt>3. t3.json</dt><dd data-project-discovery-config>{cases[0].config}</dd></div>
+    <div><dt>4. Identity</dt><dd data-project-discovery-identity>{cases[0].identity}</dd></div>
+  </dl>
+  <details class="project-discovery-fallback" open><summary>All filesystem outcomes</summary><ol>{cases.map((item) => <li><strong>{item.label}</strong><p><b>Root:</b> {item.root}</p><p><b>Project:</b> {item.project}</p><p><b>t3.json:</b> {item.config}</p><p><b>Identity:</b> {item.identity}</p></li>)}</ol></details>
+  <noscript><p class="project-discovery-noscript">JavaScript is off; the complete outcome list remains available.</p></noscript>
+  <script type="application/json" data-project-discovery-data set:html={payload}></script>
+</section>
+
+<script>
+  document.querySelectorAll<HTMLElement>("[data-project-discovery-lab]").forEach((lab) => {
+    if (lab.dataset.projectDiscoveryReady === "true") return;
+    try {
+      const cases = JSON.parse(lab.querySelector("[data-project-discovery-data]")?.textContent ?? "[]");
+      const select = lab.querySelector<HTMLSelectElement>("[data-project-discovery-select]");
+      const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      const set = (selector: string, value: string) => { const node = lab.querySelector(selector); if (node) node.textContent = value; };
+      const paint = (index: number, transition = true) => {
+        const item = cases[index]; if (!item) return;
+        set("[data-project-discovery-status]", `Selected: ${item.label}`);
+        set("[data-project-discovery-root]", item.root); set("[data-project-discovery-project]", item.project);
+        set("[data-project-discovery-config]", item.config); set("[data-project-discovery-identity]", item.identity);
+        if (transition && !reducedMotion) {
+          [...lab.querySelectorAll<HTMLElement>(".project-discovery-answer > div")].forEach((card, cardIndex) => {
+            card.animate(
+              [{ opacity: .45, transform: "translateY(5px)" }, { opacity: 1, transform: "translateY(0)" }],
+              { duration: 180, delay: cardIndex * 30, easing: "ease-out" },
+            );
+          });
+        }
+      };
+      select?.addEventListener("change", () => paint(Number(select.value)));
+      paint(0, false); lab.dataset.projectDiscoveryReady = "true";
+    } catch { lab.dataset.projectDiscoveryReady = "error"; }
+  });
+</script>
+
+<style>
+  .project-discovery-lab { margin:2rem 0; overflow:hidden; border:1px solid var(--line-strong); border-radius:14px; background:var(--paper-raised); font-family:var(--font-ui); } .project-discovery-lab header { padding:1rem 1.2rem; border-bottom:1px solid var(--line); } .project-discovery-lab header span { color:var(--signal-deep); font:750 .65rem/1 var(--font-ui); letter-spacing:.1em; text-transform:uppercase; } .project-discovery-lab h3 { margin:.35rem 0; } .project-discovery-lab header p { margin:0; color:var(--ink-soft); font-size:.82rem; } .project-discovery-controls { display:grid; gap:.35rem; padding:1rem 1.2rem; color:var(--ink-soft); font-size:.75rem; } .project-discovery-controls select { min-height:2.5rem; border:1px solid var(--line); border-radius:7px; background:var(--paper); color:var(--ink); padding:.35rem .5rem; } .project-discovery-lab:not([data-project-discovery-ready="true"]) .project-discovery-controls, .project-discovery-lab:not([data-project-discovery-ready="true"]) .project-discovery-answer { display:none; } .project-discovery-lab[data-project-discovery-ready="true"] .project-discovery-fallback { display:none; } .project-discovery-answer { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:.65rem; margin:0; padding:0 1.2rem 1.2rem; } .project-discovery-answer div { padding:.8rem; border:1px solid var(--line); background:var(--paper-muted); } .project-discovery-answer dt { color:var(--ink-faint); font-size:.62rem; font-weight:750; letter-spacing:.08em; text-transform:uppercase; } .project-discovery-answer dd { margin:.3rem 0 0; font-size:.78rem; line-height:1.5; } .project-discovery-fallback { margin:0 1.2rem 1.2rem; } .project-discovery-fallback li { margin:.85rem 0; } .project-discovery-fallback p { margin:.2rem 0; color:var(--ink-soft); font-size:.76rem; line-height:1.45; } .project-discovery-noscript { margin:0 1.2rem 1rem; color:var(--ink-faint); } @media (max-width:650px) { .project-discovery-answer { grid-template-columns:1fr; } } @media (prefers-reduced-motion:reduce) { .project-discovery-lab *, .project-discovery-lab *::before, .project-discovery-lab *::after { animation:none !important; transition:none !important; scroll-behavior:auto !important; } } @media print { .project-discovery-controls, .project-discovery-answer, .project-discovery-noscript { display:none !important; } .project-discovery-fallback { display:block !important; } .project-discovery-fallback summary { display:none; } }
+</style>

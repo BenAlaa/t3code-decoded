@@ -1,0 +1,240 @@
+---
+interface Props { id?: string; }
+const { id = "thread-projection" } = Astro.props;
+const labId = `thread-projection-${id}`;
+const scenarios = {
+  active: {
+    label: "Active turn",
+    fields: ["threadId", "messages", "session.status", "activities", "draft", "pinnedAt"],
+    note: "A running session and a local draft coexist; the draft is not a durable message yet.",
+  },
+  review: {
+    label: "Review pending",
+    fields: ["threadId", "messages", "turn.diff", "checkpoint", "review.comments", "pinnedAt"],
+    note: "The review surface reads the turn diff and comments; chat keeps the conversational context.",
+  },
+  quiet: {
+    label: "Quiet work log",
+    fields: ["threadId", "messages", "activities", "task.latest", "session.status", "orderedAt"],
+    note: "A quiet thread can still retain activity and ordering metadata without becoming a scheduler record.",
+  },
+} as const;
+
+const projections = {
+  chat: {
+    label: "Chat timeline",
+    consumes: ["messages", "session.status", "activities"],
+    suppresses: ["task.latest", "review.comments", "orderedAt"],
+    server: "Send message · interrupt turn",
+    local: "Scroll position · collapsed activity",
+    copy: "Conversation first: lifecycle details remain compact activity affordances.",
+  },
+  composer: {
+    label: "Composer + optimistic state",
+    consumes: ["draft", "messages", "session.status"],
+    suppresses: ["turn.diff", "pinnedAt", "task.latest"],
+    server: "Submit message · cancel turn",
+    local: "Draft text · optimistic pending row",
+    copy: "The composer can feel immediate while the canonical message waits for the accepted receipt.",
+  },
+  log: {
+    label: "Quiet work log",
+    consumes: ["activities", "task.latest", "session.status"],
+    suppresses: ["draft", "review.comments", "turn.diff"],
+    server: "Open thread · resume eligible work",
+    local: "Expanded rows · filter",
+    copy: "A compact activity projection preserves useful lifecycle signals without replaying every token.",
+  },
+  agents: {
+    label: "Agents / subagents",
+    consumes: ["task.latest", "activities", "session.status"],
+    suppresses: ["draft", "pinnedAt", "review.comments"],
+    server: "Interrupt agent · open thread",
+    local: "Roster grouping · selected agent",
+    copy: "The roster is derived from task lifecycle evidence; it is not a second canonical transcript.",
+  },
+  review: {
+    label: "Review / diff",
+    consumes: ["turn.diff", "checkpoint", "review.comments"],
+    suppresses: ["draft", "task.latest", "orderedAt"],
+    server: "Post review comment · restore checkpoint",
+    local: "Selected lines · diff mode",
+    copy: "Review narrows attention to changed files and anchored comments while retaining the thread identity.",
+  },
+  sidebar: {
+    label: "Ordered / pinned sidebar",
+    consumes: ["threadId", "pinnedAt", "orderedAt", "messages"],
+    suppresses: ["draft", "turn.diff", "task.latest"],
+    server: "Pin / unpin thread · archive",
+    local: "Sort choice · collapsed groups",
+    copy: "Pinning and ordering are thread metadata; the sidebar does not own conversation content.",
+  },
+} as const;
+type ProjectionKey = keyof typeof projections;
+type ScenarioKey = keyof typeof scenarios;
+const initialProjection: ProjectionKey = "chat";
+const initialScenario: ScenarioKey = "active";
+---
+
+<section class="thread-projection" data-thread-projection data-ready="pending" aria-labelledby={`${labId}-title`}>
+  <header class="thread-projection__head">
+    <span>Interactive projection lab · Chapter 31</span>
+    <h3 id={`${labId}-title`}>One canonical thread, six product surfaces</h3>
+    <p>Change the durable scenario, then choose a projection to see what it reads, leaves out, and can mutate.</p>
+  </header>
+
+  <div class="thread-projection__controls">
+    <label for={`${labId}-scenario`}>Canonical scenario</label>
+    <select id={`${labId}-scenario`} data-scenario>
+      {Object.entries(scenarios).map(([key, value]) => <option value={key} selected={key === initialScenario}>{value.label}</option>)}
+    </select>
+    <button type="button" data-reset>Reset view</button>
+  </div>
+
+  <p class="thread-projection__status" role="status" aria-live="polite" aria-atomic="true" data-status>{scenarios[initialScenario].label} · {projections[initialProjection].label}</p>
+
+  <div class="thread-projection__canonical" aria-label="Canonical thread fields">
+    <div class="thread-projection__canonical-head"><strong>Canonical thread</strong><code>thread_31 / durable fields</code></div>
+    <div class="thread-projection__fields" data-fields>
+      {scenarios[initialScenario].fields.map((field) => <span data-field={field}>{field}</span>)}
+    </div>
+    <p data-scenario-note>{scenarios[initialScenario].note}</p>
+  </div>
+
+  <div class="thread-projection__tabs" role="tablist" aria-label="Thread projections">
+    {Object.entries(projections).map(([key, projection], index) => (
+      <button type="button" role="tab" id={`${labId}-${key}`} aria-controls={`${labId}-panel`} aria-selected={index === 0 ? "true" : "false"} tabindex={index === 0 ? 0 : -1} data-projection={key}>{projection.label}</button>
+    ))}
+  </div>
+
+  <div class="thread-projection__panel" id={`${labId}-panel`} role="tabpanel" aria-labelledby={`${labId}-${initialProjection}`} tabindex="0">
+    <div class="thread-projection__panel-head"><span data-projection-label>{projections[initialProjection].label}</span><strong data-projection-copy>{projections[initialProjection].copy}</strong></div>
+    <div class="thread-projection__columns">
+      <div><h4>Consumes</h4><ul data-consumes>{projections[initialProjection].consumes.map((field) => <li>{field}</li>)}</ul></div>
+      <div><h4>Intentionally suppresses</h4><ul data-suppresses>{projections[initialProjection].suppresses.map((field) => <li>{field}</li>)}</ul></div>
+    </div>
+    <div class="thread-projection__ownership"><div><span>Server-state controls</span><strong data-server>{projections[initialProjection].server}</strong></div><div><span>Local-view controls</span><strong data-local>{projections[initialProjection].local}</strong></div></div>
+  </div>
+
+  <details class="thread-projection__fallback" open>
+    <summary>Static projection map</summary>
+    <table>
+      <thead><tr><th scope="col">Surface</th><th scope="col">Canonical fields it consumes</th><th scope="col">Local view state</th></tr></thead>
+      <tbody>{Object.entries(projections).map(([, projection]) => <tr><th scope="row">{projection.label}</th><td>{projection.consumes.join(" · ")}</td><td>{projection.local}</td></tr>)}</tbody>
+    </table>
+  </details>
+  <noscript><p class="thread-projection__noscript">JavaScript is off; the static projection map above lists the fields and local controls for each surface.</p></noscript>
+</section>
+
+<script define:vars={{ scenarios, projections, labId }}>
+  document.querySelectorAll("[data-thread-projection]").forEach((lab) => {
+    if (lab.dataset.ready === "true") return;
+    const scenario = lab.querySelector("[data-scenario]");
+    const status = lab.querySelector("[data-status]");
+    const fields = lab.querySelector("[data-fields]");
+    const note = lab.querySelector("[data-scenario-note]");
+    const panel = lab.querySelector("[role=tabpanel]");
+    const label = lab.querySelector("[data-projection-label]");
+    const copy = lab.querySelector("[data-projection-copy]");
+    const consumes = lab.querySelector("[data-consumes]");
+    const suppresses = lab.querySelector("[data-suppresses]");
+    const server = lab.querySelector("[data-server]");
+    const local = lab.querySelector("[data-local]");
+    const reset = lab.querySelector("[data-reset]");
+    const tabs = [...lab.querySelectorAll("[data-projection]")];
+    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+    let current = "chat";
+    let initialized = false;
+    const renderList = (node, values) => { if (node) node.innerHTML = values.map((value) => `<li>${value}</li>`).join(""); };
+    const render = (animate = true) => {
+      const state = scenarios[scenario?.value] ?? scenarios.active;
+      const projection = projections[current];
+      if (fields) fields.innerHTML = state.fields.map((field) => `<span data-field="${field}">${field}</span>`).join("");
+      if (note) note.textContent = state.note;
+      if (label) label.textContent = projection.label;
+      if (copy) copy.textContent = projection.copy;
+      renderList(consumes, projection.consumes); renderList(suppresses, projection.suppresses);
+      if (server) server.textContent = projection.server;
+      if (local) local.textContent = projection.local;
+      if (panel) panel.setAttribute("aria-labelledby", `${labId}-${current}`);
+      if (status) status.textContent = `${state.label} · ${projection.label}`;
+      if (initialized && animate && panel && !reducedMotion.matches) {
+        panel.animate(
+          [{ opacity: .68, transform: "translateX(5px)" }, { opacity: 1, transform: "translateX(0)" }],
+          { duration: 170, easing: "ease-out" },
+        );
+      }
+      initialized = true;
+    };
+    const selectProjection = (button, focus = false) => {
+      const next = button.dataset.projection;
+      if (!next || !projections[next]) return;
+      current = next;
+      tabs.forEach((tab) => { const selected = tab === button; tab.setAttribute("aria-selected", String(selected)); tab.tabIndex = selected ? 0 : -1; });
+      if (focus) button.focus();
+      render();
+    };
+    tabs.forEach((button, index) => {
+      button.addEventListener("click", () => selectProjection(button));
+      button.addEventListener("keydown", (event) => {
+        if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+        event.preventDefault();
+        const targetIndex = event.key === "Home"
+          ? 0
+          : event.key === "End"
+            ? tabs.length - 1
+            : (index + (event.key === "ArrowLeft" ? -1 : 1) + tabs.length) % tabs.length;
+        const target = tabs[targetIndex];
+        if (target) selectProjection(target, true);
+      });
+    });
+    scenario?.addEventListener("change", () => render());
+    reset?.addEventListener("click", () => { current = "chat"; if (scenario) scenario.value = "active"; tabs.forEach((tab, index) => { tab.setAttribute("aria-selected", String(index === 0)); tab.tabIndex = index === 0 ? 0 : -1; }); render(); });
+    render(false);
+    lab.dataset.ready = "true";
+  });
+</script>
+
+<style>
+  .thread-projection { margin: 2.5rem 0; border: 1px solid var(--line-strong); border-radius: 1rem; overflow: clip; background: var(--paper-raised); color: var(--ink); }
+  .thread-projection__head { padding: 1.3rem 1.35rem 1rem; }
+  .thread-projection__head > span { color: var(--signal-deep); font-size: .72rem; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+  .thread-projection h3 { margin: .3rem 0 .45rem; font-size: 1.2rem; }
+  .thread-projection p { color: var(--ink-soft); }
+  .thread-projection__head p { margin: 0; max-width: 68ch; }
+  .thread-projection__controls { display: flex; align-items: center; flex-wrap: wrap; gap: .55rem; padding: .8rem 1.35rem; border-block: 1px solid var(--line); background: var(--paper); }
+  .thread-projection label, .thread-projection select, .thread-projection button { font: inherit; font-size: .84rem; }
+  .thread-projection select, .thread-projection button { border: 1px solid var(--line-strong); border-radius: .45rem; padding: .45rem .65rem; background: var(--paper-raised); color: var(--ink); }
+  .thread-projection button { cursor: pointer; }
+  .thread-projection button:hover, .thread-projection button:focus-visible, .thread-projection select:focus-visible { border-color: var(--signal); outline: 2px solid color-mix(in srgb, var(--signal) 28%, transparent); outline-offset: 2px; }
+  .thread-projection__status { min-height: 1.4em; margin: .85rem 1.35rem; color: var(--ink-soft); font-size: .84rem; }
+  .thread-projection__canonical { margin: 0 1.35rem 1rem; padding: .85rem 1rem; border: 1px solid var(--line); border-radius: .65rem; background: color-mix(in srgb, var(--signal) 5%, var(--paper-raised)); }
+  .thread-projection__canonical-head { display: flex; justify-content: space-between; gap: .8rem; font-size: .88rem; }
+  .thread-projection code, .thread-projection__fields span { font-family: var(--font-mono, ui-monospace, monospace); font-size: .72rem; }
+  .thread-projection__fields { display: flex; flex-wrap: wrap; gap: .35rem; margin-top: .7rem; }
+  .thread-projection__fields span { padding: .22rem .4rem; border: 1px solid var(--line-strong); border-radius: 999px; background: var(--paper); }
+  .thread-projection__canonical p { margin: .65rem 0 0; font-size: .82rem; }
+  .thread-projection__tabs { display: flex; gap: .35rem; padding: 0 1.35rem; overflow-x: auto; border-bottom: 1px solid var(--line); }
+  .thread-projection__tabs button { flex: 0 0 auto; border: 0; border-bottom: 2px solid transparent; border-radius: 0; padding: .68rem .55rem; background: transparent; color: var(--ink-soft); }
+  .thread-projection__tabs button[aria-selected="true"] { border-bottom-color: var(--signal); color: var(--ink); font-weight: 750; }
+  .thread-projection__panel { margin: 1rem 1.35rem; padding: 1rem; border: 1px solid var(--line); border-radius: .65rem; }
+  .thread-projection__panel-head { display: grid; gap: .3rem; }
+  .thread-projection__panel-head span { color: var(--signal-deep); font-size: .75rem; font-weight: 800; text-transform: uppercase; letter-spacing: .05em; }
+  .thread-projection__panel-head strong { font-size: .9rem; }
+  .thread-projection__columns { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-top: 1rem; }
+  .thread-projection h4 { margin: 0 0 .35rem; font-size: .78rem; text-transform: uppercase; letter-spacing: .05em; }
+  .thread-projection ul { margin: 0; padding-left: 1.1rem; color: var(--ink-soft); font-size: .82rem; }
+  .thread-projection__ownership { display: grid; grid-template-columns: 1fr 1fr; gap: .6rem; margin-top: 1rem; }
+  .thread-projection__ownership div { padding: .65rem; border-radius: .45rem; background: var(--paper-muted); }
+  .thread-projection__ownership span { display: block; color: var(--ink-faint); font-size: .7rem; text-transform: uppercase; letter-spacing: .04em; }
+  .thread-projection__ownership strong { display: block; margin-top: .2rem; font-size: .78rem; }
+  .thread-projection__fallback { margin: 0 1.35rem 1.2rem; font-size: .82rem; }
+  .thread-projection__fallback summary { cursor: pointer; color: var(--ink-soft); }
+  .thread-projection__fallback table { width: 100%; margin-top: .65rem; border-collapse: collapse; }
+  .thread-projection__fallback th, .thread-projection__fallback td { border: 1px solid var(--line-strong); padding: .4rem; text-align: left; vertical-align: top; }
+  .thread-projection[data-ready="true"] .thread-projection__fallback { display: none; }
+  .thread-projection__noscript { margin: 0 1.35rem 1rem; font-size: .82rem; }
+  @media (max-width: 42rem) { .thread-projection__head, .thread-projection__controls, .thread-projection__tabs { padding-inline: .85rem; } .thread-projection__status, .thread-projection__canonical, .thread-projection__panel { margin-inline: .85rem; } .thread-projection__columns, .thread-projection__ownership { grid-template-columns: 1fr; } .thread-projection__canonical-head { display: grid; } }
+  @media (prefers-reduced-motion: no-preference) { .thread-projection__panel, .thread-projection__fields span { transition: border-color 160ms ease, background-color 160ms ease; } }
+  @media print { .thread-projection__controls, .thread-projection__status, .thread-projection__canonical, .thread-projection__tabs, .thread-projection__panel { display: none !important; } .thread-projection__fallback { display: block !important; } }
+</style>

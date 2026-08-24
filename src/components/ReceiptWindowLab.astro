@@ -1,0 +1,595 @@
+---
+import { getSourceReference, sourceReferenceHref, sourceReferenceLabel } from "../lib/sources";
+
+interface Props {
+  id: string;
+}
+
+const { id } = Astro.props;
+if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(id)) {
+  throw new Error("ReceiptWindowLab requires a stable kebab-case id.");
+}
+
+const sourceIds = [
+  "command-receipt-schema",
+  "command-receipt-handling",
+  "engine-rejected-receipt",
+  "engine-commit-publication",
+  "turn-atomic-batch",
+  "hot-reactor-no-replay",
+  "command-commit-acknowledgement",
+  "provider-turn-reactor",
+];
+const sources = Object.fromEntries(sourceIds.map((sourceId) => {
+  const source = getSourceReference(sourceId);
+  return [sourceId, { label: sourceReferenceLabel(source), href: sourceReferenceHref(source) }];
+}));
+const payload = JSON.stringify({ sources }).replaceAll("<", "\\u003c");
+const labId = `receipt-window-${id}`;
+---
+
+<section class="receipt-window-lab" data-receipt-window-lab aria-labelledby={`${labId}-title`}>
+  <header class="lab-head">
+    <span>Interactive retry laboratory</span>
+    <h3 id={`${labId}-title`}>What does this command id remember?</h3>
+    <p>Configure the durable receipt and the original delivery window, then replay the id. The result separates SQL deduplication from hot delivery and provider execution.</p>
+  </header>
+
+  <div class="lab-controls">
+    <label for={`${labId}-receipt`}>
+      Durable receipt
+      <select id={`${labId}-receipt`} data-receipt-state>
+        <option value="accepted">accepted</option>
+        <option value="rejected">rejected</option>
+        <option value="none">none</option>
+      </select>
+    </label>
+    <label for={`${labId}-target`}>
+      Retry aggregate
+      <select id={`${labId}-target`} data-retry-target>
+        <option value="same">same kind + id</option>
+        <option value="different">different aggregate</option>
+      </select>
+    </label>
+    <label for={`${labId}-body`}>
+      Retry command body
+      <select id={`${labId}-body`} data-retry-body>
+        <option value="same">byte-for-byte intent</option>
+        <option value="changed">changed type or payload</option>
+      </select>
+    </label>
+    <label for={`${labId}-window`}>
+      Original delivery window
+      <select id={`${labId}-window`} data-delivery-window>
+        <option value="ordinary">response received</option>
+        <option value="hard-crash">hard crash after SQL commit</option>
+        <option value="prefix">hard crash after a publication prefix</option>
+        <option value="response-lost">response lost after publication</option>
+        <option value="provider-failed">provider later failed</option>
+      </select>
+    </label>
+  </div>
+
+  <p class="window-help" data-window-help>The delivery window describes the accepted attempt whose receipt is being replayed.</p>
+  <noscript><p class="noscript-note">Interactive controls require JavaScript. Open the static matrices below for every receipt and crash-window outcome.</p></noscript>
+
+  <ol class="delivery-ladder" aria-label="Command delivery stages" data-delivery-ladder>
+    <li class="complete"><span>1</span><strong>Accepted SQL</strong><small>complete</small></li>
+    <li class="complete"><span>2</span><strong>Hot publish</strong><small>complete</small></li>
+    <li class="complete"><span>3</span><strong>RPC response</strong><small>received</small></li>
+    <li class="pending"><span>4</span><strong>Provider</strong><small>not proven</small></li>
+  </ol>
+
+  <p class="sr-only" role="status" aria-live="polite" aria-atomic="true" data-receipt-status>
+    Accepted receipt, same aggregate, same intent: return the stored sequence without new events. Provider execution is not proven.
+  </p>
+
+  <article class="receipt-result tone-success" data-receipt-result>
+    <div class="result-head">
+      <div><span>Engine decision</span><h4 data-result-title>Replay the accepted sequence</h4></div>
+      <strong data-result-badge>deduplicated</strong>
+    </div>
+    <p data-result-decision>The engine finds the accepted row before the decider and returns its stored resultSequence.</p>
+    <dl>
+      <div><dt>Durable record</dt><dd data-result-durable>The original event batch, projections, and accepted receipt remain committed.</dd></div>
+      <div><dt>Events and delivery</dt><dd data-result-delivery>The retry appends zero events and republishes zero events.</dd></div>
+      <div><dt>Client result</dt><dd data-result-client>The retry receives the stored last sequence.</dd></div>
+      <div><dt>Payload binding</dt><dd data-result-payload>The receipt checks aggregate kind and id, not command type or a payload fingerprint.</dd></div>
+      <div><dt>Provider meaning</dt><dd data-result-provider>The sequence acknowledges durable intent only; provider acceptance or completion is outside the receipt.</dd></div>
+    </dl>
+    <div class="result-sources" data-result-sources aria-label="Sources for the selected receipt outcome">
+      {sourceIds.slice(0, 2).map((sourceId) => <a href={sources[sourceId].href} rel="noreferrer"><code>{sources[sourceId].label}</code> ↗</a>)}
+    </div>
+  </article>
+
+  <details class="static-fallback">
+    <summary>Static receipt and crash-window matrices</summary>
+    <div class="static-section">
+      <h4>Receipt decision matrix</h4>
+      <div class="static-scroll" tabindex="0" role="region" aria-label="Receipt retry matrix">
+        <table>
+          <thead><tr><th scope="col">Stored row</th><th scope="col">Retry target</th><th scope="col">Decision</th><th scope="col">Does body matter?</th></tr></thead>
+          <tbody>
+            <tr><th scope="row">accepted</th><td>same aggregate</td><td>return stored sequence; no decide, append, or republish</td><td>no type or payload comparison</td></tr>
+            <tr><th scope="row">accepted</th><td>different aggregate</td><td>command-id conflict</td><td>conflict occurs before status replay</td></tr>
+            <tr><th scope="row">rejected</th><td>same aggregate</td><td>return previously-rejected error; no re-evaluation</td><td>no type or payload comparison</td></tr>
+            <tr><th scope="row">rejected</th><td>different aggregate</td><td>command-id conflict</td><td>conflict occurs first</td></tr>
+            <tr><th scope="row">none</th><td>any aggregate</td><td>decide the normalized command now</td><td>the supplied body is the new candidate</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <div class="static-section">
+      <h4>Accepted-attempt delivery windows</h4>
+      <div class="static-scroll" tabindex="0" role="region" aria-label="Post-commit crash-window matrix">
+        <table>
+          <thead><tr><th scope="col">Window</th><th scope="col">Durable SQL</th><th scope="col">Hot delivery</th><th scope="col">Same-id retry</th></tr></thead>
+          <tbody>
+            <tr><th scope="row">ordinary response received</th><td>complete batch + receipt</td><td>all events offered</td><td>stored sequence</td></tr>
+            <tr><th scope="row">hard crash after commit</th><td>complete batch + receipt</td><td>none in failed process</td><td>stored sequence; no republish</td></tr>
+            <tr><th scope="row">hard crash during publication</th><td>complete batch + receipt</td><td>some prefix; exact prefix depends on the crash point</td><td>stored sequence; no missing-suffix replay</td></tr>
+            <tr><th scope="row">response lost</th><td>complete batch + receipt</td><td>all events offered</td><td>stored sequence</td></tr>
+            <tr><th scope="row">provider later fails</th><td>complete batch + receipt</td><td>all events offered</td><td>stored sequence; no new provider request</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </details>
+
+  <script type="application/json" data-receipt-window-data set:html={payload}></script>
+</section>
+
+<script>
+  interface SourceLink { label: string; href: string }
+  interface Outcome {
+    title: string;
+    badge: string;
+    tone: "neutral" | "warning" | "failure" | "success";
+    decision: string;
+    durable: string;
+    delivery: string;
+    client: string;
+    payload: string;
+    provider: string;
+    sourceIds: string[];
+  }
+  interface LadderStep { state: "complete" | "warning" | "failure" | "pending" | "blocked"; detail: string }
+
+  document.querySelectorAll<HTMLElement>("[data-receipt-window-lab]").forEach((lab) => {
+    if (lab.dataset.receiptWindowReady === "true") return;
+    lab.dataset.receiptWindowReady = "true";
+    const data = JSON.parse(lab.querySelector("[data-receipt-window-data]")?.textContent ?? "{}") as { sources: Record<string, SourceLink> };
+    const receipt = lab.querySelector<HTMLSelectElement>("[data-receipt-state]");
+    const target = lab.querySelector<HTMLSelectElement>("[data-retry-target]");
+    const body = lab.querySelector<HTMLSelectElement>("[data-retry-body]");
+    const windowSelect = lab.querySelector<HTMLSelectElement>("[data-delivery-window]");
+    const result = lab.querySelector<HTMLElement>("[data-receipt-result]");
+    const ladderItems = [...lab.querySelectorAll<HTMLElement>("[data-delivery-ladder] li")];
+
+    const setText = (selector: string, value: string) => {
+      const node = lab.querySelector(selector);
+      if (node) node.textContent = value;
+    };
+    const renderSources = (sourceIds: string[]) => {
+      const container = lab.querySelector("[data-result-sources]");
+      if (!container) return;
+      container.replaceChildren(...sourceIds.flatMap((sourceId) => {
+        const source = data.sources[sourceId];
+        if (!source) return [];
+        const link = document.createElement("a");
+        link.href = source.href;
+        link.rel = "noreferrer";
+        const code = document.createElement("code");
+        code.textContent = source.label;
+        link.append(code, " ↗");
+        return [link];
+      }));
+    };
+    const windowDetails = (windowValue: string) => {
+      switch (windowValue) {
+        case "hard-crash":
+          return {
+            suffix: "The original process committed SQL, then died before publishing any event or returning.",
+            delivery: "The retry appends zero events and republishes zero events, so the original hot-delivery gap remains.",
+            client: "The original caller saw no response; the retry receives the stored last sequence.",
+            provider: "The provider reactor can miss durable turn intent because it consumes the hot stream without a durable replay here.",
+            sources: ["engine-commit-publication", "hot-reactor-no-replay", "command-receipt-handling"],
+            ladder: [
+              { state: "complete", detail: "complete" },
+              { state: "failure", detail: "not reached" },
+              { state: "blocked", detail: "none" },
+              { state: "blocked", detail: "no trigger" },
+            ] as LadderStep[],
+          };
+        case "prefix":
+          return {
+            suffix: "The original process committed the complete batch, published a prefix, and then died during its sequential PubSub loop.",
+            delivery: "A prefix may have been offered to hot subscribers. The retry appends zero events and does not publish the missing suffix.",
+            client: "The original caller saw no response; the retry receives the stored last sequence.",
+            provider: "For this existing-thread turn, the provider trigger is the final event, so every proper prefix omits it. Only publishing the complete batch can offer that trigger.",
+            sources: ["engine-commit-publication", "turn-atomic-batch", "hot-reactor-no-replay", "command-receipt-handling"],
+            ladder: [
+              { state: "complete", detail: "complete" },
+              { state: "warning", detail: "prefix only" },
+              { state: "blocked", detail: "none" },
+              { state: "blocked", detail: "final event missing" },
+            ] as LadderStep[],
+          };
+        case "response-lost":
+          return {
+            suffix: "The engine offered the complete batch and returned, but the response was lost in transport.",
+            delivery: "The retry appends and republishes nothing; the original publication already occurred.",
+            client: "The retry converts an ambiguous transport result into the stored last sequence.",
+            provider: "Publication may have triggered provider work, but the receipt still records no provider outcome.",
+            sources: ["engine-commit-publication", "command-receipt-handling", "provider-turn-reactor"],
+            ladder: [
+              { state: "complete", detail: "complete" },
+              { state: "complete", detail: "complete" },
+              { state: "failure", detail: "lost" },
+              { state: "pending", detail: "not proven" },
+            ] as LadderStep[],
+          };
+        case "provider-failed":
+          return {
+            suffix: "The caller received the sequence, then asynchronous provider work failed later.",
+            delivery: "The retry appends and republishes nothing; it does not create a second provider request.",
+            client: "The retry receives the same stored sequence even though provider execution later failed.",
+            provider: "A provider failure does not change the command receipt from accepted; a corrected intent needs a new command id.",
+            sources: ["command-receipt-handling", "command-commit-acknowledgement", "provider-turn-reactor"],
+            ladder: [
+              { state: "complete", detail: "complete" },
+              { state: "complete", detail: "complete" },
+              { state: "complete", detail: "received" },
+              { state: "failure", detail: "failed later" },
+            ] as LadderStep[],
+          };
+        default:
+          return {
+            suffix: "The original accepted attempt completed the engine's commit, publication, and response path.",
+            delivery: "The retry appends zero events and republishes zero events.",
+            client: "The retry receives the same stored last sequence.",
+            provider: "The sequence proves durable intent, not that the provider accepted, ran, or completed it.",
+            sources: ["command-receipt-handling", "command-commit-acknowledgement", "provider-turn-reactor"],
+            ladder: [
+              { state: "complete", detail: "complete" },
+              { state: "complete", detail: "complete" },
+              { state: "complete", detail: "received" },
+              { state: "pending", detail: "not proven" },
+            ] as LadderStep[],
+          };
+      }
+    };
+    const compute = (): Outcome => {
+      const receiptValue = receipt?.value ?? "accepted";
+      const targetValue = target?.value ?? "same";
+      const bodyValue = body?.value ?? "same";
+      const currentWindow = windowDetails(windowSelect?.value ?? "ordinary");
+      const payloadChanged = bodyValue === "changed";
+
+      if (receiptValue === "none") {
+        return {
+          title: "Run the command path now",
+          badge: "no dedupe record",
+          tone: "neutral",
+          decision: "No receipt matches this id, so the normalized command reaches the serialized decider and can be accepted or rejected against current state.",
+          durable: "There is no prior command result. A successful attempt will atomically add events, projections, and an accepted receipt; an invariant rejection only attempts a rejected receipt afterward.",
+          delivery: "No replay guarantee applies yet. Delivery depends on the outcome and the post-commit window of this new attempt.",
+          client: "The caller receives the result of the current decision, not a historical sequence.",
+          payload: payloadChanged ? "The changed body is the candidate being decided because no receipt has bound the id yet." : "The supplied body is the candidate being decided because no receipt has bound the id yet.",
+          provider: "Provider work is possible only after a turn-triggering event commits and reaches the hot reactor.",
+          sourceIds: ["command-receipt-handling", "engine-commit-publication", "engine-rejected-receipt"],
+        };
+      }
+
+      if (targetValue === "different") {
+        return {
+          title: "Reject the reused id",
+          badge: "aggregate conflict",
+          tone: "failure",
+          decision: "The engine compares aggregate kind and id before replaying receipt status. A different target raises a command-id conflict.",
+          durable: `The original ${receiptValue} receipt remains unchanged; no event or replacement receipt is written for the conflicting target.`,
+          delivery: "The conflicting retry appends and publishes zero events.",
+          client: "The caller receives a command-id conflict, not the stored accepted result or rejected detail.",
+          payload: "Command type and payload still are not compared; aggregate mismatch alone is sufficient to reject the reuse.",
+          provider: "The conflicting retry creates no provider intent.",
+          sourceIds: ["command-receipt-schema", "command-receipt-handling"],
+        };
+      }
+
+      if (receiptValue === "rejected") {
+        return {
+          title: "Replay the rejection",
+          badge: "previously rejected",
+          tone: "failure",
+          decision: "The engine returns a previously-rejected error using the stored detail and does not run the decider again.",
+          durable: "The rejected receipt remains; rejected receipts carry the read-model sequence at rejection time rather than a newly appended event.",
+          delivery: "The retry appends and publishes zero events.",
+          client: "The retry receives the historical rejection even if domain state has changed since the first attempt.",
+          payload: payloadChanged ? "Changing type or payload does not escape the rejection: the row binds only this id to the same aggregate." : "The row has no payload fingerprint; same aggregate plus id is enough to replay the rejection.",
+          provider: "No provider intent was produced by the rejected command or its retry.",
+          sourceIds: ["command-receipt-schema", "command-receipt-handling", "engine-rejected-receipt"],
+        };
+      }
+
+      return {
+        title: "Replay the accepted sequence",
+        badge: payloadChanged ? "body is not checked" : "deduplicated",
+        tone: payloadChanged ? "warning" : "success",
+        decision: `The engine finds the accepted row before the decider and returns its stored resultSequence. ${currentWindow.suffix}`,
+        durable: "The original event batch, projections, and accepted receipt remain committed.",
+        delivery: currentWindow.delivery,
+        client: currentWindow.client,
+        payload: payloadChanged ? "The changed type or payload is not detected because the receipt stores no command type or payload fingerprint. Reusing ids for different intent is therefore unsafe." : "The receipt checks aggregate kind and id. The caller—not the row—must ensure that an id denotes one immutable intent.",
+        provider: currentWindow.provider,
+        sourceIds: ["command-receipt-schema", ...currentWindow.sources],
+      };
+    };
+    const paintLadder = () => {
+      const receiptValue = receipt?.value ?? "accepted";
+      const isAccepted = receiptValue === "accepted";
+      if (windowSelect) windowSelect.disabled = !isAccepted;
+      setText("[data-window-help]", isAccepted
+        ? "The delivery window describes the accepted attempt whose receipt is being replayed."
+        : "Delivery-window controls apply only to an accepted attempt; this receipt did not commit an accepted event batch.");
+      const steps: LadderStep[] = isAccepted
+        ? windowDetails(windowSelect?.value ?? "ordinary").ladder
+        : receiptValue === "rejected"
+          ? [
+              { state: "failure", detail: "no event" },
+              { state: "blocked", detail: "not reached" },
+              { state: "blocked", detail: "no success" },
+              { state: "blocked", detail: "no trigger" },
+            ]
+          : [
+              { state: "pending", detail: "to decide" },
+              { state: "blocked", detail: "unknown" },
+              { state: "blocked", detail: "unknown" },
+              { state: "blocked", detail: "unknown" },
+            ];
+      ladderItems.forEach((item, index) => {
+        const step = steps[index];
+        if (!step) return;
+        item.className = step.state;
+        const detail = item.querySelector("small");
+        if (detail) detail.textContent = step.detail;
+      });
+    };
+    const paint = () => {
+      const outcome = compute();
+      if (result) result.className = `receipt-result tone-${outcome.tone}`;
+      setText("[data-result-title]", outcome.title);
+      setText("[data-result-badge]", outcome.badge);
+      setText("[data-result-decision]", outcome.decision);
+      setText("[data-result-durable]", outcome.durable);
+      setText("[data-result-delivery]", outcome.delivery);
+      setText("[data-result-client]", outcome.client);
+      setText("[data-result-payload]", outcome.payload);
+      setText("[data-result-provider]", outcome.provider);
+      setText("[data-receipt-status]", `${outcome.title}. ${outcome.badge}. ${outcome.client} ${outcome.provider}`);
+      renderSources([...new Set(outcome.sourceIds)]);
+      paintLadder();
+    };
+
+    [receipt, target, body, windowSelect].forEach((control) => control?.addEventListener("change", paint));
+    paint();
+  });
+</script>
+
+<style>
+  .receipt-window-lab {
+    margin: 2rem 0;
+    border: 1px solid var(--line-strong);
+    border-radius: 1.1rem;
+    background: var(--paper-raised);
+    box-shadow: var(--shadow);
+    overflow: hidden;
+  }
+
+  .lab-head {
+    padding: 1.2rem 1.35rem 1rem;
+    color: var(--navy-text);
+    background: var(--navy);
+    border-bottom: 1px solid var(--navy-line);
+  }
+  .lab-head > span {
+    display: block;
+    margin-bottom: 0.32rem;
+    color: var(--orange);
+    font: 700 0.72rem/1 var(--font-sans);
+    letter-spacing: 0.11em;
+    text-transform: uppercase;
+  }
+  .lab-head h3, .lab-head p { margin: 0; }
+  .lab-head h3 { color: inherit; }
+  .lab-head p { margin-top: 0.45rem; color: var(--navy-muted); max-width: 74ch; }
+
+  .lab-controls {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.8rem;
+    padding: 1.1rem 1.25rem 0.75rem;
+  }
+  .lab-controls label {
+    display: grid;
+    gap: 0.38rem;
+    color: var(--ink-soft);
+    font: 700 0.72rem/1.25 var(--font-sans);
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+  }
+  .lab-controls select {
+    width: 100%;
+    min-height: 2.55rem;
+    border: 1px solid var(--line-strong);
+    border-radius: 0.55rem;
+    padding: 0.5rem 2rem 0.5rem 0.65rem;
+    color: var(--ink);
+    background: var(--paper);
+    font: 600 0.88rem/1.2 var(--font-sans);
+  }
+  .lab-controls select:disabled { color: var(--ink-faint); background: var(--paper-muted); }
+  .lab-controls select:focus-visible,
+  .static-fallback summary:focus-visible,
+  .static-scroll:focus-visible {
+    outline: 3px solid var(--blue);
+    outline-offset: 3px;
+  }
+
+  .window-help {
+    margin: 0;
+    padding: 0 1.25rem 0.85rem;
+    color: var(--ink-soft);
+    font-size: 0.88rem;
+  }
+
+  .noscript-note {
+    margin: 0 1.25rem 0.8rem;
+    border-left: 3px solid var(--orange);
+    padding-left: 0.7rem;
+    color: var(--ink-soft);
+    font-size: 0.88rem;
+  }
+
+  .delivery-ladder {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 0.45rem;
+    margin: 0 1.25rem 1rem;
+    padding: 0;
+    list-style: none;
+  }
+  .delivery-ladder li {
+    position: relative;
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 0.15rem 0.42rem;
+    align-items: center;
+    min-width: 0;
+    border: 1px solid var(--line);
+    border-radius: 0.65rem;
+    padding: 0.6rem;
+    background: var(--paper-muted);
+    transition: border-color var(--motion-fast) var(--motion-ease), background var(--motion-fast) var(--motion-ease);
+  }
+  .delivery-ladder li + li::before {
+    content: "→";
+    position: absolute;
+    left: -0.43rem;
+    top: 50%;
+    z-index: 1;
+    transform: translate(-50%, -50%);
+    color: var(--ink-faint);
+    background: var(--paper-raised);
+  }
+  .delivery-ladder span {
+    grid-row: 1 / span 2;
+    display: grid;
+    place-items: center;
+    width: 1.45rem;
+    height: 1.45rem;
+    border-radius: 50%;
+    color: var(--ink-soft);
+    background: var(--line);
+    font: 800 0.68rem/1 var(--font-sans);
+  }
+  .delivery-ladder strong { overflow: hidden; color: var(--ink); font: 750 0.75rem/1.1 var(--font-sans); text-overflow: ellipsis; white-space: nowrap; }
+  .delivery-ladder small { color: var(--ink-faint); font: 0.69rem/1.1 var(--font-sans); }
+  .delivery-ladder .complete { border-color: color-mix(in srgb, var(--green) 48%, var(--line)); background: color-mix(in srgb, var(--green) 8%, var(--paper)); }
+  .delivery-ladder .complete span { color: white; background: var(--green); }
+  .delivery-ladder .warning { border-color: color-mix(in srgb, var(--orange) 55%, var(--line)); background: color-mix(in srgb, var(--orange) 8%, var(--paper)); }
+  .delivery-ladder .warning span { color: white; background: var(--orange); }
+  .delivery-ladder .failure { border-color: color-mix(in srgb, var(--signal) 55%, var(--line)); background: var(--signal-soft); }
+  .delivery-ladder .failure span { color: white; background: var(--signal); }
+  .delivery-ladder .pending { border-style: dashed; }
+  .delivery-ladder .blocked { opacity: 0.58; }
+
+  .receipt-result {
+    margin: 0 1.25rem 1.15rem;
+    border: 1px solid var(--line);
+    border-left: 4px solid var(--blue);
+    border-radius: 0.8rem;
+    padding: 1rem;
+    background: var(--paper);
+  }
+  .receipt-result.tone-warning { border-left-color: var(--orange); }
+  .receipt-result.tone-failure { border-left-color: var(--signal); }
+  .receipt-result.tone-success { border-left-color: var(--green); }
+  .result-head { display: flex; justify-content: space-between; gap: 1rem; align-items: start; }
+  .result-head span {
+    display: block;
+    color: var(--ink-faint);
+    font: 700 0.7rem/1.2 var(--font-sans);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+  .result-head h4 { margin: 0.18rem 0 0; color: var(--ink); }
+  .result-head > strong {
+    flex: 0 0 auto;
+    border-radius: 999px;
+    padding: 0.35rem 0.58rem;
+    color: var(--signal-deep);
+    background: var(--signal-soft);
+    font: 750 0.72rem/1.1 var(--font-sans);
+  }
+  .tone-success .result-head > strong { color: var(--green); background: color-mix(in srgb, var(--green) 13%, transparent); }
+  .tone-warning .result-head > strong { color: var(--orange); background: color-mix(in srgb, var(--orange) 13%, transparent); }
+  .receipt-result > p { margin: 0.7rem 0 0.9rem; color: var(--ink-soft); }
+  .receipt-result dl {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.55rem;
+    margin: 0;
+  }
+  .receipt-result dl > div {
+    border: 1px solid var(--line);
+    border-radius: 0.58rem;
+    padding: 0.65rem 0.72rem;
+    background: var(--paper-muted);
+  }
+  .receipt-result dl > div:last-child { grid-column: 1 / -1; }
+  .receipt-result dt {
+    color: var(--ink-faint);
+    font: 750 0.68rem/1.2 var(--font-sans);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+  .receipt-result dd { margin: 0.25rem 0 0; color: var(--ink); font-size: 0.9rem; }
+  .result-sources { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 0.8rem; }
+  .result-sources :global(a) { max-width: 100%; color: var(--signal-deep); font-size: 0.7rem; overflow-wrap: anywhere; }
+
+  .static-fallback { margin: 0 1.25rem 1.25rem; border-top: 1px solid var(--line); padding-top: 0.75rem; }
+  .static-fallback summary { cursor: pointer; color: var(--signal-deep); font-weight: 750; }
+  .static-section { margin-top: 1rem; }
+  .static-section h4 { margin: 0; }
+  .static-scroll { overflow-x: auto; margin-top: 0.65rem; }
+  .static-scroll table { width: 100%; min-width: 43rem; border-collapse: collapse; font-size: 0.78rem; }
+  .static-scroll th, .static-scroll td { border: 1px solid var(--line); padding: 0.55rem; text-align: left; vertical-align: top; }
+  .static-scroll thead th { color: var(--ink-soft); background: var(--paper-muted); }
+
+  @media (max-width: 760px) {
+    .lab-controls { grid-template-columns: 1fr; }
+    .delivery-ladder { grid-template-columns: 1fr 1fr; }
+    .delivery-ladder li + li::before { display: none; }
+    .receipt-result dl { grid-template-columns: 1fr; }
+    .receipt-result dl > div:last-child { grid-column: auto; }
+    .result-head { display: grid; }
+    .result-head > strong { justify-self: start; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .delivery-ladder li { transition: none; }
+  }
+
+  @media print {
+    .receipt-window-lab { break-inside: avoid; box-shadow: none; }
+    .lab-head { color: #000; background: transparent; }
+    .lab-head > span, .lab-head p { color: #000; }
+    .lab-controls, .window-help, .noscript-note, .delivery-ladder, .receipt-result { display: none !important; }
+    .static-fallback { border-top: 0; margin: 0; padding: 1rem; }
+    .static-fallback summary { display: none; }
+    .static-fallback:not([open]) > :not(summary) { display: block !important; }
+    .static-scroll { overflow: visible; }
+    .static-scroll table { min-width: 0; font-size: 8pt; }
+    .static-scroll th, .static-scroll td { color: #000; background: transparent; }
+  }
+</style>

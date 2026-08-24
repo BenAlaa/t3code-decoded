@@ -1,0 +1,20 @@
+---
+interface Node { label: string; slug?: string; }
+interface Layer { label: string; nodes: Node[]; boundary?: boolean; tone?: "client" | "transport" | "durable" | "runtime" | "external"; }
+interface Props { layers: Layer[]; }
+const { layers } = Astro.props;
+const base = import.meta.env.BASE_URL.endsWith("/") ? import.meta.env.BASE_URL : `${import.meta.env.BASE_URL}/`;
+---
+
+<div class="layer-map" role="list" aria-label="T3 Code architecture layers">
+  {layers.map((layer) => (
+    <div class:list={["layer-row", layer.tone && `tone-${layer.tone}`, { boundary: layer.boundary }]} role="listitem">
+      <div class="layer-label">{layer.label}</div>
+      <div class="layer-nodes">
+        {layer.nodes.map((node) => node.slug
+          ? <a class="layer-node" href={`${base}${node.slug}/`}>{node.label}</a>
+          : <span class="layer-node">{node.label}</span>)}
+      </div>
+    </div>
+  ))}
+</div>

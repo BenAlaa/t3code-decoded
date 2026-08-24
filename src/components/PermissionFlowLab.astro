@@ -1,0 +1,90 @@
+---
+interface Props { id: string; }
+const { id } = Astro.props;
+if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(id)) throw new Error("PermissionFlowLab requires a stable kebab-case id.");
+
+const modes = ["approval-required", "auto-accept-edits", "auto", "full-access"] as const;
+const providers = {
+  codex: { label: "Codex", modes: { "approval-required": "untrusted · read-only · user reviewer", "auto-accept-edits": "on-request · workspace-write · user reviewer", auto: "on-request · workspace-write · auto_review", "full-access": "never · danger-full-access · user reviewer" }, approval: "native approval request → decision", input: "native tool request → answer map" },
+  claude: { label: "Claude", modes: { "approval-required": "no explicit base-map entry", "auto-accept-edits": "acceptEdits", auto: "auto", "full-access": "bypassPermissions + allowDangerouslySkipPermissions; AskUserQuestion still routes to structured input" }, approval: "canUseTool callback → decision", input: "AskUserQuestion → answer map" },
+  cursor: { label: "Cursor (ACP)", modes: { "approval-required": "prefer native approval-mode alias; permission callbacks still wait", "auto-accept-edits": "prefer implement-mode alias; permission callbacks still wait", auto: "prefer implement-mode alias; permission callbacks still wait", "full-access": "prefer implement-mode alias; auto-select offered allow option or wait" }, approval: "session/request_permission → selected/cancelled", input: "Cursor question extension → answer map" },
+  grok: { label: "Grok (ACP)", modes: { "approval-required": "no session-mode mapping; raised callbacks wait", "auto-accept-edits": "no session-mode mapping; raised callbacks wait", auto: "no session-mode mapping; raised callbacks wait", "full-access": "auto-select offered allow-always/allow-once; otherwise wait" }, approval: "session/request_permission → selected/cancelled", input: "Grok question extension → answer map" },
+  opencode: { label: "OpenCode", modes: { "approval-required": "broad operations ask; question is allowed", "auto-accept-edits": "broad operations ask; question is allowed", auto: "broad operations ask; question is allowed", "full-access": "allow all permission rules" }, approval: "permission.asked → permission.reply", input: "question.asked → question.reply" },
+} as const;
+const initial = providers.codex;
+const labId = `permission-flow-${id}`;
+const payload = JSON.stringify({ providers, modes }).replaceAll("<", "\\u003c");
+---
+
+<section class="permission-flow-lab" data-permission-lab data-ready="pending" aria-labelledby={`${labId}-title`}>
+  <header><span>Interactive request router</span><h3 id={`${labId}-title`}>Trace a mode and a request without flattening provider behavior</h3><p>Choose a provider, stored T3 mode, and request shape. The panel distinguishes durable response intent from a live native reply.</p></header>
+  <div class="permission-controls">
+    <label for={`${labId}-provider`}>Provider<select id={`${labId}-provider`} data-provider>{Object.entries(providers).map(([key, provider]) => <option value={key}>{provider.label}</option>)}</select></label>
+    <fieldset><legend>Stored T3 mode</legend><div class="mode-options">{modes.map((mode, index) => <label><input type="radio" name={`${labId}-mode`} value={mode} checked={index === 0} data-mode /> <code>{mode}</code></label>)}</div></fieldset>
+    <fieldset><legend>Request shape</legend><div class="request-options"><label><input type="radio" name={`${labId}-request`} value="approval" checked data-request /> Approval</label><label><input type="radio" name={`${labId}-request`} value="input" data-request /> Structured input</label></div></fieldset>
+  </div>
+  <p class="sr-only" role="status" aria-live="polite" aria-atomic="true" data-status>Codex, approval-required, approval.</p>
+  <div class="permission-result">
+    <div class="result-intro"><span data-provider-label>{initial.label}</span><strong data-mode-label>approval-required</strong></div>
+    <p><strong>Native starting behavior:</strong> <span data-map>{initial.modes["approval-required"]}</span></p>
+    <ol class="permission-route" data-route>
+      <li><b>1</b><span><strong>Provider emits</strong><em>{initial.approval}</em></span></li>
+      <li><b>2</b><span><strong>Runtime ingestion</strong><em>canonical request activity; pauses the active assistant segment</em></span></li>
+      <li><b>3</b><span><strong>Client command</strong><em><code>thread.approval.respond</code> records response intent</em></span></li>
+      <li><b>4</b><span><strong>Reactor and service</strong><em>resolve the bound session and call the adapter</em></span></li>
+      <li><b>5</b><span><strong>Provider reply</strong><em>native resolution later returns as activity</em></span></li>
+    </ol>
+    <aside><strong>Boundary:</strong> client-command acceptance is not proof that the provider accepted or completed the native action.</aside>
+  </div>
+  <details class="permission-matrix" open><summary>Static provider × mode matrix</summary><div tabindex="0" role="region" aria-label="Provider permission mode matrix"><table><thead><tr><th scope="col">Provider</th>{modes.map((mode) => <th scope="col"><code>{mode}</code></th>)}</tr></thead><tbody>{Object.values(providers).map((provider) => <tr><th scope="row">{provider.label}</th>{modes.map((mode) => <td>{provider.modes[mode]}</td>)}</tr>)}</tbody></table></div></details>
+  <noscript><p class="noscript-note">JavaScript is off; the complete matrix remains available above.</p></noscript>
+  <script type="application/json" data-permission-data set:html={payload}></script>
+</section>
+
+<script>
+  type Provider = { label: string; modes: Record<string, string>; approval: string; input: string };
+  document.querySelectorAll<HTMLElement>("[data-permission-lab]").forEach((lab) => {
+    if (lab.dataset.ready === "true") return;
+    try {
+      const data = JSON.parse(lab.querySelector<HTMLScriptElement>("[data-permission-data]")?.textContent ?? "") as { providers: Record<string, Provider> };
+      const select = lab.querySelector<HTMLSelectElement>("[data-provider]");
+      const modes = [...lab.querySelectorAll<HTMLInputElement>("[data-mode]")];
+      const requests = [...lab.querySelectorAll<HTMLInputElement>("[data-request]")];
+      const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      const text = (selector: string, value: string) => { const node = lab.querySelector<HTMLElement>(selector); if (node) node.textContent = value; };
+      const paint = (transition = true) => {
+        const provider = data.providers[select?.value ?? "codex"] ?? data.providers.codex;
+        const mode = modes.find((input) => input.checked)?.value ?? "approval-required";
+        const request = requests.find((input) => input.checked)?.value ?? "approval";
+        const requestCopy = request === "approval" ? provider.approval : provider.input;
+        const command = request === "approval" ? "thread.approval.respond" : "thread.user-input.respond";
+        const response = request === "approval" ? "decision" : "answer map";
+        text("[data-provider-label]", provider.label); text("[data-mode-label]", mode); text("[data-map]", provider.modes[mode] ?? "no mapping recorded"); text("[data-status]", `${provider.label}, ${mode}, ${request === "approval" ? "approval" : "structured input"}.`);
+        const route = lab.querySelector<HTMLOListElement>("[data-route]");
+        if (route) route.replaceChildren(...[
+          ["Provider emits", requestCopy],
+          ["Runtime ingestion", request === "approval" ? "approval.requested activity and pending-approval projection" : "user-input.requested activity with questions"],
+          ["Client command", `${command} records ${response} intent`],
+          ["Reactor and service", "resolve the non-stopped bound session and call the matching adapter operation"],
+          ["Provider reply", "native resolution later returns as canonical resolution activity"],
+        ].map(([title, detail], index) => { const item = document.createElement("li"); const number = document.createElement("b"); number.textContent = String(index + 1); const wrap = document.createElement("span"); const heading = document.createElement("strong"); heading.textContent = title; const copy = document.createElement("em"); copy.textContent = detail; wrap.append(heading, copy); item.append(number, wrap); return item; }));
+        if (transition && !reducedMotion) {
+          lab.querySelector<HTMLElement>(".permission-result")?.animate(
+            [{ opacity: .5, transform: "translateX(-6px)" }, { opacity: 1, transform: "translateX(0)" }],
+            { duration: 180, easing: "ease-out" },
+          );
+        }
+      };
+      select?.addEventListener("change", () => paint()); modes.forEach((input) => input.addEventListener("change", () => paint())); requests.forEach((input) => input.addEventListener("change", () => paint())); paint(false); lab.dataset.ready = "true";
+    } catch { lab.dataset.ready = "error"; }
+  });
+</script>
+
+<style>
+  .permission-flow-lab { margin: 2rem 0; border: 1px solid var(--line-strong); border-radius: .9rem; overflow: hidden; background: var(--paper-raised); font-family: var(--font-ui); }
+  .permission-flow-lab > header { padding: 1.1rem 1.25rem .9rem; border-bottom: 1px solid var(--line); } .permission-flow-lab header > span { color: var(--signal-deep); font-size: .66rem; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; } .permission-flow-lab h3 { margin: .45rem 0; font-size: 1.05rem; } .permission-flow-lab header p { margin: 0; color: var(--ink-soft); font-size: .86rem; line-height: 1.5; }
+  .permission-controls { display: none; grid-template-columns: minmax(10rem, 1fr) 1.65fr 1fr; gap: .9rem; padding: 1rem 1.25rem; background: var(--paper-muted); } .permission-flow-lab[data-ready="true"] .permission-controls { display: grid; } .permission-flow-lab[data-ready="true"] .noscript-note { display: none; } .permission-controls label, .permission-controls legend { color: var(--ink-soft); font-size: .72rem; font-weight: 750; } .permission-controls > label { display: grid; gap: .35rem; } .permission-controls select { min-height: 2.5rem; border: 1px solid var(--line-strong); border-radius: .4rem; padding: 0 .5rem; color: var(--ink); background: var(--paper); font: inherit; } .permission-controls fieldset { min-width: 0; margin: 0; padding: 0; border: 0; } .mode-options, .request-options { display: flex; flex-wrap: wrap; gap: .35rem .65rem; margin-top: .45rem; } .mode-options label, .request-options label { display: inline-flex; gap: .25rem; align-items: center; color: var(--ink); font-size: .75rem; } .mode-options code { overflow-wrap: anywhere; }
+  .permission-result { margin: 1rem 1.25rem; border: 1px solid var(--line); border-radius: .65rem; background: var(--paper); } .result-intro { display: flex; justify-content: space-between; gap: 1rem; padding: .75rem .9rem; border-bottom: 1px solid var(--line); } .result-intro span { color: var(--ink-soft); font-size: .78rem; } .result-intro strong { font: 700 .75rem/1.2 var(--font-mono); text-align: right; } .permission-result > p { margin: .8rem .9rem; font-size: .88rem; } .permission-route { display: grid; gap: .5rem; margin: 0; padding: .8rem .9rem; list-style: none; border-top: 1px solid var(--line); } .permission-route li { display: grid; grid-template-columns: 1.5rem 1fr; gap: .55rem; align-items: start; } .permission-route b { display: grid; width: 1.5rem; height: 1.5rem; place-items: center; border-radius: 50%; background: var(--signal-soft); color: var(--signal-deep); font-size: .72rem; } .permission-route span { display: grid; gap: .12rem; } .permission-route strong { font-size: .8rem; } .permission-route em { color: var(--ink-soft); font-size: .8rem; font-style: normal; line-height: 1.4; } .permission-result aside { margin: 0 .9rem .9rem; padding: .65rem .75rem; border-left: 3px solid var(--orange); background: var(--paper-muted); color: var(--ink-soft); font-size: .8rem; line-height: 1.45; }
+  .permission-matrix { margin: 0 1.25rem 1.25rem; } .permission-matrix summary { cursor: pointer; font-size: .82rem; font-weight: 700; } .permission-matrix > div { overflow-x: auto; margin-top: .65rem; border: 1px solid var(--line); border-radius: .5rem; } .permission-matrix table { width: 100%; min-width: 54rem; border-collapse: collapse; font-size: .76rem; } .permission-matrix th, .permission-matrix td { padding: .6rem; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; line-height: 1.4; } .permission-matrix thead { background: var(--paper-muted); } .permission-matrix tbody tr:last-child > * { border-bottom: 0; } .noscript-note { margin: 0 1.25rem 1rem; color: var(--ink-soft); font-size: .8rem; }
+  @media (max-width: 48rem) { .permission-controls { grid-template-columns: 1fr; } .permission-flow-lab > header, .permission-controls { padding-left: 1rem; padding-right: 1rem; } .permission-result, .permission-matrix { margin-left: 1rem; margin-right: 1rem; } } @media (prefers-reduced-motion: reduce) { .permission-flow-lab *, .permission-flow-lab *::before, .permission-flow-lab *::after { scroll-behavior: auto !important; transition: none !important; animation: none !important; } } @media print { .permission-flow-lab { break-inside: avoid; border-color: #777; } .permission-controls, .noscript-note { display: none !important; } }
+</style>

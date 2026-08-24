@@ -1,0 +1,39 @@
+{
+  "name": "t3code-decoded",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "A source-grounded, interactive architecture book for pingdotgg/t3code.",
+  "author": "Ahmed Alaa (https://github.com/BenAlaa)",
+  "license": "SEE LICENSE IN LICENSE",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/BenAlaa/t3code-decoded.git"
+  },
+  "homepage": "https://benalaa.github.io/t3code-decoded/",
+  "bugs": {
+    "url": "https://github.com/BenAlaa/t3code-decoded/issues"
+  },
+  "scripts": {
+    "dev": "ASTRO_TELEMETRY_DISABLED=1 astro dev",
+    "build": "npm run validate && ASTRO_TELEMETRY_DISABLED=1 astro build && node scripts/build-search-index.mjs && node scripts/validate-built-site.mjs",
+    "preview": "ASTRO_TELEMETRY_DISABLED=1 astro preview",
+    "validate": "node scripts/validate-book.mjs && node scripts/validate-sources.mjs",
+    "source:sync": "node scripts/sync-source-excerpts.mjs",
+    "source:check": "node scripts/sync-source-excerpts.mjs --check && node scripts/inventory-source.mjs --check",
+    "test": "node --test tests/*.test.mjs",
+    "check": "npm run test && npm run build"
+  },
+  "dependencies": {
+    "@astrojs/mdx": "7.0.7",
+    "astro": "7.2.4",
+    "mermaid": "11.17.0"
+  },
+  "devDependencies": {
+    "pagefind": "1.5.2",
+    "typescript": "6.0.3"
+  },
+  "engines": {
+    "node": ">=24.10.0"
+  }
+}

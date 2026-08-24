@@ -1,0 +1,176 @@
+---
+interface Props { id: string; }
+
+const { id } = Astro.props;
+if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(id)) {
+  throw new Error("ReachabilityRecoveryLab requires a stable kebab-case id.");
+}
+const labId = `reachability-recovery-${id}`;
+---
+
+<section class="reachability-lab" data-reachability-lab data-ready="pending" aria-labelledby={`${labId}-title`}>
+  <header class="reachability-lab__head">
+    <span>Interactive boundary lab · Chapter 36</span>
+    <h3 id={`${labId}-title`}>A signal can wake recovery; it cannot replace synchronization</h3>
+    <p>Choose a track and a deliberate event. The ledger shows which owner acts, what may be inferred, and the next authoritative read.</p>
+  </header>
+
+  <div class="reachability-lab__interactive">
+    <div class="reachability-lab__tabs" role="tablist" aria-label="Reachability recovery tracks">
+      <button type="button" role="tab" id={`${labId}-connection-tab`} aria-controls={`${labId}-panel`} aria-selected="true" tabindex="0" data-track="connection">Connection supervision</button>
+      <button type="button" role="tab" id={`${labId}-notification-tab`} aria-controls={`${labId}-panel`} aria-selected="false" tabindex="-1" data-track="notification">Notification delivery</button>
+    </div>
+
+    <div class="reachability-lab__choices" data-choices aria-label="Teaching events"></div>
+
+    <article class="reachability-lab__panel" id={`${labId}-panel`} role="tabpanel" aria-labelledby={`${labId}-connection-tab`} tabindex="0">
+      <p class="reachability-lab__eyebrow" data-kicker>Connection supervision</p>
+      <h4 data-title>One environment lease has closed</h4>
+      <p data-summary>The environment-scoped supervisor clears its old session, records a new generation only after establishment, and owns any retry.</p>
+      <div class="reachability-lab__motion" aria-hidden="true">
+        <span class="reachability-lab__motion-token" data-motion-signal>signal</span>
+        <span class="reachability-lab__motion-arrow">→</span>
+        <span class="reachability-lab__motion-owner" data-motion-owner>supervisor</span>
+        <span class="reachability-lab__motion-arrow">→</span>
+        <span class="reachability-lab__motion-read" data-motion-read>authoritative next read</span>
+      </div>
+      <dl class="reachability-lab__ledger">
+        <div><dt>Owner</dt><dd data-owner>Environment supervisor for this environment</dd></div>
+        <div><dt>Signal means</dt><dd data-signal>The active RPC lease is no longer usable.</dd></div>
+        <div><dt>Do not infer</dt><dd data-not-infer>That shell or thread projections are current.</dd></div>
+        <div><dt>Authoritative next step</dt><dd data-next>Obtain a replacement session, then refresh/subscribe the scoped projections.</dd></div>
+      </dl>
+    </article>
+    <p class="sr-only" role="status" aria-live="polite" aria-atomic="true" data-status>Connection supervision: session closes.</p>
+  </div>
+
+  <noscript><p class="reachability-lab__noscript">JavaScript is off. The complete static recovery ledger remains available below.</p></noscript>
+  <details class="reachability-lab__static" open>
+    <summary>Static recovery ledger</summary>
+    <div class="reachability-lab__table-wrap" tabindex="0" role="region" aria-label="Static recovery ledger for connections and notifications">
+      <table>
+        <thead><tr><th scope="col">Track</th><th scope="col">Event</th><th scope="col">Owner</th><th scope="col">Safe conclusion</th><th scope="col">Required follow-up</th></tr></thead>
+        <tbody>
+          <tr><th scope="row">Connection</th><td>Socket closes</td><td>One environment supervisor</td><td>The old lease is unusable; retry policy belongs to the supervisor.</td><td>A replacement session changes generation; shell and thread synchronize independently.</td></tr>
+          <tr><th scope="row">Connection</th><td>Device goes offline</td><td>One environment supervisor</td><td>Release the active lease and wait for an external signal; do not spend retry attempts.</td><td>Reconnect only after online/wakeup input permits it.</td></tr>
+          <tr><th scope="row">Connection</th><td>Foreground wakeup</td><td>One environment supervisor</td><td>A healthy lease can be probed instead of discarded.</td><td>A failed probe leads into the same owned recovery path.</td></tr>
+          <tr><th scope="row">Notification</th><td>Approval push arrives</td><td>Mobile navigation and the selected environment state</td><td>The notification names a route-worthy event, not a thread snapshot.</td><td>Navigate, connect if needed, then reconcile shell/thread state from the environment.</td></tr>
+          <tr><th scope="row">Notification</th><td>Relay registration is accepted</td><td>Relay/device-registration boundary</td><td>The relay can replay its aggregate; a local permission alone was never delivery proof.</td><td>Use normal synchronization to repair state and remove stale UI assumptions.</td></tr>
+          <tr><th scope="row">Notification</th><td>APNs delivery is delayed or absent</td><td>Normal connection and synchronization path</td><td>There is no promised notification receipt or durable state transfer.</td><td>The app later converges through its environment supervisor and projections.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </details>
+</section>
+
+<script>
+  type Track = "connection" | "notification";
+  interface Case {
+    label: string;
+    title: string;
+    summary: string;
+    owner: string;
+    signal: string;
+    notInfer: string;
+    next: string;
+  }
+  const cases: Record<Track, Record<string, Case>> = {
+    connection: {
+      closed: { label: "Session closes", title: "One environment lease has closed", summary: "The environment-scoped supervisor clears its old session, records a new generation only after establishment, and owns any retry.", owner: "Environment supervisor for this environment", signal: "The active RPC lease is no longer usable.", notInfer: "That shell or thread projections are current.", next: "Obtain a replacement session, then refresh/subscribe the scoped projections." },
+      offline: { label: "Network goes offline", title: "Offline stops attempts without inventing a retry", summary: "The supervisor releases its lease and waits for a real network or lifecycle signal. Offline does not consume a retry rung.", owner: "Environment supervisor for this environment", signal: "The device reports no usable network.", notInfer: "That a timer should keep attempting while offline.", next: "Wait for online input, then let the same supervisor establish a new lease." },
+      wake: { label: "App foregrounds", title: "Foregrounding tests a lease before replacing it", summary: "A plain activation can probe a connected session. A healthy answer preserves it; a failed probe enters the existing recovery path.", owner: "Environment supervisor and its connected-lease monitor", signal: "The application became active; reachability may have changed.", notInfer: "That reconnect is automatically safer than probing.", next: "Probe the current lease or, for a stronger wakeup, replace it through the supervisor." },
+      catalog: { label: "Catalog entry changes", title: "Environment identity scopes replacement", summary: "The registry serializes access for one environment. It reuses an equivalent scope, otherwise closes and recreates that environment's scoped supervisor.", owner: "Environment registry, serialized per environment", signal: "Saved connection material differs for this environment.", notInfer: "That another environment's sessions or caches should be merged or restarted.", next: "Recreate only the changed environment scope; retain separate environment-owned state." },
+    },
+    notification: {
+      approval: { label: "Approval push", title: "Push is an attention signal, not a state delta", summary: "A route payload can focus the named environment and thread. The mobile client still reads current server projections after it becomes reachable.", owner: "Notification navigation plus the selected environment's state runtime", signal: "An approval or input may need attention for this route.", notInfer: "That the payload contains the latest approval, thread, or shell state.", next: "Navigate, then reconnect and synchronize the scoped environment state." },
+      registered: { label: "Registration accepted", title: "Registration gates delivery, then triggers a replay opportunity", summary: "The device keeps a relay-accepted registration state. Registration bursts are deduplicated briefly, while accepted registration can replay the current aggregate to repair drift.", owner: "Relay registration boundary", signal: "The relay accepted the device and its notification preferences.", notInfer: "That OS permission alone proved the device could receive anything.", next: "Use the relay replay as a wake/awareness aid; normal synchronization remains authoritative." },
+      throttled: { label: "Delivery delayed", title: "APNs timing is outside the state contract", summary: "The relay reports delivery outcomes, but a delayed, throttled, or missing push does not block the application's ordinary convergence path.", owner: "APNs delivery path; no state synchronizer", signal: "An external notification delivery may be queued or fail.", notInfer: "That a thread has stopped, that the user saw the alert, or that state was lost.", next: "Fall back to the environment supervisor and snapshot/subscription reconciliation when the app next runs." },
+      duplicate: { label: "Same response again", title: "Route once, then let state converge", summary: "The mobile response handler de-duplicates a notification identifier before navigation. It does not apply notification data as a thread mutation.", owner: "Mobile notification-response consumer", signal: "The OS delivered a response that may already have been handled.", notInfer: "That repeating navigation should repeat any server-side action.", next: "Ignore the duplicate route response; use the currently synchronized thread state." },
+    },
+  };
+
+  document.querySelectorAll<HTMLElement>("[data-reachability-lab]").forEach((lab) => {
+    if (lab.dataset.ready === "true") return;
+    const tabs = [...lab.querySelectorAll<HTMLButtonElement>("[data-track]")];
+    const choices = lab.querySelector<HTMLElement>("[data-choices]");
+    const panel = lab.querySelector<HTMLElement>("[role=tabpanel]");
+    let track: Track = "connection";
+    let selected = "closed";
+    const setText = (selector: string, value: string) => { const node = lab.querySelector(selector); if (node) node.textContent = value; };
+    const render = (animate = false) => {
+      const item = cases[track][selected] ?? Object.values(cases[track])[0]!;
+      tabs.forEach((tab) => {
+        const active = tab.dataset.track === track;
+        tab.setAttribute("aria-selected", String(active));
+        tab.tabIndex = active ? 0 : -1;
+        if (active && panel) panel.setAttribute("aria-labelledby", tab.id);
+      });
+      if (choices) {
+        choices.replaceChildren(...Object.entries(cases[track]).map(([key, value]) => {
+          const button = document.createElement("button");
+          button.type = "button";
+          button.textContent = value.label;
+          button.dataset.choice = key;
+          button.setAttribute("aria-pressed", String(key === selected));
+          button.addEventListener("click", () => { selected = key; render(true); });
+          return button;
+        }));
+      }
+      setText("[data-kicker]", track === "connection" ? "Connection supervision" : "Notification delivery");
+      setText("[data-title]", item.title);
+      setText("[data-summary]", item.summary);
+      setText("[data-owner]", item.owner);
+      setText("[data-signal]", item.signal);
+      setText("[data-not-infer]", item.notInfer);
+      setText("[data-next]", item.next);
+      setText("[data-status]", `${track === "connection" ? "Connection supervision" : "Notification delivery"}: ${item.label}. ${item.next}`);
+      setText("[data-motion-signal]", track === "connection" ? "reachability signal" : "attention signal");
+      setText("[data-motion-owner]", track === "connection" ? "one supervisor" : "route + state runtime");
+      setText("[data-motion-read]", track === "connection" ? "probe / snapshot" : "navigate / synchronize");
+      lab.classList.toggle("is-authoritative", track === "connection");
+      lab.classList.remove("is-moving");
+      if (animate) requestAnimationFrame(() => requestAnimationFrame(() => lab.classList.add("is-moving")));
+    };
+    const selectTrack = (next: Track) => { track = next; selected = Object.keys(cases[next])[0]!; render(true); };
+    tabs.forEach((tab, index) => {
+      tab.addEventListener("click", () => selectTrack(tab.dataset.track as Track));
+      tab.addEventListener("keydown", (event) => {
+        if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+        event.preventDefault();
+        const target = event.key === "Home" ? 0 : event.key === "End" ? tabs.length - 1 : (index + (event.key === "ArrowRight" ? 1 : -1) + tabs.length) % tabs.length;
+        tabs[target]?.focus();
+        const next = tabs[target]?.dataset.track as Track | undefined;
+        if (next) selectTrack(next);
+      });
+    });
+    render();
+    lab.dataset.ready = "true";
+  });
+</script>
+
+<style>
+  .reachability-lab { margin: 2.4rem 0; overflow: hidden; border: 1px solid var(--line-strong); border-radius: 1rem; background: var(--paper-raised); box-shadow: var(--shadow); }
+  .reachability-lab__head { padding: 1.25rem 1.3rem .85rem; border-bottom: 1px solid var(--line); } .reachability-lab__head > span, .reachability-lab__eyebrow { color: var(--signal-deep); font: 750 .68rem/1 var(--font-ui); letter-spacing: .1em; text-transform: uppercase; } .reachability-lab__head h3 { margin: .4rem 0 .35rem; font: 750 1.25rem/1.22 var(--font-display); letter-spacing: -.02em; } .reachability-lab__head p { max-width: 70ch; margin: 0; color: var(--ink-soft); font: .9rem/1.5 var(--font-ui); }
+  .reachability-lab[data-ready="pending"] .reachability-lab__interactive { display: none; }
+  .reachability-lab__interactive { padding: 1rem 1.3rem 1.2rem; } .reachability-lab__tabs { display: flex; flex-wrap: wrap; gap: .45rem; border-bottom: 1px solid var(--line); padding-bottom: .75rem; } .reachability-lab button { border: 1px solid var(--line-strong); border-radius: .45rem; padding: .48rem .7rem; background: var(--paper); color: var(--ink); font: 650 .84rem/1.2 var(--font-ui); cursor: pointer; } .reachability-lab button[aria-selected="true"], .reachability-lab button[aria-pressed="true"] { border-color: var(--signal); background: var(--signal-soft); color: var(--signal-deep); } .reachability-lab button:hover, .reachability-lab button:focus-visible { outline: 2px solid color-mix(in srgb, var(--signal) 35%, transparent); outline-offset: 2px; }
+  .reachability-lab__choices { display: flex; flex-wrap: wrap; gap: .42rem; padding: .85rem 0; } .reachability-lab__choices button { font-size: .76rem; }
+  .reachability-lab__panel { padding: .95rem 1rem; border-left: 4px solid var(--signal); background: color-mix(in srgb, var(--signal-soft) 44%, var(--paper)); } .reachability-lab__panel h4 { margin: .28rem 0 .38rem; font: 750 1.08rem/1.25 var(--font-display); } .reachability-lab__panel > p:not(.reachability-lab__eyebrow) { margin: 0; color: var(--ink-soft); font: .9rem/1.5 var(--font-ui); }
+  .reachability-lab__motion { display: flex; flex-wrap: wrap; align-items: center; gap: .42rem; margin: .9rem 0 0; padding: .65rem .7rem; border: 1px solid var(--line); border-radius: .55rem; background: var(--paper); color: var(--ink-soft); font: 700 .7rem/1.3 var(--font-ui); letter-spacing: .02em; }
+  .reachability-lab__motion-token, .reachability-lab__motion-owner, .reachability-lab__motion-read { display: inline-flex; align-items: center; min-height: 1.8rem; padding: .25rem .45rem; border: 1px solid var(--line-strong); border-radius: 999px; background: var(--paper-muted); }
+  .reachability-lab__motion-token { color: var(--orange); }
+  .reachability-lab__motion-owner { color: var(--signal-deep); }
+  .reachability-lab__motion-read { color: var(--ink-soft); }
+  .reachability-lab.is-authoritative .reachability-lab__motion-read { border-color: var(--signal); background: var(--signal-soft); color: var(--signal-deep); box-shadow: 0 0 .8rem color-mix(in srgb, var(--signal) 24%, transparent); }
+  .reachability-lab.is-moving .reachability-lab__motion-token { animation: reachability-signal-travel .65s ease-out both; }
+  .reachability-lab.is-moving .reachability-lab__motion-owner { animation: reachability-owner-receive .65s .16s ease-out both; }
+  .reachability-lab.is-moving .reachability-lab__motion-read { animation: reachability-read-highlight .65s .3s ease-out both; }
+  @keyframes reachability-signal-travel { 0% { transform: translateX(0); opacity: .5; } 55% { transform: translateX(.45rem); opacity: 1; } 100% { transform: translateX(0); opacity: 1; } }
+  @keyframes reachability-owner-receive { 0%, 45% { transform: scale(.96); } 70% { transform: scale(1.04); } 100% { transform: scale(1); } }
+  @keyframes reachability-read-highlight { 0%, 55% { box-shadow: 0 0 0 color-mix(in srgb, var(--signal) 0%, transparent); } 75% { box-shadow: 0 0 .8rem color-mix(in srgb, var(--signal) 30%, transparent); } 100% { box-shadow: 0 0 .35rem color-mix(in srgb, var(--signal) 18%, transparent); } }
+  .reachability-lab__ledger { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1px; margin: 1rem 0 0; background: var(--line); border: 1px solid var(--line); } .reachability-lab__ledger div { padding: .72rem; background: var(--paper-raised); } .reachability-lab__ledger dt { color: var(--ink-faint); font: 750 .63rem/1.2 var(--font-ui); letter-spacing: .08em; text-transform: uppercase; } .reachability-lab__ledger dd { margin: .28rem 0 0; font: .82rem/1.45 var(--font-ui); }
+  .reachability-lab__static { margin: 0 1.3rem 1.25rem; padding-top: .2rem; } .reachability-lab__static summary { cursor: pointer; font: 700 .88rem/1.3 var(--font-ui); } .reachability-lab__table-wrap { overflow: auto; margin-top: .7rem; border: 1px solid var(--line); } .reachability-lab table { width: 100%; min-width: 780px; border-collapse: collapse; font: .76rem/1.45 var(--font-ui); } .reachability-lab th, .reachability-lab td { padding: .62rem; border: 1px solid var(--line); text-align: left; vertical-align: top; } .reachability-lab thead th { background: var(--paper-muted); color: var(--ink-faint); font-size: .64rem; letter-spacing: .07em; text-transform: uppercase; } .reachability-lab tbody th { background: var(--paper-muted); }
+  .reachability-lab__noscript { margin: 1rem 1.3rem; color: var(--ink-soft); font: .85rem/1.45 var(--font-ui); }
+  @media (max-width: 42rem) { .reachability-lab__interactive { padding-inline: 1rem; } .reachability-lab__ledger { grid-template-columns: 1fr; } .reachability-lab__static { margin-inline: 1rem; } .reachability-lab__motion { align-items: flex-start; flex-direction: column; } .reachability-lab__motion-arrow { display: none; } }
+  @media (prefers-reduced-motion: reduce) { .reachability-lab *, .reachability-lab *::before, .reachability-lab *::after { scroll-behavior: auto !important; transition: none !important; animation: none !important; } }
+  @media print { .reachability-lab { box-shadow: none; break-inside: avoid-page; } .reachability-lab__interactive, .reachability-lab__noscript { display: none; } .reachability-lab__static, .reachability-lab__static > * { display: block; } .reachability-lab__table-wrap { overflow: visible; } .reachability-lab table { min-width: 0; font-size: 7.5pt; } }
+</style>

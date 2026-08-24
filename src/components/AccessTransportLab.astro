@@ -1,0 +1,173 @@
+---
+interface Props {
+  id: string;
+}
+
+const { id } = Astro.props;
+if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(id)) {
+  throw new Error("AccessTransportLab requires a stable kebab-case id.");
+}
+
+const labId = `access-transport-${id}`;
+const routes = {
+  primary: {
+    label: "Host-local primary",
+    target: "Primary connection target",
+    launch: "Desktop launches the host-local backend; a browser may already be on its same origin.",
+    access: "Loopback HTTP and WebSocket bases are used directly. Primary auth is supplied by the platform when it has one.",
+    boundary: "A loopback bind is a reachability limit. It does not make every renderer or process on the machine an authority holder.",
+    registration: "Platform registration reconciles the primary; it is not a user-saved bearer profile.",
+  },
+  bearer: {
+    label: "Paired bearer over LAN or HTTPS",
+    target: "Bearer connection target",
+    launch: "The server is already running. Pairing is an enrollment action, not a process-launch protocol.",
+    access: "The client uses the saved HTTP/WebSocket profile and a saved bearer credential, then obtains the scoped session material required by the environment.",
+    boundary: "The advertised route determines who can attempt enrollment; scopes and credential lifecycle decide what the enrolled client may do.",
+    registration: "A bearer registration binds one connection id to both a profile and credential. The resolver checks the profile before it prepares the route.",
+  },
+  tailscale: {
+    label: "Paired bearer through Tailnet",
+    target: "Bearer connection target — not a Tailscale target",
+    launch: "The server is already running. Tailscale may provide an IP endpoint or a MagicDNS HTTPS endpoint through Tailscale Serve.",
+    access: "Pairing and subsequent bearer access use the selected Tailnet endpoint just as they use another reachable endpoint.",
+    boundary: "Tailscale changes endpoint provisioning and private-network reachability. It does not add a fifth connection-target kind or replace application authorization.",
+    registration: "The saved connection remains Bearer. An endpoint provider advertises candidate routes; it does not become the durable connection model.",
+  },
+  ssh: {
+    label: "Desktop-managed SSH",
+    target: "SSH connection target",
+    launch: "Electron main asks the SSH manager to start or reuse the remote server, then reserves a local loopback port and opens an SSH forward.",
+    access: "The renderer connects to the forwarded local HTTP/WebSocket endpoint. The remote host still owns the environment and its work.",
+    boundary: "The desktop gateway owns SSH processes and password prompts. Renderer code receives a prepared environment path, not arbitrary SSH authority.",
+    registration: "Provisioning produces an SSH profile with its target. At connection time the gateway refreshes the bootstrap path before normal environment access continues.",
+  },
+} as const;
+
+const initial = routes.primary;
+const payload = JSON.stringify(routes).replaceAll("<", "\\u003c");
+---
+
+<section class="access-transport-lab" data-access-transport-lab data-ready="pending" aria-labelledby={`${labId}-title`}>
+  <header>
+    <span>Interactive route explorer</span>
+    <h3 id={`${labId}-title`}>Separate how an environment starts from how a client reaches it</h3>
+    <p>Choose a route. This is a reading aid, not a live connection test: it performs no network action and has no automatic transitions.</p>
+  </header>
+
+  <fieldset class="route-controls">
+    <legend>Route to inspect</legend>
+    <div class="route-options" role="radiogroup" aria-label="Access route options">
+      {Object.entries(routes).map(([key, route], index) => (
+        <label><input type="radio" name={`${labId}-route`} value={key} checked={index === 0} data-route aria-controls={`${labId}-focus`} /> {route.label}</label>
+      ))}
+    </div>
+  </fieldset>
+
+  <p class="sr-only" role="status" aria-live="polite" aria-atomic="true" data-status>{initial.label}. {initial.target}.</p>
+
+  <article id={`${labId}-focus`} class="route-focus" aria-labelledby={`${labId}-focus-title`}>
+    <div class="focus-heading"><span data-target>{initial.target}</span><strong id={`${labId}-focus-title`} data-label>{initial.label}</strong></div>
+    <dl>
+      <div><dt>Launch transport</dt><dd data-launch>{initial.launch}</dd></div>
+      <div><dt>Access transport</dt><dd data-access>{initial.access}</dd></div>
+      <div><dt>Trust boundary</dt><dd data-boundary>{initial.boundary}</dd></div>
+      <div><dt>Registration fact</dt><dd data-registration>{initial.registration}</dd></div>
+    </dl>
+  </article>
+
+  <section class="route-static" aria-label="Static access route comparison">
+    <h4>All four routes at a glance</h4>
+    <div class="route-grid">
+      {Object.values(routes).map((route) => (
+        <article>
+          <h5>{route.label}</h5>
+          <p><strong>{route.target}</strong></p>
+          <p><b>Launch:</b> {route.launch}</p>
+          <p><b>Access:</b> {route.access}</p>
+          <p><b>Boundary:</b> {route.boundary}</p>
+        </article>
+      ))}
+    </div>
+  </section>
+
+  <noscript><p class="noscript-note">JavaScript is off; the complete four-route comparison remains visible above.</p></noscript>
+  <script type="application/json" data-access-transport-data set:html={payload}></script>
+</section>
+
+<script>
+  type Route = { label: string; target: string; launch: string; access: string; boundary: string; registration: string };
+
+  document.querySelectorAll<HTMLElement>("[data-access-transport-lab]").forEach((lab) => {
+    if (lab.dataset.ready === "true") return;
+    try {
+      const routes = JSON.parse(lab.querySelector<HTMLScriptElement>("[data-access-transport-data]")?.textContent ?? "") as Record<string, Route>;
+      const inputs = [...lab.querySelectorAll<HTMLInputElement>("[data-route]")];
+      const paint = (animate = false) => {
+        const key = inputs.find((input) => input.checked)?.value ?? "primary";
+        const route = routes[key] ?? routes.primary;
+        const set = (selector: string, value: string) => {
+          const node = lab.querySelector<HTMLElement>(selector);
+          if (node) node.textContent = value;
+        };
+        set("[data-label]", route.label);
+        set("[data-target]", route.target);
+        set("[data-launch]", route.launch);
+        set("[data-access]", route.access);
+        set("[data-boundary]", route.boundary);
+        set("[data-registration]", route.registration);
+        set("[data-status]", `${route.label}. ${route.target}.`);
+        if (animate) {
+          lab.classList.remove("is-changing");
+          requestAnimationFrame(() => {
+            lab.classList.add("is-changing");
+            requestAnimationFrame(() => lab.classList.remove("is-changing"));
+          });
+        }
+      };
+      inputs.forEach((input) => input.addEventListener("change", () => paint(true)));
+      paint();
+      lab.dataset.ready = "true";
+    } catch {
+      lab.dataset.ready = "error";
+    }
+  });
+</script>
+
+<style>
+  .access-transport-lab { margin: 2rem 0; overflow: hidden; border: 1px solid var(--line-strong); border-radius: .9rem; background: var(--paper-raised); font-family: var(--font-ui); }
+  .access-transport-lab > header { padding: 1.1rem 1.25rem .9rem; border-bottom: 1px solid var(--line); }
+  .access-transport-lab header > span { color: var(--signal-deep); font-size: .66rem; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; }
+  .access-transport-lab h3 { margin: .45rem 0; font-size: 1.05rem; }
+  .access-transport-lab header p { margin: 0; color: var(--ink-soft); font-size: .86rem; line-height: 1.5; }
+  .route-controls { display: none; margin: 0; padding: .9rem 1.25rem 1rem; border: 0; border-bottom: 1px solid var(--line); background: var(--paper-muted); }
+  .access-transport-lab[data-ready="true"] .route-controls { display: block; }
+  .route-controls legend { padding: 0; color: var(--ink-soft); font-size: .72rem; font-weight: 750; }
+  .route-options { display: flex; flex-wrap: wrap; gap: .45rem .85rem; margin-top: .5rem; }
+  .route-options label { display: inline-flex; gap: .35rem; align-items: center; color: var(--ink); font-size: .79rem; line-height: 1.35; }
+  .route-focus { margin: 1rem 1.25rem; border: 1px solid var(--line); border-radius: .65rem; background: var(--paper); }
+  .route-focus { transition: border-color .2s ease, box-shadow .2s ease, transform .2s ease; }
+  .access-transport-lab.is-changing .route-focus { border-color: var(--signal); box-shadow: 0 .35rem 1rem color-mix(in srgb, var(--signal) 14%, transparent); transform: translateY(-.12rem); }
+  .focus-heading { display: grid; gap: .22rem; padding: .8rem .9rem; border-bottom: 1px solid var(--line); }
+  .focus-heading span { color: var(--signal-deep); font: 700 .68rem/1.3 var(--font-mono); letter-spacing: .03em; text-transform: uppercase; }
+  .focus-heading strong { font-size: .94rem; }
+  .route-focus dl { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); margin: 0; }
+  .route-focus dl > div { padding: .8rem .9rem; border-bottom: 1px solid var(--line); }
+  .route-focus dl > div:nth-child(odd) { border-right: 1px solid var(--line); }
+  .route-focus dl > div:nth-last-child(-n + 2) { border-bottom: 0; }
+  .route-focus dt { margin-bottom: .25rem; color: var(--ink-soft); font-size: .72rem; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; }
+  .route-focus dd { margin: 0; font-size: .82rem; line-height: 1.48; }
+  .route-static { margin: 1rem 1.25rem 1.25rem; }
+  .access-transport-lab[data-ready="true"] .route-static, .access-transport-lab[data-ready="true"] .noscript-note { display: none; }
+  .route-static h4 { margin: 0 0 .65rem; font-size: .84rem; }
+  .route-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .65rem; }
+  .route-grid article { padding: .75rem .8rem; border: 1px solid var(--line); border-radius: .55rem; background: var(--paper); }
+  .route-grid h5 { margin: 0 0 .3rem; font-size: .82rem; }
+  .route-grid p { margin: .38rem 0 0; color: var(--ink-soft); font-size: .74rem; line-height: 1.42; }
+  .route-grid p:first-of-type { color: var(--signal-deep); font-family: var(--font-mono); font-size: .68rem; }
+  .route-grid b { color: var(--ink); }
+  .noscript-note { margin: 0 1.25rem 1.25rem; color: var(--ink-soft); font-size: .8rem; }
+  @media (max-width: 45rem) { .route-focus dl, .route-grid { grid-template-columns: 1fr; } .route-focus dl > div { border-right: 0 !important; border-bottom: 1px solid var(--line) !important; } .route-focus dl > div:last-child { border-bottom: 0 !important; } .access-transport-lab > header, .route-controls { padding-left: 1rem; padding-right: 1rem; } .route-focus, .route-static { margin-left: 1rem; margin-right: 1rem; } }
+  @media (prefers-reduced-motion: reduce) { .access-transport-lab *, .access-transport-lab *::before, .access-transport-lab *::after { animation: none !important; scroll-behavior: auto !important; transition: none !important; } .access-transport-lab.is-changing .route-focus { transform: none; } }
+  @media print { .access-transport-lab { break-inside: avoid; border-color: #777; } .route-controls, .route-focus, .noscript-note { display: none !important; } .route-static { display: block !important; } }
+</style>

@@ -1,0 +1,116 @@
+---
+interface Props { id: string; }
+
+const { id } = Astro.props;
+if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(id)) {
+  throw new Error("ConnectPlaneLab requires a stable kebab-case id.");
+}
+const labId = `connect-plane-${id}`;
+---
+
+<section class="connect-plane" data-connect-plane data-ready="pending" aria-labelledby={`${labId}-title`}>
+  <header class="connect-plane__header">
+    <span>Interactive credential ladder · Chapter 35</span>
+    <h3 id={`${labId}-title`}>Launch the connection, then move the work on a different path</h3>
+    <p>Choose a manual step. The lab distinguishes the short setup exchange from the HTTP and WebSocket traffic that follows it.</p>
+  </header>
+
+  <div class="connect-plane__interactive">
+    <div class="connect-plane__controls" aria-label="Credential ladder controls">
+      <label for={`${labId}-step`}>Credential step</label>
+      <select id={`${labId}-step`} data-step>
+        <option value="0">1 · Clerk session reaches relay</option>
+        <option value="1">2 · Device key obtains relay DPoP access</option>
+        <option value="2">3 · Relay brokers an environment bootstrap</option>
+        <option value="3">4 · Environment issues a DPoP-bound access token</option>
+        <option value="4">5 · Client obtains a WebSocket ticket</option>
+        <option value="5">6 · Work flows directly to the environment</option>
+      </select>
+      <div class="connect-plane__buttons">
+        <button type="button" data-previous>Previous</button>
+        <button type="button" data-next>Next</button>
+      </div>
+    </div>
+
+    <article class="connect-plane__stage" data-stage tabindex="0" aria-describedby={`${labId}-status`}>
+      <p class="connect-plane__eyebrow" data-plane>Control plane · account and endpoint authorization</p>
+      <h4 data-title>Clerk session reaches the relay</h4>
+      <p data-detail>A signed-in client presents its Clerk credential to list or link environments. This authorizes relay control-plane work; it is not an environment WebSocket credential.</p>
+      <dl class="connect-plane__facts">
+        <div><dt>Sender → receiver</dt><dd data-path>Client → relay</dd></div>
+        <div><dt>Proof in use</dt><dd data-credential>Clerk bearer credential</dd></div>
+        <div><dt>What becomes possible</dt><dd data-result>Discovery, link challenge, or relay DPoP token exchange</dd></div>
+      </dl>
+      <aside data-boundary><strong>Boundary:</strong> this reaches the relay, not a T3 environment.</aside>
+    </article>
+    <p id={`${labId}-status`} class="sr-only" role="status" aria-live="polite" aria-atomic="true" data-status>Step 1 of 6. Control plane.</p>
+  </div>
+
+  <noscript><p class="connect-plane__noscript">JavaScript is off. The complete static ladder below remains the authoritative reading path.</p></noscript>
+  <details class="connect-plane__static" open>
+    <summary>Static credential ladder and plane boundary</summary>
+    <div class="connect-plane__table-wrap" tabindex="0" role="region" aria-label="T3 Connect credential ladder">
+      <table>
+        <thead><tr><th scope="col">Step</th><th scope="col">Path</th><th scope="col">Credential or proof</th><th scope="col">Result</th></tr></thead>
+        <tbody>
+          <tr><th scope="row">1</th><td>Client → relay</td><td>Clerk bearer credential</td><td>Account-scoped relay operations</td></tr>
+          <tr><th scope="row">2</th><td>Client → relay</td><td>Device P-256 DPoP proof; relay issues DPoP-bound access token</td><td>Proof-bound relay request authority</td></tr>
+          <tr><th scope="row">3</th><td>Relay → managed environment</td><td>Relay-signed short-lived mint request, bound to the client key thumbprint</td><td>Environment bootstrap credential returned through the brokered connection flow</td></tr>
+          <tr><th scope="row">4</th><td>Client → managed environment</td><td>Bootstrap credential plus DPoP proof</td><td>Environment DPoP access token</td></tr>
+          <tr><th scope="row">5</th><td>Client → managed environment</td><td>Environment DPoP access token plus fresh proof</td><td>WebSocket ticket</td></tr>
+          <tr><th scope="row">6</th><td>Client ↔ managed environment</td><td>Ticketed WebSocket and direct API authorization</td><td>Normal T3 HTTP and WebSocket traffic; it does not traverse the relay</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </details>
+</section>
+
+<script>
+  type Step = { plane: string; title: string; detail: string; path: string; credential: string; result: string; boundary: string };
+  const steps: Step[] = [
+    { plane: "Control plane · account and endpoint authorization", title: "Clerk session reaches the relay", detail: "A signed-in client presents its Clerk credential to list or link environments. This authorizes relay control-plane work; it is not an environment WebSocket credential.", path: "Client → relay", credential: "Clerk bearer credential", result: "Discovery, link challenge, or relay DPoP token exchange", boundary: "this reaches the relay, not a T3 environment." },
+    { plane: "Control plane · proof-bound relay request", title: "The device key proves possession", detail: "The client signs a DPoP proof with its local P-256 key. The relay exchanges the Clerk credential for a short-lived token bound to that key thumbprint, then requires a fresh proof on the request.", path: "Client → relay", credential: "DPoP proof + relay DPoP access token", result: "Scoped relay authorization bound to the device key", boundary: "the access token alone is insufficient without the matching proof key." },
+    { plane: "Launch path · relay brokers, environment mints", title: "The relay asks the environment to mint a bootstrap", detail: "For a selected linked environment, the relay sends a signed, short-lived mint request through the managed endpoint. Its payload carries the requesting client key thumbprint and a nonce; the environment returns a bootstrap credential after verification.", path: "Relay → managed environment", credential: "Relay mint proof; environment response", result: "Bootstrap credential for this environment connection", boundary: "this is launch traffic. It is not the client’s continuing data stream." },
+    { plane: "Data-plane admission · direct to environment", title: "The client exchanges the bootstrap credential directly", detail: "The client posts the environment bootstrap credential with a DPoP proof to the managed environment’s token endpoint. The environment verifies the proof and records replay state before it issues a DPoP-bound access token.", path: "Client → managed environment", credential: "Bootstrap credential + DPoP proof", result: "Environment access token bound to the same key", boundary: "the relay is absent from this request." },
+    { plane: "Data-plane admission · direct to environment", title: "A fresh proof obtains the WebSocket ticket", detail: "The client presents the environment DPoP token and a proof for the WebSocket-ticket endpoint. The resulting ticket is placed on the managed endpoint’s WebSocket URL.", path: "Client → managed environment", credential: "Environment DPoP token + fresh proof", result: "Ticketed environment WebSocket URL", boundary: "a ticket authorizes the socket setup; it is not a relay tunnel hop." },
+    { plane: "Data plane · ordinary T3 traffic", title: "The selected environment carries the work", detail: "After connection, ordinary API requests and WebSocket traffic run directly between the client and selected environment. The Cloudflare tunnel exposes the environment, but the hosted relay is not a proxy for that normal traffic.", path: "Client ↔ managed environment", credential: "Direct API authorization and ticketed WebSocket", result: "T3 commands, projections, terminal streams, and events", boundary: "the relay remains available for control-plane work, not in this normal hot path." },
+  ];
+
+  document.querySelectorAll<HTMLElement>("[data-connect-plane]").forEach((lab) => {
+    if (lab.dataset.ready === "true") return;
+    try {
+      const select = lab.querySelector<HTMLSelectElement>("[data-step]");
+      const previous = lab.querySelector<HTMLButtonElement>("[data-previous]");
+      const next = lab.querySelector<HTMLButtonElement>("[data-next]");
+      const text = (selector: string, value: string) => { const node = lab.querySelector<HTMLElement>(selector); if (node) node.textContent = value; };
+      const paint = (index: number, animate = false) => {
+        const safeIndex = Math.max(0, Math.min(steps.length - 1, index));
+        const step = steps[safeIndex];
+        if (!step) return;
+        if (select) select.value = String(safeIndex);
+        text("[data-plane]", step.plane); text("[data-title]", step.title); text("[data-detail]", step.detail); text("[data-path]", step.path); text("[data-credential]", step.credential); text("[data-result]", step.result); text("[data-boundary]", `Boundary: ${step.boundary}`); text("[data-status]", `Step ${safeIndex + 1} of ${steps.length}. ${step.plane}. ${step.title}.`);
+        if (previous) previous.disabled = safeIndex === 0;
+        if (next) next.disabled = safeIndex === steps.length - 1;
+        if (animate) {
+          lab.classList.remove("is-changing");
+          requestAnimationFrame(() => {
+            lab.classList.add("is-changing");
+            requestAnimationFrame(() => lab.classList.remove("is-changing"));
+          });
+        }
+      };
+      select?.addEventListener("change", () => paint(Number(select.value), true));
+      previous?.addEventListener("click", () => paint(Number(select?.value ?? 0) - 1, true));
+      next?.addEventListener("click", () => paint(Number(select?.value ?? 0) + 1, true));
+      paint(0);
+      lab.dataset.ready = "true";
+    } catch { lab.dataset.ready = "error"; }
+  });
+</script>
+
+<style>
+  .connect-plane { margin: 2rem 0; overflow: hidden; border: 1px solid var(--line-strong); border-radius: .9rem; background: var(--paper-raised); font-family: var(--font-ui); } .connect-plane__header { padding: 1.1rem 1.25rem .9rem; border-bottom: 1px solid var(--line); } .connect-plane__header > span, .connect-plane__eyebrow { color: var(--signal-deep); font-size: .66rem; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; } .connect-plane h3 { margin: .45rem 0; font-size: 1.05rem; } .connect-plane__header p { margin: 0; color: var(--ink-soft); font-size: .86rem; line-height: 1.5; } .connect-plane__interactive { display: none; } .connect-plane[data-ready="true"] .connect-plane__interactive { display: block; } .connect-plane[data-ready="true"] .connect-plane__noscript { display: none; } .connect-plane__controls { display: grid; grid-template-columns: auto minmax(12rem, 1fr) auto; gap: .65rem; align-items: end; padding: 1rem 1.25rem; background: var(--paper-muted); } .connect-plane__controls > label { color: var(--ink-soft); font-size: .72rem; font-weight: 750; } .connect-plane__controls select { min-width: 0; min-height: 2.5rem; border: 1px solid var(--line-strong); border-radius: .4rem; padding: 0 .5rem; color: var(--ink); background: var(--paper); font: inherit; } .connect-plane__buttons { display: flex; gap: .45rem; } .connect-plane button { min-height: 2.5rem; border: 1px solid var(--line-strong); border-radius: .4rem; padding: .4rem .65rem; color: var(--ink); background: var(--paper); font: 700 .75rem var(--font-ui); cursor: pointer; } .connect-plane button:focus-visible, .connect-plane select:focus-visible, .connect-plane__stage:focus-visible { outline: 3px solid var(--signal); outline-offset: 2px; } .connect-plane button:disabled { opacity: .48; cursor: not-allowed; } .connect-plane__stage { margin: 1rem 1.25rem; padding: 1rem; border: 1px solid var(--line); border-radius: .65rem; background: var(--paper); } .connect-plane__stage h4 { margin: .35rem 0 .5rem; font-size: 1rem; } .connect-plane__stage > p:not(.connect-plane__eyebrow) { margin: 0; color: var(--ink-soft); font-size: .87rem; line-height: 1.5; } .connect-plane__facts { display: grid; grid-template-columns: repeat(3, 1fr); gap: .65rem; margin: 1rem 0; } .connect-plane__facts > div { padding: .65rem; border-radius: .45rem; background: var(--paper-muted); } .connect-plane dt { color: var(--ink-soft); font-size: .66rem; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; } .connect-plane dd { margin: .3rem 0 0; font-size: .78rem; line-height: 1.4; } .connect-plane__stage aside { padding: .65rem .75rem; border-left: 3px solid var(--orange); color: var(--ink-soft); background: var(--paper-muted); font-size: .8rem; line-height: 1.45; } .connect-plane__static { margin: 0 1.25rem 1.25rem; } .connect-plane__static summary { cursor: pointer; font-size: .82rem; font-weight: 700; } .connect-plane__table-wrap { overflow-x: auto; margin-top: .65rem; border: 1px solid var(--line); border-radius: .5rem; } .connect-plane table { width: 100%; min-width: 48rem; border-collapse: collapse; font-size: .76rem; } .connect-plane th, .connect-plane td { padding: .6rem; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; line-height: 1.4; } .connect-plane thead { background: var(--paper-muted); } .connect-plane tbody tr:last-child > * { border-bottom: 0; } .connect-plane__noscript { margin: 0 1.25rem 1rem; color: var(--ink-soft); font-size: .8rem; } @media (max-width: 48rem) { .connect-plane__header, .connect-plane__controls { padding-left: 1rem; padding-right: 1rem; } .connect-plane__controls { grid-template-columns: 1fr; align-items: stretch; } .connect-plane__stage, .connect-plane__static { margin-left: 1rem; margin-right: 1rem; } .connect-plane__facts { grid-template-columns: 1fr; } } @media (prefers-reduced-motion: reduce) { .connect-plane *, .connect-plane *::before, .connect-plane *::after { scroll-behavior: auto !important; transition: none !important; animation: none !important; } } @media print { .connect-plane { break-inside: avoid; border-color: #777; } .connect-plane__interactive, .connect-plane__noscript { display: none !important; } .connect-plane__static { display: block; } }
+  .connect-plane__stage { transition: border-color .2s ease, box-shadow .2s ease, transform .2s ease; }
+  .connect-plane.is-changing .connect-plane__stage { border-color: var(--signal); box-shadow: 0 .35rem 1rem color-mix(in srgb, var(--signal) 14%, transparent); transform: translateY(-.12rem); }
+  @media (prefers-reduced-motion: reduce) { .connect-plane.is-changing .connect-plane__stage { transform: none; } }
+</style>

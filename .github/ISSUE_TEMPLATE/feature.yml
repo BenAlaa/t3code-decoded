@@ -1,0 +1,42 @@
+name: Book or engine proposal
+description: Propose a chapter, visualization, simulator, accessibility, or engine improvement.
+title: "feat(book): "
+labels: [proposal]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Reader problem
+      description: What is currently difficult to understand or use?
+    validations:
+      required: true
+  - type: textarea
+    id: outcome
+    attributes:
+      label: Proposed outcome
+      description: Describe the chapter, figure, lab, or engine behavior—not only an implementation.
+    validations:
+      required: true
+  - type: textarea
+    id: sources
+    attributes:
+      label: Likely source anchors
+      description: List relevant T3 Code paths or this repository's engine files.
+    validations:
+      required: false
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives and scope
+      description: What smaller explanation or existing component could solve it?
+    validations:
+      required: false
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Proposal checks
+      options:
+        - label: I checked BOOK_PLAN.md for an existing chapter or planned artifact.
+          required: true
+        - label: This is about the study guide, not an upstream T3 Code product bug.
+          required: true

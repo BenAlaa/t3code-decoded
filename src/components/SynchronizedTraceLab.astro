@@ -1,0 +1,266 @@
+---
+interface Props { id: string; }
+
+const { id } = Astro.props;
+if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(id)) {
+  throw new Error("SynchronizedTraceLab requires a stable kebab-case id.");
+}
+const labId = `synchronized-trace-${id}`;
+---
+
+<section class="synchronized-trace" data-synchronized-trace data-ready="pending" aria-labelledby={`${labId}-title`}>
+  <header class="synchronized-trace__head">
+    <span>Interactive synthesis lab · Chapter 39</span>
+    <h3 id={`${labId}-title`}>Move one trace through the owner that acts next</h3>
+    <p>Select a complete trace, then advance deliberately. The marker crosses the owner that acts next; its final boundary says what does—and does not—converge.</p>
+  </header>
+
+  <div class="synchronized-trace__interactive">
+    <div class="synchronized-trace__tabs" role="tablist" aria-label="Six complete T3 Code traces">
+      <button type="button" role="tab" id={`${labId}-local-tab`} aria-controls={`${labId}-panel`} aria-selected="true" tabindex="0" data-trace="local">1. Local turn</button>
+      <button type="button" role="tab" id={`${labId}-relay-tab`} aria-controls={`${labId}-panel`} aria-selected="false" tabindex="-1" data-trace="relay">2. Relay mobile</button>
+      <button type="button" role="tab" id={`${labId}-approval-tab`} aria-controls={`${labId}-panel`} aria-selected="false" tabindex="-1" data-trace="approval">3. Approval</button>
+      <button type="button" role="tab" id={`${labId}-outbox-tab`} aria-controls={`${labId}-panel`} aria-selected="false" tabindex="-1" data-trace="outbox">4. Offline drain</button>
+      <button type="button" role="tab" id={`${labId}-checkpoint-tab`} aria-controls={`${labId}-panel`} aria-selected="false" tabindex="-1" data-trace="checkpoint">5. Checkpoint</button>
+      <button type="button" role="tab" id={`${labId}-release-tab`} aria-controls={`${labId}-panel`} aria-selected="false" tabindex="-1" data-trace="release">6. Exact update</button>
+    </div>
+
+    <div class="synchronized-trace__controls" aria-label="Trace step controls">
+      <button type="button" data-previous aria-label="Previous trace step">Previous</button>
+      <p data-progress>Step 1 of 6</p>
+      <button type="button" data-next aria-label="Next trace step">Next</button>
+      <button type="button" data-reset>Start over</button>
+    </div>
+
+    <article class="synchronized-trace__panel" id={`${labId}-panel`} role="tabpanel" aria-labelledby={`${labId}-local-tab`} tabindex="0">
+      <p class="synchronized-trace__eyebrow" data-kicker>Trace 1 · Local first turn</p>
+      <h4 data-title>Client sends one existing-thread command</h4>
+      <p class="synchronized-trace__summary" data-summary>The user action enters the environment through an authorized RPC method; no provider work has happened yet.</p>
+
+      <div class="synchronized-trace__lanes" role="img" aria-label="Synchronized ownership lanes; the active marker moves one lane at a time as the reader advances">
+        <span>Release automation</span>
+        <span>Client / device</span>
+        <span>Relay</span>
+        <span>Environment engine</span>
+        <span>Durable state</span>
+        <span>Provider / Git / launcher</span>
+        <div class="synchronized-trace__marker" data-marker><b data-marker-step>1</b><strong data-marker-label>Command</strong></div>
+      </div>
+
+      <dl class="synchronized-trace__ledger">
+        <div><dt>Owner now</dt><dd data-owner>client and RPC entry policy</dd></div>
+        <div><dt>Handoff / evidence</dt><dd data-evidence>typed turn command reaches the selected environment</dd></div>
+        <div><dt>Durable fact now</dt><dd data-durable>none yet</dd></div>
+        <div><dt>Boundary if it stops here</dt><dd data-boundary>an RPC failure is not a provider failure and does not create an accepted turn</dd></div>
+      </dl>
+    </article>
+    <p class="sr-only" role="status" aria-live="polite" aria-atomic="true" data-status>Local first turn. Step 1 of 6.</p>
+  </div>
+
+  <noscript><p class="synchronized-trace__noscript">JavaScript is off. The static ledger below preserves every trace's start, owner sequence, durable fact, and failure boundary.</p></noscript>
+  <details class="synchronized-trace__static" open>
+    <summary>Static six-trace ledger</summary>
+    <div class="synchronized-trace__table-wrap" tabindex="0" role="region" aria-label="Static ledger of the six complete traces">
+      <table>
+        <thead><tr><th scope="col">Trace</th><th scope="col">Owner sequence</th><th scope="col">Durable evidence</th><th scope="col">Convergence or failure boundary</th></tr></thead>
+        <tbody>
+          <tr><th scope="row">Local first turn</th><td>client → RPC/engine → SQLite → provider reactor/adapter → engine → client state</td><td>accepted event, projections, and receipt commit together</td><td>hot reactor delivery is not replayed after a crash; later projections only show committed facts</td></tr>
+          <tr><th scope="row">Relay-connected mobile turn</th><td>phone → relay control plane → selected environment → relay bootstrap return → direct mobile session → environment state</td><td>device-held DPoP-bound environment session material and environment projections</td><td>relay launch authorization is not thread synchronization; ordinary traffic bypasses the relay</td></tr>
+          <tr><th scope="row">Approval round-trip</th><td>provider → runtime ingestion → pending projection → client → response intent → provider reactor</td><td>pending request and response-requested event are separate durable facts</td><td>native provider reply is a later hot handoff where a stale or unknown request can fail; runtime-mode labels do not equal provider semantics</td></tr>
+          <tr><th scope="row">Offline mobile drain</th><td>mobile atom → atomic outbox file → live shell → environment receipt/result → phone cleanup → later projection reconciliation</td><td>confirmed phone file, then remote command receipt</td><td>there is no transaction shared by phone storage and server SQLite; cleanup follows the command result, while projections reconcile separately</td></tr>
+          <tr><th scope="row">Checkpoint diff / revert</th><td>completion → Git hidden ref/diff → checkpoint projection → durable revert request → ordered saga → engine completion</td><td>hidden ref precedes checkpoint metadata; the request and later completion are separate orchestration facts</td><td>restore can happen before provider rollback; later failure can leave a real partial state</td></tr>
+          <tr><th scope="row">Stable exact update</th><td>release automation → exact npm runtime → client exposure → connected-client request → server preflight → stable launcher trial</td><td>exact package publication, then launcher pending/trial/commit state</td><td>publish does not replace a machine; launcher can roll back a failed trial before commit</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </details>
+</section>
+
+<script>
+  type Lane = "release" | "client" | "relay" | "engine" | "durable" | "worker";
+  type TraceKey = "local" | "relay" | "approval" | "outbox" | "checkpoint" | "release";
+  interface Step { lane: Lane; title: string; summary: string; owner: string; evidence: string; durable: string; boundary: string; }
+  interface Trace { label: string; kicker: string; steps: Step[]; }
+
+  const laneColumn: Record<Lane, string> = { release: "1", client: "2", relay: "3", engine: "4", durable: "5", worker: "6" };
+  const traces: Record<TraceKey, Trace> = {
+    local: {
+      label: "Local first turn", kicker: "Trace 1 · Local first turn", steps: [
+        { lane: "client", title: "Client sends one existing-thread command", summary: "The selected client issues a typed turn command through the authorized environment method.", owner: "client and RPC entry policy", evidence: "typed command and selected environment identity", durable: "none yet", boundary: "an RPC failure is not a provider failure and does not create an accepted turn" },
+        { lane: "engine", title: "The engine normalizes, serializes, and decides", summary: "External input is normalized and one command worker reaches the I/O-free decision layer.", owner: "environment normalizer and orchestration engine", evidence: "one ordered command envelope and invariant decision", durable: "none yet", boundary: "a rejected decision is not an accepted receipt" },
+        { lane: "durable", title: "Acceptance commits as one environment fact", summary: "Events, projections, and the accepted receipt commit in the SQLite transaction.", owner: "orchestration transaction", evidence: "committed sequence and accepted idempotency receipt", durable: "turn intent and derived read model", boundary: "durability proves acceptance, not that a harness has already acted" },
+        { lane: "worker", title: "A hot reactor sends to the selected harness", summary: "The provider reactor observes committed intent, ensures a session, and delegates native work to an adapter.", owner: "provider reactor, service, and adapter", evidence: "hot post-commit event and provider session route", durable: "no new general delivery ledger", boundary: "a crash before hot observation is not replayed as pending provider work" },
+        { lane: "engine", title: "Runtime facts re-enter as internal commands", summary: "Canonical runtime events become messages, activity, lifecycle, plan, approval, and usage commands.", owner: "runtime ingestion and same orchestration engine", evidence: "correlated canonical provider events", durable: "new committed projections when each internal command succeeds", boundary: "native notifications are not durable state until the engine commits their derived facts" },
+        { lane: "client", title: "Snapshot and stream converge the rendered thread", summary: "The client establishes authority with a snapshot and applies newer resumable events.", owner: "environment-scoped client state runtime", evidence: "HTTP snapshot plus sequence-aware subscription", durable: "client cache may persist a projection, not server authority", boundary: "a rendered projection cannot repair a missed earlier hot provider handoff" },
+      ],
+    },
+    relay: {
+      label: "Relay-connected mobile turn", kicker: "Trace 2 · Relay-connected mobile turn", steps: [
+        { lane: "client", title: "The phone presents account authority and a DPoP key", summary: "A signed-in mobile client prepares proof-bound relay access; it has not connected to a thread yet.", owner: "mobile cloud-auth and DPoP key store", evidence: "Clerk account state plus device-held proof key", durable: "device-held credential material only", boundary: "account sign-in does not prove environment reachability or thread freshness" },
+        { lane: "relay", title: "The relay authorizes launch and requests a mint", summary: "The control plane binds its request to the device proof-key thumbprint and calls the chosen environment.", owner: "hosted relay control plane", evidence: "short-lived mint request and account-to-environment authorization", durable: "relay-side control-plane state, not a thread mutation", boundary: "the relay is not on normal API or WebSocket traffic after launch" },
+        { lane: "engine", title: "The environment mints a short-lived bootstrap", summary: "The selected environment returns proof-bound bootstrap material for this direct launch path; this step alone does not establish a durable environment session.", owner: "selected T3 environment authorization boundary", evidence: "environment mint response bound to proof-key thumbprint", durable: "no general durable credential fact claimed here", boundary: "a minted bootstrap is not a WebSocket session or synchronized shell" },
+        { lane: "relay", title: "The relay returns endpoint and bootstrap to the phone", summary: "The relay's authorized connect response carries the selected endpoint and minted bootstrap back to the client that must perform the direct exchange.", owner: "hosted relay control-plane response", evidence: "relay connect response containing endpoint and credential", durable: "no thread mutation", boundary: "this final relay handoff launches connection setup but is not the data plane" },
+        { lane: "client", title: "The phone connects directly to the environment", summary: "The phone exchanges bootstrap material at the environment, stores key-bound access material, and obtains a direct socket ticket.", owner: "mobile shared connection runtime", evidence: "direct token exchange and environment socket URL", durable: "device connection material and its scoped cache", boundary: "a tunnel carries environment traffic; the relay still does not become the data proxy" },
+        { lane: "engine", title: "The ordinary turn path begins at the environment", summary: "After snapshot/subscription establishment, the mobile command uses the same environment command and provider path as a local client.", owner: "environment engine and provider path", evidence: "environment-scoped session plus normal RPC command", durable: "only the normal environment command commit proves acceptance", boundary: "relay success cannot substitute for environment snapshot and stream convergence" },
+        { lane: "client", title: "The mobile projection converges by its normal runtime", summary: "The phone reads the selected environment's state and renders its remote-authoritative thread.", owner: "mobile cache and shared state runtime", evidence: "environment snapshot and sequence-aware subscription", durable: "phone cache is continuity data", boundary: "cached remote state is not offline authority" },
+      ],
+    },
+    approval: {
+      label: "Approval round-trip", kicker: "Trace 3 · Approval round-trip", steps: [
+        { lane: "worker", title: "A native harness asks for approval or input", summary: "A provider-specific callback occurs while a turn is active.", owner: "selected provider runtime and adapter", evidence: "native interaction request normalized into canonical runtime activity", durable: "none yet", boundary: "a native callback alone is not a visible durable pending request" },
+        { lane: "engine", title: "Runtime ingestion pauses and maps the interaction", summary: "The environment flushes relevant assistant buffering and converts the request to canonical activity work.", owner: "provider runtime ingestion", evidence: "canonical approval or structured-input request", durable: "none until its internal command commits", boundary: "provider-specific permission semantics are not flattened into one universal mode" },
+        { lane: "durable", title: "The pending request becomes projected state", summary: "SQLite-backed projections retain the unresolved approval/input activity for client snapshot and stream reads.", owner: "projection pipeline and pending-request storage", evidence: "durable pending activity keyed to the thread", durable: "pending approval or input request", boundary: "the projection does not itself answer the provider callback" },
+        { lane: "client", title: "A selected client derives and submits the response", summary: "Web or mobile renders the synchronized request and sends a typed answer intent.", owner: "web or mobile request-resolution state", evidence: "response payload tied to the pending request", durable: "none before command acceptance", boundary: "a local tap is not the provider's completed decision" },
+        { lane: "durable", title: "The response intent is accepted", summary: "The decider validates that the thread exists and records response-requested durable state; pending-request freshness is not settled here.", owner: "orchestration decider and transaction", evidence: "durable approval or structured-input response request", durable: "response-requested event and projections", boundary: "acceptance is earlier than native provider completion or pending-request validation" },
+        { lane: "worker", title: "The reactor attempts the live bound callback", summary: "The provider reactor checks for a live session and forwards the response through the adapter; a stale or unknown pending request can fail at this later provider boundary.", owner: "provider command reactor and adapter", evidence: "bound-session response route, unknown-pending failure activity, and later canonical runtime event", durable: "later facts only when re-ingested and committed", boundary: "this hot response handoff is not a global exactly-once provider-callback contract" },
+      ],
+    },
+    outbox: {
+      label: "Offline mobile task drain", kicker: "Trace 4 · Offline mobile task drain", steps: [
+        { lane: "client", title: "The phone shows queued intent optimistically", summary: "The outbox manager adds a stable message/command identity to its kept client atom before the file operation completes.", owner: "mobile outbox manager", evidence: "optimistic in-memory queue row", durable: "none until the atomic file write confirms", boundary: "a visible optimistic row can be rolled back if its file write fails" },
+        { lane: "durable", title: "The atomic outbox file becomes delivery evidence", summary: "Serialized confirmation checks the durable record behind pending mutations before it can be sent.", owner: "mobile outbox storage", evidence: "versioned atomic queued-command file", durable: "phone-side delivery intent", boundary: "the phone file is not an environment command receipt" },
+        { lane: "client", title: "The drain waits for connection and live-shell evidence", summary: "It processes one message globally and uses synchronized thread existence to guard creation replay.", owner: "mobile outbox drain plus environment-scoped client state", evidence: "connected session and live shell with stable thread identity", durable: "existing phone intent remains until its selected outcome", boundary: "mere transport connectivity is insufficient for creation replay decisions" },
+        { lane: "engine", title: "The environment accepts settings and turn commands", summary: "Any needed deterministic settings sync precedes the final start-turn command, which passes normal server invariants and receipt handling before returning its command result.", owner: "environment command handlers", evidence: "authorized RPC dispatch, command identity, and accepted receipt", durable: "accepted environment receipt when command transaction succeeds", boundary: "transport interruption can leave phone and server observations temporarily ambiguous" },
+        { lane: "durable", title: "The phone removes only its delivered record", summary: "After the start-turn command returns its selected result, completeDelivery removes the durable queue item rather than waiting for a later projection or claiming a global transaction closed.", owner: "mobile outbox storage", evidence: "successful command result followed by drain removal", durable: "updated local queue file set", boundary: "a later crash still has no universal exactly-once story for prior external effects" },
+        { lane: "client", title: "Projection reconciliation remains a later observation", summary: "Snapshot and stream state can later show the shell/detail outcome and guide future retries, but they are not the successful command's local-cleanup gate.", owner: "mobile state runtime and drain classification", evidence: "synchronized shell, detail projection, and observed command classification", durable: "cache and outbox state update separately", boundary: "client policy does not promise one atomic commit across both stores" },
+      ],
+    },
+    checkpoint: {
+      label: "Checkpoint diff and revert", kicker: "Trace 5 · Checkpoint diff and revert", steps: [
+        { lane: "engine", title: "A turn boundary triggers checkpoint work", summary: "Runtime and durable paths can cause the checkpoint reactor to attempt a baseline or post-turn capture.", owner: "checkpoint reactor", evidence: "eligible turn state and checkpoint trigger", durable: "none at trigger time", boundary: "a missing trigger path can create a placeholder or later replacement attempt" },
+        { lane: "worker", title: "Git captures a hidden ref and derives a diff", summary: "An isolated index snapshots workspace content without moving the ordinary branch, then compares hidden boundaries.", owner: "Git VCS driver", evidence: "thread-scoped hidden ref and patch result", durable: "hidden Git ref outside the SQLite projection", boundary: "capture/diff failure can leave a ref and diagnostic without a normal summary" },
+        { lane: "durable", title: "Checkpoint metadata re-enters orchestration", summary: "Only after capture/diff work does the reactor dispatch durable checkpoint completion metadata for the thread projection.", owner: "orchestration engine and projection pipeline", evidence: "thread.turn.diff.complete command and projected status", durable: "checkpoint summary and changed-file rows", boundary: "a summary describes its checkpoint boundary, not live working-tree state" },
+        { lane: "client", title: "Review requests a selected revert boundary", summary: "Turn and full-thread review use hidden refs; the selected client sends a revert request for one checkpoint turn count.", owner: "web review mode and environment command client", evidence: "chosen review mode, revision pair, and typed revert request", durable: "none before command acceptance", boundary: "a live diff may change after the selected turn and is not a checkpoint snapshot" },
+        { lane: "durable", title: "The revert request commits before effects", summary: "The decider records a checkpoint-revert-requested event; this is a durable request, not proof that files or provider history changed.", owner: "orchestration decider and transaction", evidence: "accepted revert request event", durable: "checkpoint-revert-requested event", boundary: "preconditions and side effects still run later outside this transaction" },
+        { lane: "worker", title: "Git restore and provider rollback return outcomes", summary: "After preconditions, Git restores content first; workspace refresh, provider rollback, and ref pruning can still fail before their outcomes return to the reactor.", owner: "Git driver and provider rollback service", evidence: "ordered restore/rollback/ref-pruning calls", durable: "filesystem and Git refs may already have changed", boundary: "files can match the target while provider history has not converged" },
+        { lane: "engine", title: "The engine dispatches durable completion after effects", summary: "Only after the ordered worker effects return does the checkpoint reactor ask orchestration to commit thread.revert.complete.", owner: "checkpoint reactor and orchestration engine", evidence: "post-effect thread.revert.complete dispatch", durable: "completed projection only when that dispatch succeeds", boundary: "a later failure records failure rather than compensating every changed boundary" },
+      ],
+    },
+    release: {
+      label: "Stable release and exact-version update", kicker: "Trace 6 · Stable release and exact-version update", steps: [
+        { lane: "release", title: "Release automation resolves the stable version", summary: "The release graph chooses a stable version/channel before it exposes any matching client artifact.", owner: "release workflow", evidence: "validated stable version resolution", durable: "release workflow state only", boundary: "a channel selection is not an update protocol or a machine replacement" },
+        { lane: "release", title: "Release automation publishes exact t3@V first", summary: "The workflow publishes the CLI/server package for the precise version before it exposes a client that can request that target.", owner: "npm publication job in the release graph", evidence: "published exact package version", durable: "installable t3@V runtime artifact", boundary: "publication makes a target available; it does not install it anywhere" },
+        { lane: "release", title: "Release automation exposes the compatible client", summary: "Only after exact runtime publication does the release graph expose desktop artifacts and move the hosted client channel.", owner: "GitHub Release and hosted deployment jobs", evidence: "publish_cli → release → deploy_web dependencies", durable: "released client artifact or hosted channel", boundary: "client exposure still does not replace any connected server" },
+        { lane: "client", title: "A connected client requests exact target V", summary: "A later compatible client can ask an eligible boot-service server for its exact version.", owner: "client update state and capability negotiation", evidence: "exact-version update request", durable: "no server replacement yet", boundary: "an npm dist-tag is not the connected-server target" },
+        { lane: "engine", title: "The active server stages and preflights V", summary: "It rejects non-exact or concurrent requests, validates the staged runtime, and hands prepared target information onward.", owner: "active server self-update path", evidence: "version-matching preflight result", durable: "staged runtime and progress before launcher decision", boundary: "a preflight pass is not a committed service selection" },
+        { lane: "worker", title: "The stable launcher owns the trial", summary: "The independent launcher records pending state, snapshots SQLite/WAL/SHM, starts a target candidate, and waits for prepared state.", owner: "stable service launcher", evidence: "pending trial, database snapshot, prepared candidate", durable: "launcher trial state and rollback material", boundary: "timeout or exit can restore the old selection before commit" },
+        { lane: "durable", title: "Commit selects V; later failure follows restart policy", summary: "Only a prepared trial commits the new selected version and discards trial rollback material; clients correlate readiness or recover connection state.", owner: "stable service launcher and client recovery runtime", evidence: "durable selected-version commit and ready correlation", durable: "new active version after launcher commit", boundary: "post-commit failure is not reclassified as a pre-commit rollback" },
+      ],
+    },
+  };
+
+  document.querySelectorAll<HTMLElement>("[data-synchronized-trace]").forEach((lab) => {
+    if (lab.dataset.ready === "true") return;
+    try {
+      const tabs = [...lab.querySelectorAll<HTMLButtonElement>("[data-trace]")];
+      const panel = lab.querySelector<HTMLElement>("[role=tabpanel]");
+      const previous = lab.querySelector<HTMLButtonElement>("[data-previous]");
+      const next = lab.querySelector<HTMLButtonElement>("[data-next]");
+      const reset = lab.querySelector<HTMLButtonElement>("[data-reset]");
+      const marker = lab.querySelector<HTMLElement>("[data-marker]");
+      const setText = (selector: string, value: string) => { const element = lab.querySelector<HTMLElement>(selector); if (element) element.textContent = value; };
+      let traceKey: TraceKey = "local";
+      let stepIndex = 0;
+      const trace = () => traces[traceKey];
+      const step = () => trace().steps[stepIndex] ?? trace().steps[0];
+      const render = (move = false) => {
+        const selected = step();
+        tabs.forEach((tab) => {
+          const active = tab.dataset.trace === traceKey;
+          tab.setAttribute("aria-selected", String(active));
+          tab.tabIndex = active ? 0 : -1;
+          if (active && panel) panel.setAttribute("aria-labelledby", tab.id);
+        });
+        setText("[data-kicker]", trace().kicker);
+        setText("[data-title]", selected.title);
+        setText("[data-summary]", selected.summary);
+        setText("[data-owner]", selected.owner);
+        setText("[data-evidence]", selected.evidence);
+        setText("[data-durable]", selected.durable);
+        setText("[data-boundary]", selected.boundary);
+        setText("[data-progress]", `Step ${stepIndex + 1} of ${trace().steps.length}`);
+        setText("[data-marker-step]", String(stepIndex + 1));
+        setText("[data-marker-label]", selected.lane === "release" ? "Release" : selected.lane === "client" ? "Client" : selected.lane === "relay" ? "Relay" : selected.lane === "engine" ? "Engine" : selected.lane === "durable" ? "Durable" : "Worker");
+        setText("[data-status]", `${trace().label}. Step ${stepIndex + 1} of ${trace().steps.length}. ${selected.title}. Owner: ${selected.owner}. Boundary: ${selected.boundary}.`);
+        const previousMarkerBounds = move ? marker?.getBoundingClientRect() : undefined;
+        if (marker) marker.style.gridColumn = laneColumn[selected.lane];
+        const nextMarkerBounds = move ? marker?.getBoundingClientRect() : undefined;
+        if (previous) previous.disabled = stepIndex === 0;
+        if (next) next.disabled = stepIndex === trace().steps.length - 1;
+        lab.dataset.trace = traceKey;
+        lab.dataset.moving = "false";
+        if (move && !window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+          if (marker && previousMarkerBounds && nextMarkerBounds && marker.animate) {
+            marker.animate([
+              { translate: `${previousMarkerBounds.left - nextMarkerBounds.left}px ${previousMarkerBounds.top - nextMarkerBounds.top}px` },
+              { translate: "0 0" },
+            ], { duration: 340, easing: "cubic-bezier(.2,.8,.2,1)" });
+          }
+          void lab.offsetWidth;
+          lab.dataset.moving = "true";
+        }
+      };
+      const selectTrace = (nextTrace: TraceKey, focusPanel = false) => { traceKey = nextTrace; stepIndex = 0; render(true); if (focusPanel) panel?.focus(); };
+      tabs.forEach((tab, index) => {
+        tab.addEventListener("click", () => selectTrace(tab.dataset.trace as TraceKey, true));
+        tab.addEventListener("keydown", (event) => {
+          if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+          event.preventDefault();
+          const target = event.key === "Home" ? 0 : event.key === "End" ? tabs.length - 1 : (index + (event.key === "ArrowRight" ? 1 : -1) + tabs.length) % tabs.length;
+          tabs[target]?.focus();
+          const nextTrace = tabs[target]?.dataset.trace as TraceKey | undefined;
+          if (nextTrace) selectTrace(nextTrace);
+        });
+      });
+      previous?.addEventListener("click", () => { if (stepIndex > 0) { stepIndex -= 1; render(true); } });
+      next?.addEventListener("click", () => { if (stepIndex < trace().steps.length - 1) { stepIndex += 1; render(true); } });
+      reset?.addEventListener("click", () => { stepIndex = 0; render(true); });
+      lab.addEventListener("animationend", () => { lab.dataset.moving = "false"; });
+      render();
+      lab.dataset.ready = "true";
+    } catch (error) {
+      console.error("Synchronized trace lab could not initialize", error);
+      lab.dataset.ready = "failed";
+    }
+  });
+</script>
+
+<style>
+  .synchronized-trace { margin: 2.4rem 0; overflow: hidden; border: 1px solid var(--line-strong); border-radius: 1rem; background: var(--paper-raised); box-shadow: var(--shadow); }
+  .synchronized-trace__head { padding: 1.25rem 1.3rem .95rem; border-bottom: 1px solid var(--line); background: linear-gradient(135deg, color-mix(in srgb, var(--signal-soft) 65%, var(--paper)), var(--paper-raised)); }
+  .synchronized-trace__head > span, .synchronized-trace__eyebrow { color: var(--signal-deep); font: 750 .68rem/1 var(--font-ui); letter-spacing: .1em; text-transform: uppercase; }
+  .synchronized-trace__head h3 { margin: .4rem 0 .35rem; font: 750 1.25rem/1.22 var(--font-display); letter-spacing: -.02em; }
+  .synchronized-trace__head p, .synchronized-trace__summary { max-width: 76ch; margin: 0; color: var(--ink-soft); font: .9rem/1.5 var(--font-ui); }
+  .synchronized-trace[data-ready="pending"] .synchronized-trace__interactive, .synchronized-trace[data-ready="failed"] .synchronized-trace__interactive { display: none; }
+  .synchronized-trace[data-ready="true"] .synchronized-trace__static, .synchronized-trace[data-ready="true"] .synchronized-trace__noscript { display: none; }
+  .synchronized-trace__interactive { padding: 1rem 1.3rem 1.2rem; }
+  .synchronized-trace__tabs { display: flex; flex-wrap: wrap; gap: .42rem; padding-bottom: .75rem; border-bottom: 1px solid var(--line); }
+  .synchronized-trace button { min-height: 2.35rem; border: 1px solid var(--line-strong); border-radius: .45rem; padding: .44rem .64rem; background: var(--paper); color: var(--ink); font: 700 .76rem/1.2 var(--font-ui); cursor: pointer; }
+  .synchronized-trace button[aria-selected="true"] { border-color: var(--signal); background: var(--signal-soft); color: var(--signal-deep); }
+  .synchronized-trace button:disabled { cursor: not-allowed; opacity: .48; }
+  .synchronized-trace button:focus-visible, .synchronized-trace__panel:focus-visible, .synchronized-trace__table-wrap:focus-visible { outline: 3px solid var(--signal); outline-offset: 2px; }
+  .synchronized-trace__controls { display: grid; grid-template-columns: auto 1fr auto auto; gap: .5rem; align-items: center; padding: .85rem 0; }
+  .synchronized-trace__controls p { margin: 0; color: var(--ink-soft); font: 750 .75rem/1.3 var(--font-ui); text-align: center; }
+  .synchronized-trace__panel { padding: 1rem; border: 1px solid var(--line); border-left: 4px solid var(--signal); border-radius: .65rem; background: var(--paper); transition: border-color .24s ease, box-shadow .24s ease; }
+  .synchronized-trace__panel h4 { margin: .3rem 0 .38rem; font: 750 1.1rem/1.25 var(--font-display); }
+  .synchronized-trace__lanes { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 1px; position: relative; min-height: 8.45rem; margin-top: 1rem; overflow: hidden; border: 1px solid var(--line); border-radius: .55rem; background: var(--line); }
+  .synchronized-trace__lanes > span { grid-row: 1; padding: .55rem .38rem; background: var(--paper-muted); color: var(--ink-faint); font: 750 .62rem/1.25 var(--font-ui); letter-spacing: .05em; text-align: center; text-transform: uppercase; }
+  .synchronized-trace__lanes > span:nth-of-type(1) { grid-column: 1; }
+  .synchronized-trace__lanes > span:nth-of-type(2) { grid-column: 2; }
+  .synchronized-trace__lanes > span:nth-of-type(3) { grid-column: 3; }
+  .synchronized-trace__lanes > span:nth-of-type(4) { grid-column: 4; }
+  .synchronized-trace__lanes > span:nth-of-type(5) { grid-column: 5; }
+  .synchronized-trace__lanes > span:nth-of-type(6) { grid-column: 6; }
+  .synchronized-trace__marker { grid-row: 1; align-self: end; justify-self: stretch; z-index: 1; display: grid; gap: .12rem; margin: 0 .35rem .45rem; padding: .5rem .3rem; border: 1px solid var(--signal); border-radius: .45rem; background: var(--signal); color: var(--paper); text-align: center; box-shadow: 0 .35rem .8rem color-mix(in srgb, var(--signal-deep) 22%, transparent); transition: grid-column .34s ease, transform .34s ease, box-shadow .34s ease; }
+  .synchronized-trace__marker b { font: 800 .65rem/1 var(--font-ui); opacity: .8; } .synchronized-trace__marker strong { font: 800 .73rem/1.1 var(--font-ui); }
+  .synchronized-trace[data-moving="true"] .synchronized-trace__marker { animation: synchronized-trace-marker .42s ease-out both; }
+  @keyframes synchronized-trace-marker { 0% { transform: translateY(.55rem) scale(.94); opacity: .55; } 70% { transform: translateY(-.12rem) scale(1.025); opacity: 1; } 100% { transform: translateY(0) scale(1); opacity: 1; } }
+  .synchronized-trace__ledger { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1px; margin: 1rem 0 0; border: 1px solid var(--line); background: var(--line); }
+  .synchronized-trace__ledger div { padding: .72rem; background: var(--paper-raised); } .synchronized-trace__ledger dt { color: var(--ink-faint); font: 750 .63rem/1.2 var(--font-ui); letter-spacing: .08em; text-transform: uppercase; } .synchronized-trace__ledger dd { margin: .28rem 0 0; font: .82rem/1.45 var(--font-ui); }
+  .synchronized-trace__static { margin: 0 1.3rem 1.25rem; padding-top: .2rem; } .synchronized-trace__static summary { cursor: pointer; font: 700 .88rem/1.3 var(--font-ui); }
+  .synchronized-trace__table-wrap { overflow: auto; margin-top: .7rem; border: 1px solid var(--line); } .synchronized-trace table { width: 100%; min-width: 880px; border-collapse: collapse; font: .76rem/1.45 var(--font-ui); } .synchronized-trace th, .synchronized-trace td { padding: .62rem; border: 1px solid var(--line); text-align: left; vertical-align: top; } .synchronized-trace thead th, .synchronized-trace tbody th { background: var(--paper-muted); } .synchronized-trace thead th { color: var(--ink-faint); font-size: .64rem; letter-spacing: .07em; text-transform: uppercase; }
+  .synchronized-trace__noscript { margin: 1rem 1.3rem; color: var(--ink-soft); font: .85rem/1.45 var(--font-ui); }
+  @media (max-width: 44rem) { .synchronized-trace__interactive { padding-inline: 1rem; } .synchronized-trace__controls { grid-template-columns: 1fr 1fr; } .synchronized-trace__controls p { grid-column: 1 / -1; grid-row: 1; } .synchronized-trace__controls button { min-width: 0; } .synchronized-trace__ledger { grid-template-columns: 1fr; } .synchronized-trace__static { margin-inline: 1rem; } .synchronized-trace__lanes { min-height: 7.7rem; } .synchronized-trace__lanes > span { overflow-wrap: anywhere; font-size: .57rem; } .synchronized-trace__marker { margin-inline: .13rem; padding-inline: .12rem; } .synchronized-trace__marker strong { font-size: .64rem; } }
+  @media (prefers-reduced-motion: reduce) { .synchronized-trace *, .synchronized-trace *::before, .synchronized-trace *::after { scroll-behavior: auto !important; transition: none !important; animation: none !important; } }
+  @media print { .synchronized-trace { box-shadow: none; break-inside: avoid-page; } .synchronized-trace__interactive, .synchronized-trace__noscript { display: none !important; } .synchronized-trace__static, .synchronized-trace__static > * { display: block !important; } .synchronized-trace__table-wrap { overflow: visible; } .synchronized-trace table { min-width: 0; font-size: 7.5pt; } }
+</style>

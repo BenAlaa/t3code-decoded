@@ -1,0 +1,4178 @@
+[
+  {
+    "id": "rpc-group",
+    "path": "packages/contracts/src/rpc.ts",
+    "kind": "file",
+    "label": "complete typed RPC group"
+  },
+  {
+    "id": "server-composition",
+    "path": "apps/server/src/server.ts",
+    "start": 123,
+    "end": 472,
+    "kind": "file",
+    "label": "server layer and route composition"
+  },
+  {
+    "id": "provider-adapter-contract",
+    "path": "apps/server/src/provider/Services/ProviderAdapter.ts",
+    "start": 28,
+    "end": 134,
+    "kind": "file",
+    "label": "provider normalization boundary"
+  },
+  {
+    "id": "client-connection-directory",
+    "path": "packages/client-runtime/src/connection",
+    "kind": "directory",
+    "label": "shared client connection runtime"
+  },
+  {
+    "id": "rpc-authorization-scopes",
+    "path": "apps/server/src/auth/RpcAuthorization.ts",
+    "start": 18,
+    "end": 139,
+    "kind": "file",
+    "label": "exhaustive RPC method-to-scope map"
+  },
+  {
+    "id": "decider-command-sequence",
+    "path": "apps/server/src/orchestration/decider.ts",
+    "start": 181,
+    "end": 213,
+    "kind": "file",
+    "label": "compound-command planning against an evolved temporary read model"
+  },
+  {
+    "id": "provider-turn-reactor",
+    "path": "apps/server/src/orchestration/Layers/ProviderCommandReactor.ts",
+    "start": 1060,
+    "end": 1174,
+    "kind": "file",
+    "label": "committed turn intent to provider send"
+  },
+  {
+    "id": "provider-runtime-event-union",
+    "path": "packages/contracts/src/providerRuntime.ts",
+    "start": 1139,
+    "end": 1193,
+    "kind": "file",
+    "label": "canonical provider runtime event union"
+  },
+  {
+    "id": "provider-runtime-ingestion",
+    "path": "apps/server/src/orchestration/Layers/ProviderRuntimeIngestion.ts",
+    "start": 1490,
+    "end": 1874,
+    "kind": "file",
+    "label": "runtime lifecycle, buffering, and internal command ingestion"
+  },
+  {
+    "id": "orchestration-event-catalog",
+    "path": "packages/contracts/src/orchestration.ts",
+    "start": 1059,
+    "end": 1504,
+    "kind": "file",
+    "label": "durable orchestration event catalog"
+  },
+  {
+    "id": "checkpoint-diff-dispatch",
+    "path": "apps/server/src/orchestration/Layers/CheckpointReactor.ts",
+    "start": 270,
+    "end": 316,
+    "kind": "file",
+    "label": "checkpoint result re-enters the command engine"
+  },
+  {
+    "id": "checkpoint-runtime-triggers",
+    "path": "apps/server/src/orchestration/Layers/CheckpointReactor.ts",
+    "start": 842,
+    "end": 937,
+    "kind": "file",
+    "label": "provider and domain stream checkpoint triggers"
+  },
+  {
+    "id": "maintainer-product-constraints",
+    "path": "AGENTS.md",
+    "start": 3,
+    "end": 31,
+    "kind": "file",
+    "label": "maintainer product boundaries"
+  },
+  {
+    "id": "thread-state-runtime",
+    "path": "packages/client-runtime/src/state/threads.ts",
+    "start": 534,
+    "end": 645,
+    "kind": "file",
+    "label": "HTTP snapshot followed by resumable event subscription"
+  },
+  {
+    "id": "turn-normalizer",
+    "path": "apps/server/src/orchestration/Normalizer.ts",
+    "start": 46,
+    "end": 178,
+    "kind": "file",
+    "label": "timestamp, workspace, and attachment normalization before dispatch"
+  },
+  {
+    "id": "existing-turn-decider",
+    "path": "apps/server/src/orchestration/decider.ts",
+    "start": 926,
+    "end": 1036,
+    "kind": "file",
+    "label": "atomic event batch for a turn on an existing thread"
+  },
+  {
+    "id": "bootstrap-command-path",
+    "path": "apps/server/src/ws.ts",
+    "start": 1000,
+    "end": 1053,
+    "kind": "file",
+    "label": "multi-step bootstrap and compensating cleanup"
+  },
+  {
+    "id": "command-receipt-handling",
+    "path": "apps/server/src/orchestration/Layers/OrchestrationEngine.ts",
+    "start": 142,
+    "end": 170,
+    "kind": "file",
+    "label": "accepted receipt replay and aggregate conflict handling"
+  },
+  {
+    "id": "runtime-receipt-bus",
+    "path": "apps/server/src/orchestration/Layers/RuntimeReceiptBus.ts",
+    "start": 1,
+    "end": 34,
+    "kind": "file",
+    "label": "test receipt bus and production no-op"
+  },
+  {
+    "id": "event-engine-runtime",
+    "path": "apps/server/src/orchestration/Layers/OrchestrationEngine.ts",
+    "start": 83,
+    "end": 96,
+    "kind": "file",
+    "label": "in-memory read model, queue, and event PubSub"
+  },
+  {
+    "id": "ws-thread-subscription",
+    "path": "apps/server/src/ws.ts",
+    "start": 1394,
+    "end": 1521,
+    "kind": "file",
+    "label": "attach-before-snapshot thread subscription"
+  },
+  {
+    "id": "provider-event-routing",
+    "path": "apps/server/src/provider/Layers/ProviderService.ts",
+    "start": 356,
+    "end": 409,
+    "kind": "file",
+    "label": "adapter runtime events routed through ProviderService"
+  },
+  {
+    "id": "client-environment-registry",
+    "path": "packages/client-runtime/src/connection/registry.ts",
+    "start": 128,
+    "end": 165,
+    "kind": "file",
+    "label": "one client registry supervises several environments"
+  },
+  {
+    "id": "ephemeral-agent-liveness",
+    "path": "apps/server/src/orchestration/ThreadBackgroundLiveness.ts",
+    "start": 1,
+    "end": 14,
+    "kind": "file",
+    "label": "background-agent liveness is intentionally ephemeral"
+  },
+  {
+    "id": "cli-web-bundle",
+    "path": "apps/server/scripts/cli.ts",
+    "start": 143,
+    "end": 176,
+    "kind": "file",
+    "label": "server distribution copies the built web client"
+  },
+  {
+    "id": "cli-build-dependency",
+    "path": "apps/server/vite.config.ts",
+    "start": 26,
+    "end": 55,
+    "kind": "file",
+    "label": "server bundle depends on the web build"
+  },
+  {
+    "id": "web-runtime-selection",
+    "path": "apps/web/src/main.tsx",
+    "start": 21,
+    "end": 59,
+    "kind": "file",
+    "label": "hosted, browser, and Electron web runtime selection"
+  },
+  {
+    "id": "desktop-app-assembly",
+    "path": "apps/desktop/src/app/DesktopApp.ts",
+    "start": 142,
+    "end": 291,
+    "kind": "file",
+    "label": "Electron app and managed backend assembly"
+  },
+  {
+    "id": "mobile-app-distribution",
+    "path": "apps/mobile/app.config.ts",
+    "start": 159,
+    "end": 180,
+    "kind": "file",
+    "label": "mobile runtime version and distribution configuration"
+  },
+  {
+    "id": "marketing-site-runtime",
+    "path": "apps/marketing/package.json",
+    "start": 1,
+    "end": 20,
+    "kind": "file",
+    "label": "independent Astro marketing package boundary"
+  },
+  {
+    "id": "desktop-native-boundary",
+    "path": "apps/desktop/src/preload.ts",
+    "start": 30,
+    "end": 185,
+    "kind": "file",
+    "label": "curated desktop-native API boundary"
+  },
+  {
+    "id": "mobile-local-state-cleanup",
+    "path": "apps/mobile/src/connection/platform.ts",
+    "start": 212,
+    "end": 229,
+    "kind": "file",
+    "label": "mobile owns durable drafts and outbox cleanup"
+  },
+  {
+    "id": "connection-target-model",
+    "path": "packages/client-runtime/src/connection/model.ts",
+    "start": 9,
+    "end": 54,
+    "kind": "file",
+    "label": "Primary, Bearer, Relay, and SSH target union"
+  },
+  {
+    "id": "desktop-preview-gate",
+    "path": "apps/web/src/routes/_chat.tsx",
+    "start": 111,
+    "end": 150,
+    "kind": "file",
+    "label": "preview is restricted to the desktop runtime"
+  },
+  {
+    "id": "mobile-notification-capability",
+    "path": "apps/mobile/src/features/settings/SettingsRouteScreen.logic.ts",
+    "start": 1,
+    "end": 8,
+    "kind": "file",
+    "label": "remote notification settings are iOS-only"
+  },
+  {
+    "id": "mobile-offline-outbox",
+    "path": "apps/mobile/src/state/use-thread-outbox-drain.ts",
+    "start": 285,
+    "end": 424,
+    "kind": "file",
+    "label": "durable mobile task outbox drain"
+  },
+  {
+    "id": "environment-descriptor",
+    "path": "packages/contracts/src/environment.ts",
+    "start": 31,
+    "end": 92,
+    "kind": "file",
+    "label": "environment capability and version descriptor"
+  },
+  {
+    "id": "orchestration-entities",
+    "path": "packages/contracts/src/orchestration.ts",
+    "start": 235,
+    "end": 432,
+    "kind": "file",
+    "label": "project, thread, message, plan, session, and checkpoint entities"
+  },
+  {
+    "id": "orchestration-shell-summary",
+    "path": "packages/contracts/src/orchestration.ts",
+    "start": 434,
+    "end": 507,
+    "kind": "file",
+    "label": "shell summary with durable and ephemeral thread state"
+  },
+  {
+    "id": "orchestration-command-catalog",
+    "path": "packages/contracts/src/orchestration.ts",
+    "start": 637,
+    "end": 1057,
+    "kind": "file",
+    "label": "external and internal command catalog"
+  },
+  {
+    "id": "provider-session-vocabulary",
+    "path": "packages/contracts/src/provider.ts",
+    "start": 26,
+    "end": 66,
+    "kind": "file",
+    "label": "canonical provider session lifecycle contract"
+  },
+  {
+    "id": "provider-runtime-vocabulary",
+    "path": "packages/contracts/src/providerRuntime.ts",
+    "start": 52,
+    "end": 197,
+    "kind": "file",
+    "label": "canonical provider turn, message, content, and activity vocabulary"
+  },
+  {
+    "id": "provider-session-binding",
+    "path": "apps/server/src/persistence/ProviderSessionRuntime.ts",
+    "start": 147,
+    "end": 236,
+    "kind": "file",
+    "label": "persisted provider binding and continuation cursor"
+  },
+  {
+    "id": "provider-session-recovery",
+    "path": "apps/server/src/provider/Layers/ProviderService.ts",
+    "start": 411,
+    "end": 544,
+    "kind": "file",
+    "label": "lazy adapter-session creation and recovery"
+  },
+  {
+    "id": "startup-provider-reconciliation",
+    "path": "apps/server/src/serverRuntimeStartup.ts",
+    "start": 296,
+    "end": 377,
+    "kind": "file",
+    "label": "orphaned provider-session startup reconciliation"
+  },
+  {
+    "id": "provider-adapter-capabilities",
+    "path": "apps/server/src/provider/Services/ProviderAdapter.ts",
+    "start": 28,
+    "end": 35,
+    "kind": "file",
+    "label": "common adapter capability declaration"
+  },
+  {
+    "id": "root-workspace-manifest",
+    "path": "package.json",
+    "start": 1,
+    "end": 61,
+    "kind": "file",
+    "label": "monorepo scripts, build graph entrypoints, and toolchain"
+  },
+  {
+    "id": "pnpm-workspace",
+    "path": "pnpm-workspace.yaml",
+    "start": 1,
+    "end": 160,
+    "kind": "file",
+    "label": "workspace packages, catalogs, and dependency policy"
+  },
+  {
+    "id": "contracts-package",
+    "path": "packages/contracts/package.json",
+    "start": 1,
+    "end": 34,
+    "kind": "file",
+    "label": "shared contract package boundaries"
+  },
+  {
+    "id": "client-runtime-package",
+    "path": "packages/client-runtime/package.json",
+    "start": 1,
+    "end": 172,
+    "kind": "file",
+    "label": "shared client runtime package boundary"
+  },
+  {
+    "id": "desktop-package",
+    "path": "apps/desktop/package.json",
+    "start": 1,
+    "end": 39,
+    "kind": "file",
+    "label": "Electron package and native dependencies"
+  },
+  {
+    "id": "mobile-package",
+    "path": "apps/mobile/package.json",
+    "start": 1,
+    "end": 147,
+    "kind": "file",
+    "label": "React Native/Expo package and independent version domain"
+  },
+  {
+    "id": "resource-monitor-crate",
+    "path": "native/resource-monitor/Cargo.toml",
+    "start": 1,
+    "end": 17,
+    "kind": "file",
+    "label": "native resource-monitor crate"
+  },
+  {
+    "id": "cli-package-surface",
+    "path": "apps/server/package.json",
+    "start": 1,
+    "end": 52,
+    "kind": "file",
+    "label": "published t3 package, executable, files, and runtime constraints"
+  },
+  {
+    "id": "cli-root-dispatch",
+    "path": "apps/server/src/bin.ts",
+    "start": 23,
+    "end": 71,
+    "kind": "file",
+    "label": "root command, cloud gate, and subcommand dispatch"
+  },
+  {
+    "id": "cli-service-preflight-command",
+    "path": "apps/server/src/cli/servicePreflight.ts",
+    "start": 7,
+    "end": 16,
+    "kind": "file",
+    "label": "hidden internal service preflight command"
+  },
+  {
+    "id": "cli-command-semantics",
+    "path": "apps/server/src/cli/server.ts",
+    "start": 8,
+    "end": 35,
+    "kind": "file",
+    "label": "start and headless serve handoff"
+  },
+  {
+    "id": "cli-config-channels",
+    "path": "apps/server/src/cli/config.ts",
+    "start": 20,
+    "end": 191,
+    "kind": "file",
+    "label": "CLI flags and environment configuration channels"
+  },
+  {
+    "id": "cli-config-resolver",
+    "path": "apps/server/src/cli/config.ts",
+    "start": 210,
+    "end": 392,
+    "kind": "file",
+    "label": "resolved server configuration precedence and defaults"
+  },
+  {
+    "id": "available-port-selection",
+    "path": "packages/shared/src/Net.ts",
+    "start": 194,
+    "end": 200,
+    "kind": "file",
+    "label": "preferred port followed by OS-assigned ephemeral fallback"
+  },
+  {
+    "id": "desktop-backend-port-selection",
+    "path": "apps/desktop/src/app/DesktopApp.ts",
+    "start": 69,
+    "end": 103,
+    "kind": "file",
+    "label": "desktop parent sequential port selection helper"
+  },
+  {
+    "id": "desktop-bootstrap-envelope",
+    "path": "apps/desktop/src/backend/DesktopBackendConfiguration.ts",
+    "start": 366,
+    "end": 414,
+    "kind": "file",
+    "label": "desktop parent bootstrap port and process metadata envelope"
+  },
+  {
+    "id": "server-path-layout",
+    "path": "apps/server/src/config.ts",
+    "start": 99,
+    "end": 155,
+    "kind": "file",
+    "label": "development and userdata path derivation"
+  },
+  {
+    "id": "static-dir-resolution",
+    "path": "apps/server/src/config.ts",
+    "start": 206,
+    "end": 225,
+    "kind": "file",
+    "label": "bundled and monorepo static-client lookup"
+  },
+  {
+    "id": "cli-bundle-policy",
+    "path": "apps/server/vite.config.ts",
+    "start": 8,
+    "end": 75,
+    "kind": "file",
+    "label": "CLI bundling policy, native external boundary, and build metadata"
+  },
+  {
+    "id": "cli-publish-assertions",
+    "path": "apps/server/scripts/cli.ts",
+    "start": 225,
+    "end": 304,
+    "kind": "file",
+    "label": "publish-time client and launcher artifact assertions"
+  },
+  {
+    "id": "cli-native-dependency-boundary",
+    "path": "scripts/lib/cli-external-packages.ts",
+    "start": 1,
+    "end": 102,
+    "kind": "file",
+    "label": "native packages kept outside the bundled executable"
+  },
+  {
+    "id": "service-launcher-trial-handoff",
+    "path": "apps/server/src/serviceLauncher.ts",
+    "start": 353,
+    "end": 600,
+    "kind": "file",
+    "label": "managed service update trial, handoff, commit, and rollback"
+  },
+  {
+    "id": "static-and-dev-serving",
+    "path": "apps/server/src/http.ts",
+    "start": 233,
+    "end": 322,
+    "kind": "file",
+    "label": "development redirect, static fallback, and missing-client response"
+  },
+  {
+    "id": "startup-browser-target",
+    "path": "apps/server/src/serverRuntimeStartup.ts",
+    "start": 257,
+    "end": 288,
+    "kind": "file",
+    "label": "startup browser and pairing target resolution"
+  },
+  {
+    "id": "startup-headless-access",
+    "path": "apps/server/src/startupAccess.ts",
+    "start": 71,
+    "end": 147,
+    "kind": "file",
+    "label": "actual listening address and fragment-based headless pairing output"
+  },
+  {
+    "id": "server-platform-layers",
+    "path": "apps/server/src/server.ts",
+    "start": 123,
+    "end": 240,
+    "kind": "file",
+    "label": "Bun or Node platform and HTTP server layer selection"
+  },
+  {
+    "id": "server-service-composition",
+    "path": "apps/server/src/server.ts",
+    "start": 242,
+    "end": 429,
+    "kind": "file",
+    "label": "server persistence, runtime, provider, workspace, and operational layer composition"
+  },
+  {
+    "id": "server-route-readiness-barrier",
+    "path": "apps/server/src/server.ts",
+    "start": 431,
+    "end": 437,
+    "kind": "file",
+    "label": "global route-execution readiness barrier"
+  },
+  {
+    "id": "server-route-composition",
+    "path": "apps/server/src/server.ts",
+    "start": 447,
+    "end": 472,
+    "kind": "file",
+    "label": "HTTP API, assets, WebSocket RPC, and MCP route composition"
+  },
+  {
+    "id": "server-activation-barrier",
+    "path": "apps/server/src/server.ts",
+    "start": 474,
+    "end": 689,
+    "kind": "file",
+    "label": "prepared roots, activation, routes, and scoped server ownership"
+  },
+  {
+    "id": "startup-command-gate",
+    "path": "apps/server/src/serverRuntimeStartup.ts",
+    "start": 94,
+    "end": 136,
+    "kind": "file",
+    "label": "command readiness deferred and failure propagation"
+  },
+  {
+    "id": "startup-authoritative-sequence",
+    "path": "apps/server/src/serverRuntimeStartup.ts",
+    "start": 385,
+    "end": 583,
+    "kind": "file",
+    "label": "authoritative startup ordering and failure path"
+  },
+  {
+    "id": "activation-fork-parked",
+    "path": "apps/server/src/serverActivation.ts",
+    "start": 11,
+    "end": 25,
+    "kind": "file",
+    "label": "parked child fiber activation semantics"
+  },
+  {
+    "id": "sqlite-acquisition",
+    "path": "apps/server/src/persistence/Layers/Sqlite.ts",
+    "start": 19,
+    "end": 41,
+    "kind": "file",
+    "label": "SQLite pragmas and migration acquisition"
+  },
+  {
+    "id": "sqlite-migration-manifest",
+    "path": "apps/server/src/persistence/Migrations.ts",
+    "start": 15,
+    "end": 152,
+    "kind": "file",
+    "label": "ordered static SQLite migration manifest"
+  },
+  {
+    "id": "orchestration-reactor-start",
+    "path": "apps/server/src/orchestration/Layers/OrchestrationReactor.ts",
+    "start": 14,
+    "end": 31,
+    "kind": "file",
+    "label": "production orchestration reactor startup surface"
+  },
+  {
+    "id": "drainable-worker-semantics",
+    "path": "packages/shared/src/DrainableWorker.ts",
+    "start": 1,
+    "end": 70,
+    "kind": "file",
+    "label": "serialized worker drain semantics and test synchronization intent"
+  },
+  {
+    "id": "stale-startup-overview",
+    "path": "docs/internals/overview.md",
+    "start": 124,
+    "end": 130,
+    "kind": "file",
+    "label": "stale documented startup sequence"
+  },
+  {
+    "id": "orchestration-snapshot-contracts",
+    "path": "packages/contracts/src/orchestration.ts",
+    "start": 501,
+    "end": 635,
+    "kind": "file",
+    "label": "shell and thread snapshots, cursors, and pagination contracts"
+  },
+  {
+    "id": "orchestration-thread-stream-contract",
+    "path": "packages/contracts/src/orchestration.ts",
+    "start": 1506,
+    "end": 1519,
+    "kind": "file",
+    "label": "thread snapshot, event, and synchronized stream union"
+  },
+  {
+    "id": "orchestration-rpc-schema-map",
+    "path": "packages/contracts/src/orchestration.ts",
+    "start": 1680,
+    "end": 1713,
+    "kind": "file",
+    "label": "orchestration RPC input and output schema map"
+  },
+  {
+    "id": "rpc-orchestration-definitions",
+    "path": "packages/contracts/src/rpc.ts",
+    "start": 885,
+    "end": 948,
+    "kind": "file",
+    "label": "typed orchestration unary and streaming RPC definitions"
+  },
+  {
+    "id": "environment-http-contracts",
+    "path": "packages/contracts/src/environmentHttp.ts",
+    "start": 486,
+    "end": 531,
+    "kind": "file",
+    "label": "typed environment HTTP orchestration contracts"
+  },
+  {
+    "id": "orchestration-http-snapshots",
+    "path": "apps/server/src/orchestration/http.ts",
+    "start": 22,
+    "end": 108,
+    "kind": "file",
+    "label": "HTTP shell and thread snapshot implementations"
+  },
+  {
+    "id": "ws-authenticated-session",
+    "path": "apps/server/src/ws.ts",
+    "start": 385,
+    "end": 538,
+    "kind": "file",
+    "label": "authenticated WebSocket session and per-method authorization wrapper"
+  },
+  {
+    "id": "ws-shell-coalescing",
+    "path": "apps/server/src/ws.ts",
+    "start": 644,
+    "end": 819,
+    "kind": "file",
+    "label": "shell invalidation coalescing and refetch behavior"
+  },
+  {
+    "id": "ws-advertised-capabilities",
+    "path": "apps/server/src/ws.ts",
+    "start": 1077,
+    "end": 1116,
+    "kind": "file",
+    "label": "server configuration and synchronization capability advertisement"
+  },
+  {
+    "id": "ws-dispatch-handler",
+    "path": "apps/server/src/ws.ts",
+    "start": 1124,
+    "end": 1221,
+    "kind": "file",
+    "label": "authorized command normalization and dispatch handler"
+  },
+  {
+    "id": "ws-shell-resume",
+    "path": "apps/server/src/ws.ts",
+    "start": 1270,
+    "end": 1375,
+    "kind": "file",
+    "label": "bounded shell replay and snapshot fallback"
+  },
+  {
+    "id": "ws-resume-gap-cap",
+    "path": "apps/server/src/ws.ts",
+    "start": 308,
+    "end": 315,
+    "kind": "file",
+    "label": "one-thousand-event shell and thread resume gap limits"
+  },
+  {
+    "id": "ws-command-entry-policy",
+    "path": "apps/server/src/ws.ts",
+    "start": 821,
+    "end": 1074,
+    "kind": "file",
+    "label": "WebSocket bootstrap compensation and startup command queue"
+  },
+  {
+    "id": "command-commit-acknowledgement",
+    "path": "apps/server/src/orchestration/Layers/OrchestrationEngine.ts",
+    "start": 197,
+    "end": 260,
+    "kind": "file",
+    "label": "transactional event commit before sequence acknowledgement"
+  },
+  {
+    "id": "ws-route-json-protocol",
+    "path": "apps/server/src/ws.ts",
+    "start": 2398,
+    "end": 2468,
+    "kind": "file",
+    "label": "WebSocket upgrade, authenticated RPC handler, and JSON serialization layer"
+  },
+  {
+    "id": "client-rpc-session",
+    "path": "packages/client-runtime/src/rpc/session.ts",
+    "start": 68,
+    "end": 145,
+    "kind": "file",
+    "label": "one WebSocket RPC attempt with internal retries disabled"
+  },
+  {
+    "id": "client-rpc-subscriptions",
+    "path": "packages/client-runtime/src/rpc/client.ts",
+    "start": 178,
+    "end": 280,
+    "kind": "file",
+    "label": "session-aware dynamic subscription replacement"
+  },
+  {
+    "id": "client-shell-convergence",
+    "path": "packages/client-runtime/src/state/shellReducer.ts",
+    "start": 1,
+    "end": 45,
+    "kind": "file",
+    "label": "shell sequence watermark and overlapping event de-duplication"
+  },
+  {
+    "id": "client-thread-convergence",
+    "path": "packages/client-runtime/src/state/threads.ts",
+    "start": 316,
+    "end": 365,
+    "kind": "file",
+    "label": "thread snapshot replacement and sequence de-duplication"
+  },
+  {
+    "id": "auth-contracts",
+    "path": "packages/contracts/src/auth.ts",
+    "start": 29,
+    "end": 202,
+    "kind": "file",
+    "label": "authentication policy, session, method, and scope contracts"
+  },
+  {
+    "id": "auth-policy-derivation",
+    "path": "apps/server/src/auth/EnvironmentAuthPolicy.ts",
+    "start": 16,
+    "end": 47,
+    "kind": "file",
+    "label": "runtime mode and bind-host authentication policy derivation"
+  },
+  {
+    "id": "auth-session-exchange",
+    "path": "apps/server/src/auth/EnvironmentAuth.ts",
+    "start": 655,
+    "end": 744,
+    "kind": "file",
+    "label": "browser and token session exchange with scope subset checks"
+  },
+  {
+    "id": "auth-request-precedence",
+    "path": "apps/server/src/auth/EnvironmentAuth.ts",
+    "start": 592,
+    "end": 632,
+    "kind": "file",
+    "label": "cookie, Bearer, and DPoP request credential precedence"
+  },
+  {
+    "id": "auth-pairing-ticket-upgrade",
+    "path": "apps/server/src/auth/EnvironmentAuth.ts",
+    "start": 769,
+    "end": 961,
+    "kind": "file",
+    "label": "pairing issue, WebSocket ticket, and upgrade authentication"
+  },
+  {
+    "id": "pairing-grant-ttls",
+    "path": "apps/server/src/auth/PairingGrantStore.ts",
+    "start": 241,
+    "end": 330,
+    "kind": "file",
+    "label": "standard, startup, and desktop bootstrap grant lifetimes"
+  },
+  {
+    "id": "pairing-grant-consumption",
+    "path": "apps/server/src/auth/PairingGrantStore.ts",
+    "start": 379,
+    "end": 568,
+    "kind": "file",
+    "label": "pairing grant issuance and one-use consumption"
+  },
+  {
+    "id": "pairing-sqlite-consumption",
+    "path": "apps/server/src/persistence/AuthPairingLinks.ts",
+    "start": 125,
+    "end": 180,
+    "kind": "file",
+    "label": "atomic SQLite pairing-link consumption"
+  },
+  {
+    "id": "session-default-ttls",
+    "path": "apps/server/src/auth/SessionStore.ts",
+    "start": 410,
+    "end": 434,
+    "kind": "file",
+    "label": "normal session and WebSocket ticket default lifetimes"
+  },
+  {
+    "id": "session-issue-verification",
+    "path": "apps/server/src/auth/SessionStore.ts",
+    "start": 603,
+    "end": 747,
+    "kind": "file",
+    "label": "signed session issue and SQLite-backed verification"
+  },
+  {
+    "id": "websocket-ticket-session",
+    "path": "apps/server/src/auth/SessionStore.ts",
+    "start": 749,
+    "end": 851,
+    "kind": "file",
+    "label": "WebSocket ticket issue and current session reload"
+  },
+  {
+    "id": "session-revocation",
+    "path": "apps/server/src/auth/SessionStore.ts",
+    "start": 876,
+    "end": 929,
+    "kind": "file",
+    "label": "session revocation persistence and access events"
+  },
+  {
+    "id": "auth-http-exchange",
+    "path": "apps/server/src/auth/http.ts",
+    "start": 164,
+    "end": 319,
+    "kind": "file",
+    "label": "HTTP credential exchange and cookie behavior"
+  },
+  {
+    "id": "auth-delegated-scopes",
+    "path": "apps/server/src/auth/http.ts",
+    "start": 335,
+    "end": 432,
+    "kind": "file",
+    "label": "pairing delegation and client-session scope enforcement"
+  },
+  {
+    "id": "server-secret-store",
+    "path": "apps/server/src/auth/ServerSecretStore.ts",
+    "start": 152,
+    "end": 310,
+    "kind": "file",
+    "label": "secret file permissions and atomic persistence"
+  },
+  {
+    "id": "dpop-replay-record",
+    "path": "apps/server/src/auth/dpop.ts",
+    "start": 29,
+    "end": 87,
+    "kind": "file",
+    "label": "durable exclusive DPoP replay marker"
+  },
+  {
+    "id": "startup-pairing-fragment",
+    "path": "apps/server/src/startupAccess.ts",
+    "start": 92,
+    "end": 97,
+    "kind": "file",
+    "label": "pairing token encoded in the URL fragment"
+  },
+  {
+    "id": "client-pairing-fragment-strip",
+    "path": "apps/web/src/environments/primary/auth.ts",
+    "start": 156,
+    "end": 176,
+    "kind": "file",
+    "label": "browser pairing fragment extraction and immediate removal"
+  },
+  {
+    "id": "hosted-static-auth-boundary",
+    "path": "apps/web/src/routes/__root.tsx",
+    "start": 61,
+    "end": 129,
+    "kind": "file",
+    "label": "hosted static and hosted pairing routes bypass the primary-server auth gate"
+  },
+  {
+    "id": "hosted-pairing-url",
+    "path": "apps/web/src/hostedPairing.ts",
+    "start": 47,
+    "end": 80,
+    "kind": "file",
+    "label": "hosted pairing backend query and credential fragment"
+  },
+  {
+    "id": "hosted-pairing-registration",
+    "path": "apps/web/src/components/auth/PairingRouteSurface.tsx",
+    "start": 166,
+    "end": 231,
+    "kind": "file",
+    "label": "hosted pairing fragment removal and remote-environment registration"
+  },
+  {
+    "id": "hosted-bearer-onboarding",
+    "path": "packages/client-runtime/src/connection/onboarding.ts",
+    "start": 86,
+    "end": 118,
+    "kind": "file",
+    "label": "direct hosted pairing exchanges a grant for a Bearer environment registration"
+  },
+  {
+    "id": "hosted-clerk-provider",
+    "path": "apps/web/src/main.tsx",
+    "start": 31,
+    "end": 59,
+    "kind": "file",
+    "label": "Clerk and managed-relay auth wrap the configured cloud client"
+  },
+  {
+    "id": "managed-relay-auth-provider",
+    "path": "apps/web/src/cloud/managedAuth.tsx",
+    "start": 39,
+    "end": 115,
+    "kind": "file",
+    "label": "Clerk account state activates the managed-relay session"
+  },
+  {
+    "id": "auth-session-row-shape",
+    "path": "apps/server/src/persistence/AuthSessions.ts",
+    "start": 34,
+    "end": 55,
+    "kind": "file",
+    "label": "SQLite session row fields exclude the DPoP key thumbprint"
+  },
+  {
+    "id": "auth-doc-ticket-overclaim",
+    "path": "docs/internals/environment-auth.md",
+    "start": 95,
+    "end": 111,
+    "kind": "file",
+    "label": "documentation claim that WebSocket tickets carry scopes"
+  },
+  {
+    "id": "decider-effect-dependencies",
+    "path": "apps/server/src/orchestration/decider.ts",
+    "start": 18,
+    "end": 173,
+    "kind": "file",
+    "label": "clock, UUID, and event-envelope dependencies in decision logic"
+  },
+  {
+    "id": "bootstrap-saga-full",
+    "path": "apps/server/src/ws.ts",
+    "start": 821,
+    "end": 1053,
+    "kind": "file",
+    "label": "WebSocket-only thread bootstrap and compensating delete saga"
+  },
+  {
+    "id": "event-envelope-fields",
+    "path": "packages/contracts/src/orchestration.ts",
+    "start": 1323,
+    "end": 1355,
+    "kind": "file",
+    "label": "public durable event envelope"
+  },
+  {
+    "id": "event-store-versioning",
+    "path": "apps/server/src/persistence/Layers/OrchestrationEventStore.ts",
+    "start": 70,
+    "end": 157,
+    "kind": "file",
+    "label": "actor classification, global sequence, and internal stream version assignment"
+  },
+  {
+    "id": "engine-rejected-receipt",
+    "path": "apps/server/src/orchestration/Layers/OrchestrationEngine.ts",
+    "start": 287,
+    "end": 325,
+    "kind": "file",
+    "label": "best-effort persistence of invariant rejection receipts"
+  },
+  {
+    "id": "engine-failure-reconciliation",
+    "path": "apps/server/src/orchestration/Layers/OrchestrationEngine.ts",
+    "start": 109,
+    "end": 130,
+    "kind": "file",
+    "label": "same-process durable-tail reconciliation after dispatch failure"
+  },
+  {
+    "id": "engine-receipt-publication-boundary",
+    "path": "apps/server/src/orchestration/Layers/OrchestrationEngine.ts",
+    "start": 142,
+    "end": 259,
+    "kind": "file",
+    "label": "receipt short-circuit, atomic commit, and post-commit publication"
+  },
+  {
+    "id": "projection-registration-order",
+    "path": "apps/server/src/orchestration/Layers/ProjectionPipeline.ts",
+    "start": 1609,
+    "end": 1646,
+    "kind": "file",
+    "label": "nine projectors in synchronous application order"
+  },
+  {
+    "id": "projection-bootstrap-cursors",
+    "path": "apps/server/src/orchestration/Layers/ProjectionPipeline.ts",
+    "start": 1681,
+    "end": 1727,
+    "kind": "file",
+    "label": "sequential projector catch-up from independent cursors"
+  },
+  {
+    "id": "projection-read-cap",
+    "path": "apps/server/src/persistence/Layers/OrchestrationEventStore.ts",
+    "start": 67,
+    "end": 267,
+    "kind": "file",
+    "label": "default one-thousand-event total read limit and pagination loop"
+  },
+  {
+    "id": "thread-detail-turn-limit",
+    "path": "apps/server/src/orchestration/Layers/ProjectionSnapshotQuery.ts",
+    "start": 2669,
+    "end": 2700,
+    "kind": "file",
+    "label": "thread detail bounds pathological fan-out at 150 raw turns per page"
+  },
+  {
+    "id": "checkpoint-projector-noop",
+    "path": "apps/server/src/orchestration/Layers/ProjectionPipeline.ts",
+    "start": 1477,
+    "end": 1487,
+    "kind": "file",
+    "label": "named checkpoint projector currently performs no writes"
+  },
+  {
+    "id": "turn-checkpoint-projection",
+    "path": "apps/server/src/orchestration/Layers/ProjectionPipeline.ts",
+    "start": 1404,
+    "end": 1448,
+    "kind": "file",
+    "label": "checkpoint completion fields are written into projected turn rows"
+  },
+  {
+    "id": "projection-snapshot-shapes",
+    "path": "apps/server/src/orchestration/Layers/ProjectionSnapshotQuery.ts",
+    "start": 1738,
+    "end": 1940,
+    "kind": "file",
+    "label": "optimized command model excludes message, activity, and checkpoint collections"
+  },
+  {
+    "id": "projection-attachment-cleanup",
+    "path": "apps/server/src/orchestration/Layers/ProjectionPipeline.ts",
+    "start": 330,
+    "end": 468,
+    "kind": "file",
+    "label": "projected attachment reference collection and filesystem cleanup"
+  },
+  {
+    "id": "reactor-composite-start",
+    "path": "apps/server/src/orchestration/Layers/OrchestrationReactor.ts",
+    "start": 14,
+    "end": 31,
+    "kind": "file",
+    "label": "independent orchestration reactor roots"
+  },
+  {
+    "id": "provider-reactor-hot-subscription",
+    "path": "apps/server/src/orchestration/Layers/ProviderCommandReactor.ts",
+    "start": 1377,
+    "end": 1439,
+    "kind": "file",
+    "label": "hot stream subscription, worker wiring, and partial drain surface"
+  },
+  {
+    "id": "provider-turn-dedupe-cache",
+    "path": "apps/server/src/orchestration/Layers/ProviderCommandReactor.ts",
+    "start": 89,
+    "end": 325,
+    "kind": "file",
+    "label": "bounded volatile turn-start duplicate suppression cache"
+  },
+  {
+    "id": "provider-send-binding-order",
+    "path": "apps/server/src/provider/Layers/ProviderService.ts",
+    "start": 771,
+    "end": 801,
+    "kind": "file",
+    "label": "adapter send precedes local running-binding persistence"
+  },
+  {
+    "id": "provider-runtime-publish",
+    "path": "apps/server/src/provider/Layers/ProviderService.ts",
+    "start": 286,
+    "end": 295,
+    "kind": "file",
+    "label": "best-effort runtime log write before hot PubSub publication"
+  },
+  {
+    "id": "runtime-ingestion-buffer-dispatch",
+    "path": "apps/server/src/orchestration/Layers/ProviderRuntimeIngestion.ts",
+    "start": 884,
+    "end": 1162,
+    "kind": "file",
+    "label": "randomized internal command IDs and buffer invalidation before dispatch"
+  },
+  {
+    "id": "runtime-ingestion-worker",
+    "path": "apps/server/src/orchestration/Layers/ProviderRuntimeIngestion.ts",
+    "start": 2040,
+    "end": 2082,
+    "kind": "file",
+    "label": "hot runtime and no-op domain inputs feed one failure-isolating worker"
+  },
+  {
+    "id": "drainable-worker-close",
+    "path": "packages/shared/src/DrainableWorker.ts",
+    "start": 31,
+    "end": 69,
+    "kind": "file",
+    "label": "serialized queue, test drain, and interrupting scope finalizer"
+  },
+  {
+    "id": "startup-parked-reactors",
+    "path": "apps/server/src/serverRuntimeStartup.ts",
+    "start": 385,
+    "end": 535,
+    "kind": "file",
+    "label": "parked reactor roots, pre-activation reconciliation, and command-ready gate"
+  },
+  {
+    "id": "agent-awareness-recovery",
+    "path": "apps/server/src/relay/AgentAwarenessRelay.ts",
+    "start": 337,
+    "end": 631,
+    "kind": "file",
+    "label": "volatile confirmation state and delayed active-thread snapshot publication"
+  },
+  {
+    "id": "migration-runner",
+    "path": "apps/server/src/persistence/Migrations.ts",
+    "start": 15,
+    "end": 152,
+    "kind": "file",
+    "label": "static migration manifest and automatically tracked runner"
+  },
+  {
+    "id": "checkpoint-diff-blob-migration",
+    "path": "apps/server/src/persistence/Migrations/003_CheckpointDiffBlobs.ts",
+    "start": 1,
+    "end": 22,
+    "kind": "file",
+    "label": "checkpoint diff blob table and index migration"
+  },
+  {
+    "id": "service-update-recovery",
+    "path": "apps/server/src/serviceLauncher.ts",
+    "start": 73,
+    "end": 600,
+    "kind": "file",
+    "label": "durable update state, SQLite backup, restore marker, trial, and rollback"
+  },
+  {
+    "id": "settings-secret-order",
+    "path": "apps/server/src/serverSettings.ts",
+    "start": 427,
+    "end": 642,
+    "kind": "file",
+    "label": "secret mutations precede settings JSON, cache, and publication"
+  },
+  {
+    "id": "settings-load-fallbacks",
+    "path": "apps/server/src/serverSettings.ts",
+    "start": 302,
+    "end": 408,
+    "kind": "file",
+    "label": "missing and malformed settings fallbacks plus secret materialization"
+  },
+  {
+    "id": "settings-atomic-write",
+    "path": "apps/server/src/atomicWrite.ts",
+    "start": 5,
+    "end": 24,
+    "kind": "file",
+    "label": "same-directory temporary settings write and rename"
+  },
+  {
+    "id": "secret-store-atomic-boundary",
+    "path": "apps/server/src/auth/ServerSecretStore.ts",
+    "start": 187,
+    "end": 302,
+    "kind": "file",
+    "label": "secret temp-file rename, exclusive creation, and removal semantics"
+  },
+  {
+    "id": "attachment-projection-cleanup",
+    "path": "apps/server/src/orchestration/Layers/ProjectionPipeline.ts",
+    "start": 1648,
+    "end": 1678,
+    "kind": "file",
+    "label": "projector SQL and cursor step precede best-effort attachment cleanup"
+  },
+  {
+    "id": "attachment-path-safety",
+    "path": "apps/server/src/attachmentPaths.ts",
+    "start": 4,
+    "end": 27,
+    "kind": "file",
+    "label": "attachment path normalization and root-containment check"
+  },
+  {
+    "id": "terminal-history-persistence",
+    "path": "apps/server/src/terminal/Manager.ts",
+    "start": 1355,
+    "end": 1496,
+    "kind": "file",
+    "label": "coalesced direct-overwrite terminal history persistence and restore"
+  },
+  {
+    "id": "terminal-history-defaults",
+    "path": "apps/server/src/terminal/Manager.ts",
+    "start": 77,
+    "end": 84,
+    "kind": "file",
+    "label": "terminal history cap and persistence debounce defaults"
+  },
+  {
+    "id": "terminal-output-persistence-order",
+    "path": "apps/server/src/terminal/Manager.ts",
+    "start": 1630,
+    "end": 1726,
+    "kind": "file",
+    "label": "terminal output updates memory, queues persistence, then publishes"
+  },
+  {
+    "id": "terminal-explicit-close",
+    "path": "apps/server/src/terminal/Manager.ts",
+    "start": 1963,
+    "end": 2000,
+    "kind": "file",
+    "label": "explicit terminal close persists and drains one history key"
+  },
+  {
+    "id": "terminal-scope-finalizer",
+    "path": "apps/server/src/terminal/Manager.ts",
+    "start": 2116,
+    "end": 2160,
+    "kind": "file",
+    "label": "manager finalizer kills sessions without a global history drain"
+  },
+  {
+    "id": "terminal-lazy-history-open",
+    "path": "apps/server/src/terminal/Manager.ts",
+    "start": 2145,
+    "end": 2203,
+    "kind": "file",
+    "label": "first open loads saved text before starting a new terminal process"
+  },
+  {
+    "id": "provider-event-log-contract",
+    "path": "apps/server/src/provider/Layers/EventNdjsonLogger.ts",
+    "start": 1,
+    "end": 49,
+    "kind": "file",
+    "label": "best-effort provider log defaults and omitted transient events"
+  },
+  {
+    "id": "provider-event-log-drain",
+    "path": "apps/server/src/provider/Layers/EventNdjsonLogger.ts",
+    "start": 340,
+    "end": 615,
+    "kind": "file",
+    "label": "provider log buffer drain, retention failures, and no-op setup fallback"
+  },
+  {
+    "id": "observability-runtime",
+    "path": "apps/server/src/observability/Layers/Observability.ts",
+    "start": 19,
+    "end": 93,
+    "kind": "file",
+    "label": "local trace sink with optional OTLP trace and metrics delegates"
+  },
+  {
+    "id": "server-logger-sinks",
+    "path": "apps/server/src/serverLogger.ts",
+    "start": 8,
+    "end": 16,
+    "kind": "file",
+    "label": "pretty console and tracer logger composition"
+  },
+  {
+    "id": "checkpoint-git-capture-restore",
+    "path": "apps/server/src/vcs/GitVcsDriver.ts",
+    "start": 708,
+    "end": 828,
+    "kind": "file",
+    "label": "hidden-ref capture and content restore with index reset"
+  },
+  {
+    "id": "checkpoint-revert-saga",
+    "path": "apps/server/src/orchestration/Layers/CheckpointReactor.ts",
+    "start": 690,
+    "end": 818,
+    "kind": "file",
+    "label": "Git restore, provider rollback, ref cleanup, and durable completion ordering"
+  },
+  {
+    "id": "checkpoint-capture-dispatch-order",
+    "path": "apps/server/src/orchestration/Layers/CheckpointReactor.ts",
+    "start": 221,
+    "end": 351,
+    "kind": "file",
+    "label": "hidden-ref capture and diff precede durable checkpoint metadata dispatch"
+  },
+  {
+    "id": "projection-tombstones",
+    "path": "apps/server/src/orchestration/Layers/ProjectionPipeline.ts",
+    "start": 490,
+    "end": 857,
+    "kind": "file",
+    "label": "project and thread deletion update projection tombstones"
+  },
+  {
+    "id": "revert-derived-pruning",
+    "path": "apps/server/src/orchestration/Layers/ProjectionPipeline.ts",
+    "start": 948,
+    "end": 1475,
+    "kind": "file",
+    "label": "thread revert prunes and rebuilds selected derived projection rows"
+  },
+  {
+    "id": "event-store-api-surface",
+    "path": "apps/server/src/persistence/Services/OrchestrationEventStore.ts",
+    "start": 22,
+    "end": 55,
+    "kind": "file",
+    "label": "event store append and ordered read API surface"
+  },
+  {
+    "id": "receipt-repository-api-surface",
+    "path": "apps/server/src/persistence/Services/OrchestrationCommandReceipts.ts",
+    "start": 25,
+    "end": 63,
+    "kind": "file",
+    "label": "command receipt schema plus upsert and lookup API surface"
+  },
+  {
+    "id": "provider-binding-delete-surface",
+    "path": "apps/server/src/persistence/ProviderSessionRuntime.ts",
+    "start": 70,
+    "end": 103,
+    "kind": "file",
+    "label": "provider runtime repository includes an explicit delete operation"
+  },
+  {
+    "id": "thread-deletion-side-effects",
+    "path": "apps/server/src/orchestration/Layers/ThreadDeletionReactor.ts",
+    "start": 40,
+    "end": 97,
+    "kind": "file",
+    "label": "hot post-delete provider and terminal cleanup"
+  },
+  {
+    "id": "provider-session-contract",
+    "path": "packages/contracts/src/provider.ts",
+    "start": 34,
+    "end": 86,
+    "kind": "file",
+    "label": "canonical provider session identity and runtime state"
+  },
+  {
+    "id": "provider-session-directory",
+    "path": "apps/server/src/provider/Layers/ProviderSessionDirectory.ts",
+    "start": 60,
+    "end": 148,
+    "kind": "file",
+    "label": "live provider session directory registration and lookup"
+  },
+  {
+    "id": "provider-service-session-recovery",
+    "path": "apps/server/src/provider/Layers/ProviderService.ts",
+    "start": 411,
+    "end": 544,
+    "kind": "file",
+    "label": "binding-led provider session recovery and adoption"
+  },
+  {
+    "id": "provider-adapter-error-taxonomy",
+    "path": "apps/server/src/provider/Errors.ts",
+    "start": 5,
+    "end": 203,
+    "kind": "file",
+    "label": "typed provider boundary and recovery error taxonomy"
+  },
+  {
+    "id": "provider-runtime-event-base",
+    "path": "packages/contracts/src/providerRuntime.ts",
+    "start": 148,
+    "end": 265,
+    "kind": "file",
+    "label": "canonical runtime event identity and base fields"
+  },
+  {
+    "id": "provider-service-runtime-correlation",
+    "path": "apps/server/src/provider/Layers/ProviderService.ts",
+    "start": 195,
+    "end": 409,
+    "kind": "file",
+    "label": "provider-instance correlation, optional event logging, and hot publication"
+  },
+  {
+    "id": "provider-command-control-forwarding",
+    "path": "apps/server/src/orchestration/Layers/ProviderCommandReactor.ts",
+    "start": 1176,
+    "end": 1316,
+    "kind": "file",
+    "label": "interrupt, approval, input, stop, and rollback forwarding"
+  },
+  {
+    "id": "codex-adapter-capabilities",
+    "path": "apps/server/src/provider/Layers/CodexAdapter.ts",
+    "start": 1984,
+    "end": 2000,
+    "kind": "file",
+    "label": "Codex adapter capability declaration"
+  },
+  {
+    "id": "claude-adapter-capabilities",
+    "path": "apps/server/src/provider/Layers/ClaudeAdapter.ts",
+    "start": 4577,
+    "end": 4596,
+    "kind": "file",
+    "label": "Claude adapter capability declaration and shutdown"
+  },
+  {
+    "id": "cursor-adapter-capabilities",
+    "path": "apps/server/src/provider/Layers/CursorAdapter.ts",
+    "start": 1165,
+    "end": 1186,
+    "kind": "file",
+    "label": "Cursor adapter capability declaration and shutdown"
+  },
+  {
+    "id": "grok-adapter-capabilities",
+    "path": "apps/server/src/provider/Layers/GrokAdapter.ts",
+    "start": 1455,
+    "end": 1467,
+    "kind": "file",
+    "label": "Grok adapter capability declaration"
+  },
+  {
+    "id": "opencode-adapter-capabilities",
+    "path": "apps/server/src/provider/Layers/OpenCodeAdapter.ts",
+    "start": 1718,
+    "end": 1737,
+    "kind": "file",
+    "label": "OpenCode adapter capability declaration and shutdown"
+  },
+  {
+    "id": "opencode-steer-behavior",
+    "path": "apps/server/src/provider/Layers/OpenCodeAdapter.test.ts",
+    "start": 733,
+    "end": 810,
+    "kind": "file",
+    "label": "OpenCode active-turn steering behavior tests"
+  },
+  {
+    "id": "provider-runtime-schema-tests",
+    "path": "packages/contracts/src/providerRuntime.test.ts",
+    "kind": "file",
+    "label": "canonical provider runtime schema compatibility tests"
+  },
+  {
+    "id": "provider-service-routing-tests",
+    "path": "apps/server/src/provider/Layers/ProviderService.test.ts",
+    "kind": "file",
+    "label": "provider routing, binding, recovery, and event-correlation tests"
+  },
+  {
+    "id": "server-provider-routing-identity",
+    "path": "packages/contracts/src/server.ts",
+    "start": 161,
+    "end": 198,
+    "kind": "file",
+    "label": "server provider snapshot with stable instance routing identity"
+  },
+  {
+    "id": "built-in-provider-drivers",
+    "path": "apps/server/src/provider/builtInDrivers.ts",
+    "start": 42,
+    "end": 53,
+    "kind": "file",
+    "label": "five shipped provider driver registrations"
+  },
+  {
+    "id": "provider-instance-settings-contract",
+    "path": "packages/contracts/src/settings.ts",
+    "start": 664,
+    "end": 733,
+    "kind": "file",
+    "label": "explicit provider instance settings and legacy provider fields"
+  },
+  {
+    "id": "provider-instance-hydration",
+    "path": "apps/server/src/provider/Layers/ProviderInstanceRegistryHydration.ts",
+    "start": 65,
+    "end": 134,
+    "kind": "file",
+    "label": "explicit instance map precedence and legacy default hydration"
+  },
+  {
+    "id": "provider-instance-enabled-precedence",
+    "path": "apps/server/src/provider/Layers/ProviderInstanceRegistryLive.ts",
+    "start": 97,
+    "end": 111,
+    "kind": "file",
+    "label": "provider instance enabled-state precedence"
+  },
+  {
+    "id": "provider-instance-build-shadow",
+    "path": "apps/server/src/provider/Layers/ProviderInstanceRegistryLive.ts",
+    "start": 118,
+    "end": 214,
+    "kind": "file",
+    "label": "scoped instance construction and unavailable shadow fallback"
+  },
+  {
+    "id": "provider-instance-registry-reconcile",
+    "path": "apps/server/src/provider/Layers/ProviderInstanceRegistryLive.ts",
+    "start": 228,
+    "end": 320,
+    "kind": "file",
+    "label": "live registry remove, retain, replace, and publication sequence"
+  },
+  {
+    "id": "provider-unavailable-shadow",
+    "path": "apps/server/src/provider/unavailableProviderSnapshot.ts",
+    "start": 45,
+    "end": 78,
+    "kind": "file",
+    "label": "diagnostic snapshot for unavailable provider instances"
+  },
+  {
+    "id": "provider-adapter-registry-live",
+    "path": "apps/server/src/provider/Layers/ProviderAdapterRegistry.ts",
+    "start": 36,
+    "end": 100,
+    "kind": "file",
+    "label": "live adapter facade excludes unavailable instances"
+  },
+  {
+    "id": "provider-registry-boot-cache",
+    "path": "apps/server/src/provider/Layers/ProviderRegistry.ts",
+    "start": 209,
+    "end": 331,
+    "kind": "file",
+    "label": "provider discovery aggregation and boot cache"
+  },
+  {
+    "id": "provider-registry-live-sync",
+    "path": "apps/server/src/provider/Layers/ProviderRegistry.ts",
+    "start": 511,
+    "end": 693,
+    "kind": "file",
+    "label": "per-instance snapshot refresh and live registry synchronization"
+  },
+  {
+    "id": "provider-managed-snapshot-lifecycle",
+    "path": "apps/server/src/provider/makeManagedServerProvider.ts",
+    "start": 27,
+    "end": 228,
+    "kind": "file",
+    "label": "serialized provider discovery and streaming snapshot lifecycle"
+  },
+  {
+    "id": "provider-instance-environment-contract",
+    "path": "packages/contracts/src/providerInstance.ts",
+    "start": 97,
+    "end": 139,
+    "kind": "file",
+    "label": "plain and secret-backed provider environment value contract"
+  },
+  {
+    "id": "provider-instance-secret-materialization",
+    "path": "apps/server/src/serverSettings.ts",
+    "start": 365,
+    "end": 525,
+    "kind": "file",
+    "label": "provider instance secret persistence and materialization"
+  },
+  {
+    "id": "provider-instance-settings-redaction",
+    "path": "apps/server/src/serverSettings.ts",
+    "start": 620,
+    "end": 650,
+    "kind": "file",
+    "label": "provider instance environment re-redaction for clients"
+  },
+  {
+    "id": "provider-instance-environment-overlay",
+    "path": "apps/server/src/provider/ProviderInstanceEnvironment.ts",
+    "start": 1,
+    "end": 16,
+    "kind": "file",
+    "label": "instance environment overlay including blank overrides"
+  },
+  {
+    "id": "opencode-password-settings",
+    "path": "packages/contracts/src/settings.ts",
+    "start": 500,
+    "end": 521,
+    "kind": "file",
+    "label": "OpenCode external server password setting"
+  },
+  {
+    "id": "opencode-password-persistence-test",
+    "path": "apps/server/src/serverSettings.test.ts",
+    "start": 636,
+    "end": 687,
+    "kind": "file",
+    "label": "OpenCode password plaintext persistence regression test"
+  },
+  {
+    "id": "opencode-external-basic-auth",
+    "path": "apps/server/src/provider/Layers/OpenCodeAdapter.ts",
+    "start": 1204,
+    "end": 1233,
+    "kind": "file",
+    "label": "external OpenCode endpoint Basic authentication wiring"
+  },
+  {
+    "id": "opencode-process-ownership",
+    "path": "apps/server/src/provider/opencodeRuntime.ts",
+    "start": 477,
+    "end": 666,
+    "kind": "file",
+    "label": "local OpenCode process acquisition, health, and scope-owned release"
+  },
+  {
+    "id": "provider-service-start-session",
+    "path": "apps/server/src/provider/Layers/ProviderService.ts",
+    "start": 581,
+    "end": 813,
+    "kind": "file",
+    "label": "instance-routed provider session start and turn send"
+  },
+  {
+    "id": "provider-reactor-session-continuity",
+    "path": "apps/server/src/orchestration/Layers/ProviderCommandReactor.ts",
+    "start": 469,
+    "end": 782,
+    "kind": "file",
+    "label": "continuation compatibility, restart, and model selection decisions"
+  },
+  {
+    "id": "codex-continuation-identity",
+    "path": "apps/server/src/provider/Drivers/CodexDriver.ts",
+    "start": 122,
+    "end": 146,
+    "kind": "file",
+    "label": "Codex continuation compatibility identity"
+  },
+  {
+    "id": "claude-continuation-identity",
+    "path": "apps/server/src/provider/Drivers/ClaudeDriver.ts",
+    "start": 128,
+    "end": 165,
+    "kind": "file",
+    "label": "Claude continuation compatibility identity"
+  },
+  {
+    "id": "provider-instance-registry-tests",
+    "path": "apps/server/src/provider/Layers/ProviderInstanceRegistryLive.test.ts",
+    "start": 152,
+    "end": 290,
+    "kind": "file",
+    "label": "live provider instance registry replacement tests"
+  },
+  {
+    "id": "provider-settings-secret-tests",
+    "path": "apps/server/src/serverSettings.test.ts",
+    "start": 691,
+    "end": 752,
+    "kind": "file",
+    "label": "provider environment secret persistence and redaction tests"
+  },
+  {
+    "id": "codex-app-server-child-process",
+    "path": "packages/effect-codex-app-server/src/client.ts",
+    "start": 212,
+    "end": 268,
+    "kind": "file",
+    "label": "Codex app-server child process and stdio client construction"
+  },
+  {
+    "id": "codex-app-server-protocol-lifecycle",
+    "path": "packages/effect-codex-app-server/src/protocol.ts",
+    "start": 154,
+    "end": 342,
+    "kind": "file",
+    "label": "pending JSON-RPC requests, notifications, and transport termination"
+  },
+  {
+    "id": "codex-app-server-errors",
+    "path": "packages/effect-codex-app-server/src/errors.ts",
+    "start": 119,
+    "end": 409,
+    "kind": "file",
+    "label": "typed Codex app-server transport and protocol errors"
+  },
+  {
+    "id": "codex-adapter-event-consumer",
+    "path": "apps/server/src/provider/Layers/CodexAdapter.ts",
+    "start": 1694,
+    "end": 1764,
+    "kind": "file",
+    "label": "session-scoped Codex event consumer started before adapter return"
+  },
+  {
+    "id": "codex-adapter-error-mapping",
+    "path": "apps/server/src/provider/Layers/CodexAdapter.ts",
+    "start": 1508,
+    "end": 1566,
+    "kind": "file",
+    "label": "Codex native error and stderr classification"
+  },
+  {
+    "id": "codex-adapter-model-reroute",
+    "path": "apps/server/src/provider/Layers/CodexAdapter.ts",
+    "start": 1321,
+    "end": 1328,
+    "kind": "file",
+    "label": "Codex native model reroute projection"
+  },
+  {
+    "id": "codex-adapter-error-events",
+    "path": "apps/server/src/provider/Layers/CodexAdapter.ts",
+    "start": 1515,
+    "end": 1546,
+    "kind": "file",
+    "label": "Codex native errors normalized as runtime warning or error events"
+  },
+  {
+    "id": "codex-adapter-tests",
+    "path": "apps/server/src/provider/Layers/CodexAdapter.test.ts",
+    "kind": "file",
+    "label": "Codex adapter lifecycle and canonical event behavior tests"
+  },
+  {
+    "id": "claude-adapter-resume",
+    "path": "apps/server/src/provider/Layers/ClaudeAdapter.ts",
+    "start": 656,
+    "end": 689,
+    "kind": "file",
+    "label": "Claude native session resume metadata validation"
+  },
+  {
+    "id": "claude-adapter-runtime-events",
+    "path": "apps/server/src/provider/Layers/ClaudeAdapter.ts",
+    "start": 2051,
+    "end": 2112,
+    "kind": "file",
+    "label": "Claude usage observations projected to canonical runtime events"
+  },
+  {
+    "id": "claude-adapter-task-normalization",
+    "path": "apps/server/src/provider/Layers/ClaudeAdapter.ts",
+    "start": 916,
+    "end": 1031,
+    "kind": "file",
+    "label": "Claude task and tool observations normalized for the product model"
+  },
+  {
+    "id": "claude-adapter-permission-tests",
+    "path": "apps/server/src/provider/Layers/ClaudeAdapter.test.ts",
+    "start": 338,
+    "end": 401,
+    "kind": "file",
+    "label": "Claude permission-mode and deferred interaction tests"
+  },
+  {
+    "id": "claude-adapter-tests",
+    "path": "apps/server/src/provider/Layers/ClaudeAdapter.test.ts",
+    "kind": "file",
+    "label": "Claude adapter stream, task, approval, input, resume, and usage tests"
+  },
+  {
+    "id": "claude-driver-capability-probe",
+    "path": "apps/server/src/provider/Drivers/ClaudeDriver.ts",
+    "start": 63,
+    "end": 168,
+    "kind": "file",
+    "label": "Claude CLI discovery and capability snapshot construction"
+  },
+  {
+    "id": "claude-skills-scanner",
+    "path": "apps/server/src/provider/Drivers/ClaudeSkills.ts",
+    "kind": "file",
+    "label": "Claude skill discovery and precedence scanner"
+  },
+  {
+    "id": "acp-runtime-startup",
+    "path": "apps/server/src/provider/acp/AcpSessionRuntime.ts",
+    "start": 332,
+    "end": 418,
+    "kind": "file",
+    "label": "ACP session runtime construction, initialization, and queues"
+  },
+  {
+    "id": "acp-runtime-prompt-cancel",
+    "path": "apps/server/src/provider/acp/AcpSessionRuntime.ts",
+    "start": 720,
+    "end": 783,
+    "kind": "file",
+    "label": "ACP prompt and cancellation operations"
+  },
+  {
+    "id": "acp-runtime-event-queue",
+    "path": "apps/server/src/provider/acp/AcpSessionRuntime.ts",
+    "start": 691,
+    "end": 870,
+    "kind": "file",
+    "label": "ACP native and canonical event queue consumption"
+  },
+  {
+    "id": "cursor-acp-spawn",
+    "path": "apps/server/src/provider/acp/CursorAcpSupport.ts",
+    "start": 34,
+    "end": 86,
+    "kind": "file",
+    "label": "Cursor ACP child launch and initialization options"
+  },
+  {
+    "id": "cursor-extension-callbacks",
+    "path": "apps/server/src/provider/Layers/CursorAdapter.ts",
+    "start": 479,
+    "end": 780,
+    "kind": "file",
+    "label": "Cursor ACP extension callbacks and canonical projections"
+  },
+  {
+    "id": "cursor-steering-and-rollback",
+    "path": "apps/server/src/provider/Layers/CursorAdapter.ts",
+    "start": 916,
+    "end": 1145,
+    "kind": "file",
+    "label": "Cursor steering, interruption, transcript rollback, and session stop"
+  },
+  {
+    "id": "cursor-adapter-tests",
+    "path": "apps/server/src/provider/Layers/CursorAdapter.test.ts",
+    "kind": "file",
+    "label": "Cursor ACP adapter lifecycle and behavior tests"
+  },
+  {
+    "id": "grok-extension-callbacks",
+    "path": "apps/server/src/provider/Layers/GrokAdapter.ts",
+    "start": 530,
+    "end": 740,
+    "kind": "file",
+    "label": "Grok ACP and XAI extension callbacks"
+  },
+  {
+    "id": "grok-interrupt-race",
+    "path": "apps/server/src/provider/Layers/GrokAdapter.ts",
+    "start": 918,
+    "end": 1362,
+    "kind": "file",
+    "label": "Grok prompt, steering, and interruption race handling"
+  },
+  {
+    "id": "grok-rollback-unsupported",
+    "path": "apps/server/src/provider/Layers/GrokAdapter.ts",
+    "start": 1400,
+    "end": 1421,
+    "kind": "file",
+    "label": "explicitly unsupported Grok native rollback"
+  },
+  {
+    "id": "grok-interrupt-tests",
+    "path": "apps/server/src/provider/Layers/GrokAdapter.test.ts",
+    "kind": "file",
+    "label": "Grok steering and interruption race tests"
+  },
+  {
+    "id": "opencode-session-scope",
+    "path": "apps/server/src/provider/Layers/OpenCodeAdapter.ts",
+    "start": 1139,
+    "end": 1426,
+    "kind": "file",
+    "label": "OpenCode scoped session construction and adoption"
+  },
+  {
+    "id": "opencode-local-server-startup",
+    "path": "apps/server/src/provider/opencodeRuntime.ts",
+    "start": 477,
+    "end": 639,
+    "kind": "file",
+    "label": "scope-owned OpenCode child startup and stdout URL announcement"
+  },
+  {
+    "id": "opencode-resume-adoption",
+    "path": "apps/server/src/provider/Layers/OpenCodeAdapter.ts",
+    "start": 1204,
+    "end": 1387,
+    "kind": "file",
+    "label": "OpenCode resume lookup, cwd comparison, adoption, and fork"
+  },
+  {
+    "id": "opencode-resume-cursor-codec",
+    "path": "apps/server/src/provider/Layers/OpenCodeAdapter.ts",
+    "start": 63,
+    "end": 83,
+    "kind": "file",
+    "label": "OpenCode current-version resume cursor decoder"
+  },
+  {
+    "id": "opencode-resume-tests",
+    "path": "apps/server/src/provider/Layers/OpenCodeAdapter.test.ts",
+    "start": 304,
+    "end": 545,
+    "kind": "file",
+    "label": "OpenCode adoption, missing-session, and cwd-fork tests"
+  },
+  {
+    "id": "opencode-event-pump",
+    "path": "apps/server/src/provider/Layers/OpenCodeAdapter.ts",
+    "start": 900,
+    "end": 1202,
+    "kind": "file",
+    "label": "session-filtered OpenCode event pump and normalization"
+  },
+  {
+    "id": "opencode-interrupt-history-revert",
+    "path": "apps/server/src/provider/Layers/OpenCodeAdapter.ts",
+    "start": 1510,
+    "end": 1701,
+    "kind": "file",
+    "label": "OpenCode abort, message history read, and counted session revert"
+  },
+  {
+    "id": "opencode-adapter-tests",
+    "path": "apps/server/src/provider/Layers/OpenCodeAdapter.test.ts",
+    "kind": "file",
+    "label": "OpenCode adapter ownership, recovery, steering, and rollback tests"
+  },
+  {
+    "id": "usage-live-admission",
+    "path": "apps/server/src/orchestration/Layers/ProviderRuntimeIngestion.ts",
+    "start": 250,
+    "end": 257,
+    "kind": "file",
+    "label": "positive-used-token admission rule for live context telemetry"
+  },
+  {
+    "id": "usage-window-validation",
+    "path": "apps/server/src/usage/UsageService.ts",
+    "start": 293,
+    "end": 350,
+    "kind": "file",
+    "label": "daily and bounded hourly usage window validation"
+  },
+  {
+    "id": "usage-codex-transcript-parser",
+    "path": "apps/server/src/usage/usageTranscripts.ts",
+    "start": 200,
+    "end": 298,
+    "kind": "file",
+    "label": "Codex transcript model tracking, token deltas, and fork-copy suppression"
+  },
+  {
+    "id": "usage-rate-table-acquisition",
+    "path": "apps/server/src/usage/UsageService.ts",
+    "start": 137,
+    "end": 184,
+    "kind": "file",
+    "label": "memory, disk, and remote LiteLLM rate-table acquisition"
+  },
+  {
+    "id": "usage-scan-cache",
+    "path": "apps/server/src/usage/usageScanCache.ts",
+    "start": 1,
+    "end": 255,
+    "kind": "file",
+    "label": "per-file transcript scan cache, validation, pruning, and persistence"
+  },
+  {
+    "id": "usage-merge-totals",
+    "path": "packages/shared/src/usageMerge.ts",
+    "start": 200,
+    "end": 416,
+    "kind": "file",
+    "label": "cross-environment bucket, source, session, and cost total reconstruction"
+  },
+  {
+    "id": "usage-web-environment-queries",
+    "path": "apps/web/src/state/usage.ts",
+    "start": 40,
+    "end": 122,
+    "kind": "file",
+    "label": "web usage fan-out across connected environments and merge"
+  },
+  {
+    "id": "usage-mobile-environment-queries",
+    "path": "apps/mobile/src/state/usage.ts",
+    "start": 43,
+    "end": 125,
+    "kind": "file",
+    "label": "mobile usage fan-out across connected environments and merge"
+  },
+  {
+    "id": "usage-transcript-listing",
+    "path": "apps/server/src/usage/usageTranscriptReader.ts",
+    "start": 35,
+    "end": 74,
+    "kind": "file",
+    "label": "best-effort recursive transcript discovery"
+  },
+  {
+    "id": "codex-followup-turn-queue",
+    "path": "apps/server/src/provider/Layers/CodexSessionRuntime.ts",
+    "start": 1806,
+    "end": 1864,
+    "kind": "file",
+    "label": "Codex turn/start follow-up queue and active interrupt target"
+  },
+  {
+    "id": "codex-task-normalization",
+    "path": "apps/server/src/provider/Layers/CodexAdapter.ts",
+    "start": 503,
+    "end": 750,
+    "kind": "file",
+    "label": "Codex multi-agent observations normalized to task lifecycle events"
+  },
+  {
+    "id": "claude-task-event-lifecycle",
+    "path": "apps/server/src/provider/Layers/ClaudeAdapter.ts",
+    "start": 2985,
+    "end": 3318,
+    "kind": "file",
+    "label": "Claude coordinator and member activity normalized to task events"
+  },
+  {
+    "id": "cursor-plan-updates",
+    "path": "apps/server/src/provider/Layers/CursorAdapter.ts",
+    "start": 414,
+    "end": 840,
+    "kind": "file",
+    "label": "Cursor plan and todo extensions normalized to product plan events"
+  },
+  {
+    "id": "grok-plan-updates",
+    "path": "apps/server/src/provider/Layers/GrokAdapter.ts",
+    "start": 464,
+    "end": 850,
+    "kind": "file",
+    "label": "Grok ACP plan observations normalized to product plan events"
+  },
+  {
+    "id": "codex-provider-skills",
+    "path": "apps/server/src/provider/Layers/CodexProvider.ts",
+    "start": 400,
+    "end": 420,
+    "kind": "file",
+    "label": "Codex provider discovery requests native skills and models"
+  },
+  {
+    "id": "codex-provider-feedback-command",
+    "path": "apps/server/src/provider/Layers/CodexProvider.ts",
+    "start": 600,
+    "end": 620,
+    "kind": "file",
+    "label": "Codex snapshot exposes discovered skills and a feedback slash command"
+  },
+  {
+    "id": "claude-provider-skills-commands",
+    "path": "apps/server/src/provider/Layers/ClaudeProvider.ts",
+    "start": 920,
+    "end": 962,
+    "kind": "file",
+    "label": "Claude snapshot combines discovered skills and initialization commands"
+  },
+  {
+    "id": "cursor-provider-snapshot",
+    "path": "apps/server/src/provider/Layers/CursorProvider.ts",
+    "start": 625,
+    "end": 650,
+    "kind": "file",
+    "label": "Cursor snapshot exposes models and probe state without skills or commands"
+  },
+  {
+    "id": "grok-provider-snapshot",
+    "path": "apps/server/src/provider/Layers/GrokProvider.ts",
+    "start": 294,
+    "end": 311,
+    "kind": "file",
+    "label": "Grok snapshot exposes models and probe state without skills or commands"
+  },
+  {
+    "id": "opencode-provider-skills",
+    "path": "apps/server/src/provider/Layers/OpenCodeProvider.ts",
+    "start": 445,
+    "end": 480,
+    "kind": "file",
+    "label": "OpenCode provider inventory flattened into models and skills"
+  },
+  {
+    "id": "claude-local-rollback",
+    "path": "apps/server/src/provider/Layers/ClaudeAdapter.ts",
+    "start": 4480,
+    "end": 4494,
+    "kind": "file",
+    "label": "Claude adapter-local turn snapshot rollback and cursor refresh"
+  },
+  {
+    "id": "turn-lifecycle-command-contract",
+    "path": "packages/contracts/src/orchestration.ts",
+    "start": 800,
+    "end": 872,
+    "kind": "file",
+    "label": "Turn start and interrupt command contracts"
+  },
+  {
+    "id": "turn-lifecycle-runtime-contract",
+    "path": "packages/contracts/src/providerRuntime.ts",
+    "start": 121,
+    "end": 170,
+    "kind": "file",
+    "label": "Canonical provider runtime lifecycle event kinds"
+  },
+  {
+    "id": "turn-lifecycle-turn-completion-payload",
+    "path": "packages/contracts/src/providerRuntime.ts",
+    "start": 358,
+    "end": 375,
+    "kind": "file",
+    "label": "Provider turn completion payload"
+  },
+  {
+    "id": "turn-lifecycle-engine-commit",
+    "path": "apps/server/src/orchestration/Layers/OrchestrationEngine.ts",
+    "start": 197,
+    "end": 259,
+    "kind": "file",
+    "label": "Atomic event, projection, and receipt commit"
+  },
+  {
+    "id": "turn-lifecycle-hot-reactor",
+    "path": "apps/server/src/orchestration/Layers/ProviderCommandReactor.ts",
+    "start": 1405,
+    "end": 1409,
+    "kind": "file",
+    "label": "Hot command reactor stream without pending-work replay"
+  },
+  {
+    "id": "turn-lifecycle-start-dedupe-cache",
+    "path": "apps/server/src/orchestration/Layers/ProviderCommandReactor.ts",
+    "start": 89,
+    "end": 325,
+    "kind": "file",
+    "label": "Bounded in-memory suppression cache for recently handled turn starts"
+  },
+  {
+    "id": "turn-lifecycle-runtime-publication",
+    "path": "apps/server/src/provider/Layers/ProviderService.ts",
+    "start": 286,
+    "end": 354,
+    "kind": "file",
+    "label": "Correlated runtime event publication"
+  },
+  {
+    "id": "turn-lifecycle-runtime-adapter-subscription",
+    "path": "apps/server/src/provider/Layers/ProviderService.ts",
+    "start": 372,
+    "end": 400,
+    "kind": "file",
+    "label": "Provider adapter event subscription"
+  },
+  {
+    "id": "turn-lifecycle-runtime-fanout",
+    "path": "apps/server/src/provider/Layers/ProviderService.ts",
+    "start": 1234,
+    "end": 1239,
+    "kind": "file",
+    "label": "Provider runtime hot-stream fan-out"
+  },
+  {
+    "id": "turn-lifecycle-completion-finalization",
+    "path": "apps/server/src/orchestration/Layers/ProviderRuntimeIngestion.ts",
+    "start": 1840,
+    "end": 1874,
+    "kind": "file",
+    "label": "Turn-completion message and plan finalization"
+  },
+  {
+    "id": "turn-lifecycle-interrupt-reactor",
+    "path": "apps/server/src/orchestration/Layers/ProviderCommandReactor.ts",
+    "start": 1176,
+    "end": 1196,
+    "kind": "file",
+    "label": "Session-scoped provider interruption"
+  },
+  {
+    "id": "turn-lifecycle-checkpoint-baseline",
+    "path": "apps/server/src/orchestration/Layers/CheckpointReactor.ts",
+    "start": 482,
+    "end": 530,
+    "kind": "file",
+    "label": "Pre-turn checkpoint baseline capture"
+  },
+  {
+    "id": "turn-lifecycle-checkpoint-triggers",
+    "path": "apps/server/src/orchestration/Layers/CheckpointReactor.ts",
+    "start": 820,
+    "end": 937,
+    "kind": "file",
+    "label": "Runtime and domain stream checkpoint triggers"
+  },
+  {
+    "id": "turn-lifecycle-runtime-receipts",
+    "path": "apps/server/src/orchestration/Layers/RuntimeReceiptBus.ts",
+    "start": 1,
+    "end": 39,
+    "kind": "file",
+    "label": "Test-only runtime milestone receipt bus"
+  },
+  {
+    "id": "turn-lifecycle-client-liveness",
+    "path": "packages/client-runtime/src/state/threads.ts",
+    "start": 255,
+    "end": 271,
+    "kind": "file",
+    "label": "Client thread connection liveness derivation"
+  },
+  {
+    "id": "turn-lifecycle-client-turn-reducer",
+    "path": "packages/client-runtime/src/state/threadReducer.ts",
+    "start": 319,
+    "end": 425,
+    "kind": "file",
+    "label": "Client assistant-message and session turn reduction"
+  },
+  {
+    "id": "turn-lifecycle-settlement-guards",
+    "path": "packages/client-runtime/src/state/threadSettled.ts",
+    "start": 286,
+    "end": 312,
+    "kind": "file",
+    "label": "Thread settlement eligibility guards"
+  },
+  {
+    "id": "turn-lifecycle-waiting-ui-test",
+    "path": "apps/web/src/components/chat/ComposerPrimaryActions.test.tsx",
+    "start": 214,
+    "end": 219,
+    "kind": "file",
+    "label": "Stop action retained while provider waits for input"
+  },
+  {
+    "id": "turn-lifecycle-runtime-tests",
+    "path": "apps/server/src/orchestration/Layers/ProviderRuntimeIngestion.test.ts",
+    "start": 848,
+    "end": 920,
+    "kind": "file",
+    "label": "Lifecycle correlation and stale-event ingestion tests"
+  },
+  {
+    "id": "turn-lifecycle-checkpoint-tests",
+    "path": "apps/server/src/orchestration/Layers/CheckpointReactor.test.ts",
+    "start": 457,
+    "end": 515,
+    "kind": "file",
+    "label": "Checkpoint trigger and capture tests"
+  },
+  {
+    "id": "permission-runtime-mode-command",
+    "path": "packages/contracts/src/orchestration.ts",
+    "start": 784,
+    "end": 798,
+    "kind": "file",
+    "label": "Thread runtime-mode and interaction-mode commands"
+  },
+  {
+    "id": "permission-runtime-mode-event",
+    "path": "packages/contracts/src/orchestration.ts",
+    "start": 1222,
+    "end": 1225,
+    "kind": "file",
+    "label": "Durable thread runtime-mode event payload"
+  },
+  {
+    "id": "permission-claude-mode-map",
+    "path": "apps/server/src/provider/Layers/ClaudeAdapter.ts",
+    "start": 4138,
+    "end": 4412,
+    "kind": "file",
+    "label": "Claude runtime mode and permission callback mapping"
+  },
+  {
+    "id": "permission-cursor-mode-routing",
+    "path": "apps/server/src/provider/Layers/CursorAdapter.ts",
+    "start": 217,
+    "end": 733,
+    "kind": "file",
+    "label": "Cursor ACP session mode and permission routing"
+  },
+  {
+    "id": "permission-grok-request-routing",
+    "path": "apps/server/src/provider/Layers/GrokAdapter.ts",
+    "start": 666,
+    "end": 727,
+    "kind": "file",
+    "label": "Grok ACP permission request routing"
+  },
+  {
+    "id": "permission-opencode-mode-map",
+    "path": "apps/server/src/provider/opencodeRuntime.ts",
+    "start": 371,
+    "end": 405,
+    "kind": "file",
+    "label": "OpenCode permission rules derived from T3 runtime mode"
+  },
+  {
+    "id": "permission-opencode-request-routing",
+    "path": "apps/server/src/provider/Layers/OpenCodeAdapter.ts",
+    "start": 958,
+    "end": 1034,
+    "kind": "file",
+    "label": "OpenCode permission and question request normalization"
+  },
+  {
+    "id": "permission-opencode-response-routing",
+    "path": "apps/server/src/provider/Layers/OpenCodeAdapter.ts",
+    "start": 1579,
+    "end": 1618,
+    "kind": "file",
+    "label": "OpenCode permission and question replies"
+  },
+  {
+    "id": "permission-runtime-activities",
+    "path": "apps/server/src/orchestration/Layers/ProviderRuntimeIngestion.ts",
+    "start": 299,
+    "end": 539,
+    "kind": "file",
+    "label": "Canonical approval and input requests mapped to durable activities"
+  },
+  {
+    "id": "permission-assistant-pause-flush",
+    "path": "apps/server/src/orchestration/Layers/ProviderRuntimeIngestion.ts",
+    "start": 1707,
+    "end": 1749,
+    "kind": "file",
+    "label": "Assistant buffer flush before provider interaction pauses"
+  },
+  {
+    "id": "permission-response-reactor",
+    "path": "apps/server/src/orchestration/Layers/ProviderCommandReactor.ts",
+    "start": 1199,
+    "end": 1285,
+    "kind": "file",
+    "label": "Approval and structured-input response intents forwarded to providers"
+  },
+  {
+    "id": "permission-approval-projection",
+    "path": "apps/server/src/orchestration/Layers/ProjectionPipeline.ts",
+    "start": 1540,
+    "end": 1601,
+    "kind": "file",
+    "label": "Pending approval projection and stale-response recovery"
+  },
+  {
+    "id": "permission-pending-storage",
+    "path": "apps/server/src/persistence/Layers/ProjectionPendingApprovals.ts",
+    "start": 16,
+    "end": 136,
+    "kind": "file",
+    "label": "SQLite-backed projected pending-approval upsert and query"
+  },
+  {
+    "id": "permission-web-resolution",
+    "path": "apps/web/src/session-logic.ts",
+    "start": 410,
+    "end": 562,
+    "kind": "file",
+    "label": "Web pending approval and structured-input derivation"
+  },
+  {
+    "id": "permission-mobile-resolution",
+    "path": "apps/mobile/src/state/use-selected-thread-requests.ts",
+    "start": 68,
+    "end": 191,
+    "kind": "file",
+    "label": "Mobile request derivation, drafts, and response commands"
+  },
+  {
+    "id": "work-thread-record",
+    "path": "packages/contracts/src/orchestration.ts",
+    "start": 379,
+    "end": 423,
+    "kind": "file",
+    "label": "Durable thread record and lifecycle overlays"
+  },
+  {
+    "id": "work-thread-shell",
+    "path": "packages/contracts/src/orchestration.ts",
+    "start": 449,
+    "end": 475,
+    "kind": "file",
+    "label": "Thread shell summary exposed to clients"
+  },
+  {
+    "id": "work-thread-lifecycle-events",
+    "path": "packages/contracts/src/orchestration.ts",
+    "start": 1126,
+    "end": 1204,
+    "kind": "file",
+    "label": "Thread archive, settlement, snooze, and pin event payloads"
+  },
+  {
+    "id": "work-thread-lifecycle-decisions",
+    "path": "apps/server/src/orchestration/decider.ts",
+    "start": 408,
+    "end": 810,
+    "kind": "file",
+    "label": "Archive, settle, snooze, pin, and reorder decision rules"
+  },
+  {
+    "id": "work-task-linkage-ingestion",
+    "path": "apps/server/src/orchestration/Layers/ProviderRuntimeIngestion.ts",
+    "start": 316,
+    "end": 359,
+    "kind": "file",
+    "label": "Server-stamped task identity and agent classification fields"
+  },
+  {
+    "id": "work-task-activities",
+    "path": "apps/server/src/orchestration/Layers/ProviderRuntimeIngestion.ts",
+    "start": 541,
+    "end": 742,
+    "kind": "file",
+    "label": "Task lifecycle and agent tool progress converted to activities"
+  },
+  {
+    "id": "work-task-live-services",
+    "path": "apps/server/src/orchestration/Layers/ProviderRuntimeIngestion.ts",
+    "start": 1957,
+    "end": 2026,
+    "kind": "file",
+    "label": "Ephemeral plan progress and background liveness updates"
+  },
+  {
+    "id": "work-subagent-fold",
+    "path": "packages/client-runtime/src/state/subagentRuntime.ts",
+    "start": 449,
+    "end": 679,
+    "kind": "file",
+    "label": "Order-tolerant activity fold into retained subagent state"
+  },
+  {
+    "id": "work-agent-panel-model",
+    "path": "packages/client-runtime/src/state/subagentRuntime.ts",
+    "start": 680,
+    "end": 839,
+    "kind": "file",
+    "label": "Source-neutral Agents panel view model and rollups"
+  },
+  {
+    "id": "work-web-agent-panel",
+    "path": "apps/web/src/components/AgentsPanel.tsx",
+    "start": 1,
+    "end": 190,
+    "kind": "file",
+    "label": "Web agent row states, activity, elapsed time, and task metrics"
+  },
+  {
+    "id": "work-web-agent-summary",
+    "path": "apps/web/src/components/AgentsPanel.tsx",
+    "start": 490,
+    "end": 540,
+    "kind": "file",
+    "label": "Web Agents roster and aggregate footer"
+  },
+  {
+    "id": "work-web-quiet-timeline",
+    "path": "apps/web/src/session-logic.ts",
+    "start": 783,
+    "end": 1115,
+    "kind": "file",
+    "label": "Web quiet-timeline filtering and agent spawn grouping"
+  },
+  {
+    "id": "work-mobile-quiet-timeline",
+    "path": "apps/mobile/src/lib/threadActivity.ts",
+    "start": 283,
+    "end": 470,
+    "kind": "file",
+    "label": "Mobile work-log filtering and terminal task retention"
+  },
+  {
+    "id": "work-mobile-work-log",
+    "path": "apps/mobile/src/features/threads/thread-work-log.tsx",
+    "start": 123,
+    "end": 274,
+    "kind": "file",
+    "label": "Mobile compact work-log presentation"
+  },
+  {
+    "id": "work-background-liveness",
+    "path": "apps/server/src/orchestration/ThreadBackgroundLiveness.ts",
+    "start": 1,
+    "end": 173,
+    "kind": "file",
+    "label": "In-memory thread background liveness registry"
+  },
+  {
+    "id": "work-plan-progress",
+    "path": "apps/server/src/orchestration/ThreadPlanProgress.ts",
+    "start": 1,
+    "end": 76,
+    "kind": "file",
+    "label": "In-memory current plan-step projection"
+  },
+  {
+    "id": "work-provider-skill-contract",
+    "path": "packages/contracts/src/server.ts",
+    "start": 76,
+    "end": 97,
+    "kind": "file",
+    "label": "Provider slash-command and skill inventory contracts"
+  },
+  {
+    "id": "work-provider-inventory-contract",
+    "path": "packages/contracts/src/server.ts",
+    "start": 180,
+    "end": 195,
+    "kind": "file",
+    "label": "Provider snapshots carry commands and skills as default-empty arrays"
+  },
+  {
+    "id": "work-provider-skill-menu",
+    "path": "packages/client-runtime/src/providerSkills.ts",
+    "start": 19,
+    "end": 70,
+    "kind": "file",
+    "label": "Skill display, slash-menu inclusion, collision filtering, and source labels"
+  },
+  {
+    "id": "work-web-skill-composer",
+    "path": "apps/web/src/components/chat/ChatComposer.tsx",
+    "start": 1108,
+    "end": 1165,
+    "kind": "file",
+    "label": "Web provider commands and skills composed into searchable menus"
+  },
+  {
+    "id": "work-mobile-skill-composer",
+    "path": "apps/mobile/src/features/threads/ThreadComposer.tsx",
+    "start": 420,
+    "end": 530,
+    "kind": "file",
+    "label": "Mobile provider command and skill search composition"
+  },
+  {
+    "id": "context-current-turn-payload",
+    "path": "apps/server/src/provider/Layers/ProviderService.ts",
+    "start": 724,
+    "end": 760,
+    "kind": "file",
+    "label": "T3 constructs the visible turn payload and attachment paths"
+  },
+  {
+    "id": "context-codex-turn-input",
+    "path": "apps/server/src/provider/Layers/CodexSessionRuntime.ts",
+    "start": 367,
+    "end": 423,
+    "kind": "file",
+    "label": "Codex native turn input assembled from the T3 request"
+  },
+  {
+    "id": "context-codex-session-resume",
+    "path": "apps/server/src/provider/Layers/CodexSessionRuntime.ts",
+    "start": 466,
+    "end": 503,
+    "kind": "file",
+    "label": "Codex thread start or resume selection"
+  },
+  {
+    "id": "context-codex-native-resume",
+    "path": "apps/server/src/provider/Layers/CodexSessionRuntime.ts",
+    "start": 1749,
+    "end": 1769,
+    "kind": "file",
+    "label": "Codex native continuation thread id returned as resume state"
+  },
+  {
+    "id": "context-claude-resume-choice",
+    "path": "apps/server/src/provider/Layers/ClaudeAdapter.ts",
+    "start": 4170,
+    "end": 4254,
+    "kind": "file",
+    "label": "Claude native session resume and cursor selection"
+  },
+  {
+    "id": "context-memory-codex-compaction",
+    "path": "apps/server/src/provider/Layers/CodexAdapter.ts",
+    "start": 945,
+    "end": 975,
+    "kind": "file",
+    "label": "Codex compacted notification normalized as thread state"
+  },
+  {
+    "id": "context-memory-claude-compaction",
+    "path": "apps/server/src/provider/Layers/ClaudeAdapter.ts",
+    "start": 3122,
+    "end": 3143,
+    "kind": "file",
+    "label": "Claude compact boundary normalized as usage and thread state"
+  },
+  {
+    "id": "context-client-snapshot-cache",
+    "path": "packages/client-runtime/src/state/threads.ts",
+    "start": 129,
+    "end": 210,
+    "kind": "file",
+    "label": "Client thread snapshot cache hydration and persistence"
+  },
+  {
+    "id": "context-client-event-cursor",
+    "path": "packages/client-runtime/src/state/threads.ts",
+    "start": 619,
+    "end": 637,
+    "kind": "file",
+    "label": "Cached shell sequence seeds event-subscription catch-up"
+  },
+  {
+    "id": "context-mobile-drafts",
+    "path": "apps/mobile/src/state/use-composer-drafts.ts",
+    "start": 146,
+    "end": 280,
+    "kind": "file",
+    "label": "Environment-scoped mobile composer draft persistence"
+  },
+  {
+    "id": "context-mobile-outbox-storage",
+    "path": "apps/mobile/src/state/thread-outbox-storage.ts",
+    "start": 21,
+    "end": 145,
+    "kind": "file",
+    "label": "Mobile offline thread-command outbox persistence"
+  },
+  {
+    "id": "context-thread-activity-limit",
+    "path": "apps/server/src/orchestration/Layers/ProjectionSnapshotQuery.ts",
+    "start": 68,
+    "end": 76,
+    "kind": "file",
+    "label": "Thread detail snapshots cap recent activities at 500"
+  },
+  {
+    "id": "context-thread-activity-query",
+    "path": "apps/server/src/orchestration/Layers/ProjectionSnapshotQuery.ts",
+    "start": 1028,
+    "end": 1044,
+    "kind": "file",
+    "label": "Recent thread activities selected under the detail-window limit"
+  },
+  {
+    "id": "checkpoint-model-contract",
+    "path": "packages/contracts/src/orchestration.ts",
+    "start": 312,
+    "end": 332,
+    "kind": "file",
+    "label": "Projected checkpoint identity, status, file summary, and completion fields"
+  },
+  {
+    "id": "checkpoint-command-event-contract",
+    "path": "packages/contracts/src/orchestration.ts",
+    "start": 892,
+    "end": 1035,
+    "kind": "file",
+    "label": "Checkpoint revert, diff completion, and revert completion command payloads"
+  },
+  {
+    "id": "checkpoint-event-discriminants",
+    "path": "packages/contracts/src/orchestration.ts",
+    "start": 1470,
+    "end": 1476,
+    "kind": "file",
+    "label": "Durable checkpoint-revert-requested and thread-reverted event discriminants"
+  },
+  {
+    "id": "checkpoint-ref-naming",
+    "path": "apps/server/src/checkpointing/Utils.ts",
+    "start": 1,
+    "end": 24,
+    "kind": "file",
+    "label": "Base64url thread-scoped hidden checkpoint reference naming"
+  },
+  {
+    "id": "checkpoint-git-capture",
+    "path": "apps/server/src/vcs/GitVcsDriver.ts",
+    "start": 708,
+    "end": 787,
+    "kind": "file",
+    "label": "Isolated-index workspace capture into a hidden Git ref"
+  },
+  {
+    "id": "checkpoint-git-restore",
+    "path": "apps/server/src/vcs/GitVcsDriver.ts",
+    "start": 794,
+    "end": 828,
+    "kind": "file",
+    "label": "Checkpoint or HEAD fallback content restore, clean, and index reset"
+  },
+  {
+    "id": "checkpoint-git-diff-delete",
+    "path": "apps/server/src/vcs/GitVcsDriver.ts",
+    "start": 830,
+    "end": 907,
+    "kind": "file",
+    "label": "Hidden-ref patch comparison and best-effort ref deletion attempts"
+  },
+  {
+    "id": "checkpoint-status-derivation",
+    "path": "apps/server/src/orchestration/Layers/CheckpointReactor.ts",
+    "start": 65,
+    "end": 75,
+    "kind": "file",
+    "label": "Provider turn runtime state mapped to checkpoint status"
+  },
+  {
+    "id": "checkpoint-diff-query-modes",
+    "path": "apps/server/src/checkpointing/CheckpointDiffQuery.ts",
+    "start": 37,
+    "end": 276,
+    "kind": "file",
+    "label": "Turn and full-thread hidden checkpoint diff queries"
+  },
+  {
+    "id": "checkpoint-web-review-modes",
+    "path": "apps/web/src/components/DiffPanel.tsx",
+    "start": 203,
+    "end": 390,
+    "kind": "file",
+    "label": "Web selection of working-tree, branch, latest-turn, and prior-turn review modes"
+  },
+  {
+    "id": "checkpoint-live-review-diffs",
+    "path": "apps/server/src/vcs/GitVcsDriverCore.ts",
+    "start": 2166,
+    "end": 2290,
+    "kind": "file",
+    "label": "Tracked plus untracked working-tree diff and merge-base branch-range diff"
+  },
+  {
+    "id": "checkpoint-revert-preconditions",
+    "path": "apps/server/src/orchestration/Layers/CheckpointReactor.ts",
+    "start": 690,
+    "end": 770,
+    "kind": "file",
+    "label": "Revert read-model, bound-session, Git, turn-count, and target-ref preconditions"
+  },
+  {
+    "id": "checkpoint-revert-effects",
+    "path": "apps/server/src/orchestration/Layers/CheckpointReactor.ts",
+    "start": 758,
+    "end": 838,
+    "kind": "file",
+    "label": "Ordered restore, workspace refresh, provider rollback, ref pruning, and completion dispatch"
+  },
+  {
+    "id": "provider-rollback-interface",
+    "path": "apps/server/src/provider/Services/ProviderAdapter.ts",
+    "start": 106,
+    "end": 117,
+    "kind": "file",
+    "label": "Provider adapter conversation rollback interface"
+  },
+  {
+    "id": "provider-rollback-service",
+    "path": "apps/server/src/provider/Layers/ProviderService.ts",
+    "start": 1080,
+    "end": 1119,
+    "kind": "file",
+    "label": "Bound provider session resolution and rollback delegation"
+  },
+  {
+    "id": "codex-rollback-adapter",
+    "path": "apps/server/src/provider/Layers/CodexAdapter.ts",
+    "start": 1869,
+    "end": 1891,
+    "kind": "file",
+    "label": "Codex adapter rollback validation and runtime delegation"
+  },
+  {
+    "id": "codex-rollback-native-request",
+    "path": "apps/server/src/provider/Layers/CodexSessionRuntime.ts",
+    "start": 1907,
+    "end": 1919,
+    "kind": "file",
+    "label": "Codex thread rollback native request and local session-state reset"
+  },
+  {
+    "id": "cursor-rollback-local-history",
+    "path": "apps/server/src/provider/Layers/CursorAdapter.ts",
+    "start": 1123,
+    "end": 1141,
+    "kind": "file",
+    "label": "Cursor adapter-local turn history truncation"
+  },
+  {
+    "id": "opencode-rollback-native-revert",
+    "path": "apps/server/src/provider/Layers/OpenCodeAdapter.ts",
+    "start": 1678,
+    "end": 1702,
+    "kind": "file",
+    "label": "OpenCode counted message-boundary session revert"
+  },
+  {
+    "id": "workbench-terminal-contract",
+    "path": "packages/contracts/src/terminal.ts",
+    "start": 1,
+    "end": 234,
+    "kind": "file",
+    "label": "Terminal identity, commands, snapshots, metadata, and attach event schemas"
+  },
+  {
+    "id": "workbench-terminal-manager-interface",
+    "path": "apps/server/src/terminal/Manager.ts",
+    "start": 123,
+    "end": 198,
+    "kind": "file",
+    "label": "Server terminal lifecycle and subscription service boundary"
+  },
+  {
+    "id": "workbench-terminal-history-persistence",
+    "path": "apps/server/src/terminal/Manager.ts",
+    "start": 1355,
+    "end": 1496,
+    "kind": "file",
+    "label": "Debounced capped terminal history persistence and reload"
+  },
+  {
+    "id": "workbench-terminal-history-reopen",
+    "path": "apps/server/src/terminal/Manager.ts",
+    "start": 2120,
+    "end": 2203,
+    "kind": "file",
+    "label": "Manager finalization and persisted-history restoration before PTY start"
+  },
+  {
+    "id": "workbench-terminal-cleanup",
+    "path": "apps/server/src/orchestration/Layers/ThreadDeletionReactor.ts",
+    "start": 45,
+    "end": 65,
+    "kind": "file",
+    "label": "Thread deletion stops provider session and closes terminal history best-effort"
+  },
+  {
+    "id": "workbench-terminal-web",
+    "path": "apps/web/src/components/ThreadTerminalDrawer.tsx",
+    "start": 337,
+    "end": 527,
+    "kind": "file",
+    "label": "Web terminal drawer subscribes to shared terminal state and renders Ghostty"
+  },
+  {
+    "id": "workbench-terminal-mobile",
+    "path": "apps/mobile/src/features/terminal/ThreadTerminalPanel.tsx",
+    "start": 31,
+    "end": 210,
+    "kind": "file",
+    "label": "Mobile terminal lifecycle and native surface integration"
+  },
+  {
+    "id": "workbench-project-file-rpc-contract",
+    "path": "packages/contracts/src/rpc.ts",
+    "start": 629,
+    "end": 656,
+    "kind": "file",
+    "label": "Authorized project entry search, list, read, and write RPC contracts"
+  },
+  {
+    "id": "workbench-project-file-server",
+    "path": "apps/server/src/ws.ts",
+    "start": 1850,
+    "end": 1931,
+    "kind": "file",
+    "label": "Server workspace search, list, read, and write RPC handlers"
+  },
+  {
+    "id": "workbench-project-file-client",
+    "path": "packages/client-runtime/src/state/projectCommands.ts",
+    "start": 42,
+    "end": 106,
+    "kind": "file",
+    "label": "Environment-scoped project file queries and serialized writes"
+  },
+  {
+    "id": "workbench-mobile-files",
+    "path": "apps/mobile/src/features/files/FileTreeBrowser.tsx",
+    "start": 1,
+    "end": 145,
+    "kind": "file",
+    "label": "Mobile workspace tree and file preview surface"
+  },
+  {
+    "id": "workbench-asset-contract",
+    "path": "packages/contracts/src/assets.ts",
+    "start": 1,
+    "end": 180,
+    "kind": "file",
+    "label": "Typed workspace file, attachment, and favicon asset resources"
+  },
+  {
+    "id": "workbench-asset-claims",
+    "path": "apps/server/src/assets/AssetAccess.ts",
+    "start": 45,
+    "end": 97,
+    "kind": "file",
+    "label": "One-hour token TTL, preview extension allow-list, and narrow asset claims"
+  },
+  {
+    "id": "workbench-asset-containment",
+    "path": "apps/server/src/assets/AssetAccess.ts",
+    "start": 133,
+    "end": 183,
+    "kind": "file",
+    "label": "Canonical real-path workspace containment checks"
+  },
+  {
+    "id": "workbench-asset-issue",
+    "path": "apps/server/src/assets/AssetAccess.ts",
+    "start": 186,
+    "end": 425,
+    "kind": "file",
+    "label": "Scoped asset resolution, inspection, claim construction, and URL signing"
+  },
+  {
+    "id": "workbench-asset-resolve",
+    "path": "apps/server/src/assets/AssetAccess.ts",
+    "start": 430,
+    "end": 523,
+    "kind": "file",
+    "label": "Signed asset signature, expiry, path, extension, and containment enforcement"
+  },
+  {
+    "id": "workbench-asset-client",
+    "path": "packages/client-runtime/src/state/assets.ts",
+    "start": 38,
+    "end": 79,
+    "kind": "file",
+    "label": "Client asset URL refresh and expiry-aware state"
+  },
+  {
+    "id": "workbench-mobile-workspace-asset",
+    "path": "apps/mobile/src/features/files/workspaceFileAssetUrl.ts",
+    "start": 1,
+    "end": 31,
+    "kind": "file",
+    "label": "Mobile workspace-file signed asset URL request"
+  },
+  {
+    "id": "workbench-preview-contract",
+    "path": "packages/contracts/src/preview.ts",
+    "start": 145,
+    "end": 289,
+    "kind": "file",
+    "label": "Preview session snapshots, revisioned event stream, and navigation commands"
+  },
+  {
+    "id": "workbench-preview-manager",
+    "path": "apps/server/src/preview/Manager.ts",
+    "start": 44,
+    "end": 442,
+    "kind": "file",
+    "label": "Server preview state, revision, event publication, and refresh coordination"
+  },
+  {
+    "id": "workbench-preview-web-gate",
+    "path": "apps/web/src/routes/_chat.tsx",
+    "start": 111,
+    "end": 152,
+    "kind": "file",
+    "label": "Web runtime rejects in-app preview outside desktop"
+  },
+  {
+    "id": "workbench-desktop-preview-preload",
+    "path": "apps/desktop/src/preload.ts",
+    "start": 167,
+    "end": 272,
+    "kind": "file",
+    "label": "Curated renderer-to-main preview IPC surface"
+  },
+  {
+    "id": "workbench-desktop-preview-ipc",
+    "path": "apps/desktop/src/ipc/methods/preview.ts",
+    "start": 51,
+    "end": 92,
+    "kind": "file",
+    "label": "Desktop main-process preview IPC dispatch to PreviewManager"
+  },
+  {
+    "id": "workbench-desktop-preview-manager",
+    "path": "apps/desktop/src/preview/Manager.ts",
+    "start": 1875,
+    "end": 2028,
+    "kind": "file",
+    "label": "Electron PreviewManager validates and owns guest WebContents"
+  },
+  {
+    "id": "workbench-preview-automation-contract",
+    "path": "packages/contracts/src/previewAutomation.ts",
+    "start": 20,
+    "end": 113,
+    "kind": "file",
+    "label": "Preview automation host identity and operation vocabulary"
+  },
+  {
+    "id": "workbench-preview-automation-broker",
+    "path": "apps/server/src/mcp/PreviewAutomationBroker.ts",
+    "start": 420,
+    "end": 587,
+    "kind": "file",
+    "label": "Environment-compatible desktop selection and sticky provider-session host lease"
+  },
+  {
+    "id": "workbench-mcp-provider-preparation",
+    "path": "apps/server/src/provider/Layers/ProviderService.ts",
+    "start": 237,
+    "end": 300,
+    "kind": "file",
+    "label": "Agent browser access setting gates MCP credential issue and revocation"
+  },
+  {
+    "id": "workbench-mcp-session-start",
+    "path": "apps/server/src/provider/Layers/ProviderService.ts",
+    "start": 645,
+    "end": 670,
+    "kind": "file",
+    "label": "MCP session is prepared before the provider adapter starts"
+  },
+  {
+    "id": "workbench-mcp-registry",
+    "path": "apps/server/src/mcp/McpSessionRegistry.ts",
+    "start": 59,
+    "end": 201,
+    "kind": "file",
+    "label": "Hashed bearer registry, scoped preview capability, liveness, and eager revocation"
+  },
+  {
+    "id": "workbench-mcp-http-auth",
+    "path": "apps/server/src/mcp/McpHttpServer.ts",
+    "start": 26,
+    "end": 97,
+    "kind": "file",
+    "label": "Provider-scoped bearer authentication supplies MCP invocation scope"
+  },
+  {
+    "id": "workbench-mcp-http-toolkit",
+    "path": "apps/server/src/mcp/McpHttpServer.ts",
+    "start": 130,
+    "end": 226,
+    "kind": "file",
+    "label": "Authenticated preview toolkit registration on the MCP HTTP route"
+  },
+  {
+    "id": "workbench-mcp-codex-injection",
+    "path": "apps/server/src/provider/Layers/CodexAdapter.ts",
+    "start": 1662,
+    "end": 1692,
+    "kind": "file",
+    "label": "Codex t3-code MCP URL and bearer-token environment injection"
+  },
+  {
+    "id": "workbench-mcp-claude-injection",
+    "path": "apps/server/src/provider/Layers/ClaudeAdapter.ts",
+    "start": 4149,
+    "end": 4195,
+    "kind": "file",
+    "label": "Claude t3-code MCP HTTP server configuration injection"
+  },
+  {
+    "id": "workbench-mcp-cursor-injection",
+    "path": "apps/server/src/provider/Layers/CursorAdapter.ts",
+    "start": 534,
+    "end": 558,
+    "kind": "file",
+    "label": "Cursor ACP t3-code MCP server injection"
+  },
+  {
+    "id": "workbench-mcp-grok-injection",
+    "path": "apps/server/src/provider/Layers/GrokAdapter.ts",
+    "start": 572,
+    "end": 596,
+    "kind": "file",
+    "label": "Grok ACP t3-code MCP server injection"
+  },
+  {
+    "id": "workbench-mcp-opencode-injection",
+    "path": "apps/server/src/provider/Layers/OpenCodeAdapter.ts",
+    "start": 1234,
+    "end": 1249,
+    "kind": "file",
+    "label": "OpenCode t3-code MCP registration only for T3-owned local servers"
+  },
+  {
+    "id": "workbench-vcs-contract",
+    "path": "packages/contracts/src/vcs.ts",
+    "start": 1,
+    "end": 36,
+    "kind": "file",
+    "label": "VCS driver identity, freshness, and capability flags"
+  },
+  {
+    "id": "workbench-git-worktree-contract",
+    "path": "packages/contracts/src/git.ts",
+    "start": 76,
+    "end": 165,
+    "kind": "file",
+    "label": "Server-addressed VCS reference and worktree operation inputs"
+  },
+  {
+    "id": "worktree-local-selected-path",
+    "path": "apps/mobile/src/lib/projectThreadStartTurn.ts",
+    "start": 50,
+    "end": 88,
+    "kind": "file",
+    "label": "Mobile local bootstrap retains a supplied existing workspace path"
+  },
+  {
+    "id": "worktree-runtime-cwd-resolution",
+    "path": "apps/server/src/checkpointing/Utils.ts",
+    "start": 12,
+    "end": 27,
+    "kind": "file",
+    "label": "Runtime workspace resolution prefers thread worktreePath before project root"
+  },
+  {
+    "id": "worktree-setup-launch-outcome",
+    "path": "apps/server/src/ws.ts",
+    "start": 846,
+    "end": 959,
+    "kind": "file",
+    "label": "Bootstrap setup launch records failure or started activity outcomes"
+  },
+  {
+    "id": "worktree-thread-deletion-effects",
+    "path": "apps/server/src/orchestration/Layers/ThreadDeletionReactor.ts",
+    "start": 45,
+    "end": 65,
+    "kind": "file",
+    "label": "Thread deletion stops provider session and closes terminal history"
+  },
+  {
+    "id": "worktree-web-orphan-cleanup",
+    "path": "apps/web/src/hooks/useThreadActions.ts",
+    "start": 308,
+    "end": 453,
+    "kind": "file",
+    "label": "Web-confirmed orphaned-worktree removal follows durable thread deletion"
+  },
+  {
+    "id": "workbench-pr-rpc-contract",
+    "path": "packages/contracts/src/rpc.ts",
+    "start": 289,
+    "end": 603,
+    "kind": "file",
+    "label": "Pull-request list, detail, action, review, and invalidation RPC surface"
+  },
+  {
+    "id": "workbench-pr-http-contract",
+    "path": "packages/contracts/src/environmentHttp.ts",
+    "start": 533,
+    "end": 547,
+    "kind": "file",
+    "label": "Authenticated HTTP endpoint for large pull-request diff payloads"
+  },
+  {
+    "id": "workbench-pr-project-resolution",
+    "path": "apps/server/src/pullRequest/PullRequestService.ts",
+    "start": 585,
+    "end": 740,
+    "kind": "file",
+    "label": "Eligible repository resolution, worktree de-duplication, and alternate viewer roots"
+  },
+  {
+    "id": "workbench-pr-invalidation",
+    "path": "apps/server/src/pullRequest/PullRequestService.ts",
+    "start": 2110,
+    "end": 2145,
+    "kind": "file",
+    "label": "Successful PR mutations invalidate reference and listing epochs"
+  },
+  {
+    "id": "workbench-pr-web-capability",
+    "path": "apps/web/src/routes/_chat.pull-requests.tsx",
+    "start": 223,
+    "end": 274,
+    "kind": "file",
+    "label": "Web PR route selects connected environments advertising pull-request capability"
+  },
+  {
+    "id": "workbench-mobile-external-pr",
+    "path": "apps/mobile/src/features/threads/ThreadGitControls.tsx",
+    "start": 149,
+    "end": 188,
+    "kind": "file",
+    "label": "Mobile Git controls open an existing pull request externally"
+  },
+  {
+    "id": "workbench-mobile-vcs-state",
+    "path": "apps/mobile/src/state/vcs.ts",
+    "start": 1,
+    "end": 9,
+    "kind": "file",
+    "label": "Mobile re-exports shared server-backed VCS state"
+  },
+  {
+    "id": "permission-runtime-mode-decider",
+    "path": "apps/server/src/orchestration/decider.ts",
+    "start": 878,
+    "end": 900,
+    "kind": "file",
+    "label": "Runtime-mode command validation and durable event creation"
+  },
+  {
+    "id": "permission-turn-start-stored-mode",
+    "path": "apps/server/src/orchestration/decider.ts",
+    "start": 926,
+    "end": 995,
+    "kind": "file",
+    "label": "Turn-start event takes runtime and interaction modes from stored thread state"
+  },
+  {
+    "id": "permission-response-intent-decider",
+    "path": "apps/server/src/orchestration/decider.ts",
+    "start": 1061,
+    "end": 1110,
+    "kind": "file",
+    "label": "Approval and structured-input responses become durable requested events"
+  },
+  {
+    "id": "permission-claude-special-input",
+    "path": "apps/server/src/provider/Layers/ClaudeAdapter.ts",
+    "start": 3966,
+    "end": 4000,
+    "kind": "file",
+    "label": "Claude AskUserQuestion and ExitPlanMode are intercepted before full-access shortcut"
+  },
+  {
+    "id": "permission-grok-full-access",
+    "path": "apps/server/src/provider/Layers/GrokAdapter.ts",
+    "start": 182,
+    "end": 203,
+    "kind": "file",
+    "label": "Grok full-access selects allow-always or allow-once when offered"
+  },
+  {
+    "id": "permission-pinned-activities",
+    "path": "apps/server/src/orchestration/Layers/ProjectionSnapshotQuery.ts",
+    "start": 1256,
+    "end": 1342,
+    "kind": "file",
+    "label": "Unresolved approval and user-input request activities are pinned outside the recent window"
+  },
+  {
+    "id": "work-task-stable-streams",
+    "path": "apps/server/src/orchestration/Layers/ProviderRuntimeIngestion.ts",
+    "start": 541,
+    "end": 742,
+    "kind": "file",
+    "label": "Only task progress, typed usage, and agent tool heartbeats use stable latest-state activity ids"
+  },
+  {
+    "id": "work-subagent-legacy-classification",
+    "path": "packages/client-runtime/src/state/subagentRuntime.ts",
+    "start": 112,
+    "end": 120,
+    "kind": "file",
+    "label": "Legacy activity without server-stamped agentKind falls back to background classification"
+  },
+  {
+    "id": "work-mobile-skill-search",
+    "path": "apps/mobile/src/features/threads/composerSlashSkillSearch.ts",
+    "start": 1,
+    "end": 16,
+    "kind": "file",
+    "label": "Mobile skill search matches enabled inventory without web collision filtering"
+  },
+  {
+    "id": "work-web-skill-insertion",
+    "path": "apps/web/src/components/chat/ChatComposer.tsx",
+    "start": 1807,
+    "end": 1823,
+    "kind": "file",
+    "label": "Web skill selection inserts provider-facing dollar-prefixed prompt syntax"
+  },
+  {
+    "id": "work-mobile-skill-insertion",
+    "path": "apps/mobile/src/features/threads/ThreadComposer.tsx",
+    "start": 601,
+    "end": 617,
+    "kind": "file",
+    "label": "Mobile skill selection inserts provider-facing dollar-prefixed prompt syntax"
+  },
+  {
+    "id": "turn-lifecycle-web-mode-persist",
+    "path": "apps/web/src/components/ChatView.tsx",
+    "start": 5549,
+    "end": 5563,
+    "kind": "file",
+    "label": "Web persists selected model and modes on the thread before sending the turn"
+  },
+  {
+    "id": "turn-lifecycle-domain-baseline",
+    "path": "apps/server/src/orchestration/Layers/CheckpointReactor.ts",
+    "start": 629,
+    "end": 680,
+    "kind": "file",
+    "label": "Durable turn-start or user-message events trigger the early checkpoint baseline"
+  },
+  {
+    "id": "project-cli-add",
+    "path": "apps/server/src/cli/project.ts",
+    "start": 444,
+    "end": 491,
+    "kind": "file",
+    "label": "CLI project add normalizes one explicit root and dispatches project.create"
+  },
+  {
+    "id": "project-startup-cwd-bootstrap",
+    "path": "apps/server/src/serverRuntimeStartup.ts",
+    "start": 196,
+    "end": 249,
+    "kind": "file",
+    "label": "Optional startup flag registers the configured cwd and creates an initial local thread"
+  },
+  {
+    "id": "project-client-add-path",
+    "path": "packages/client-runtime/src/operations/projects.ts",
+    "start": 256,
+    "end": 316,
+    "kind": "file",
+    "label": "Client validates one chosen add-project path and builds project.create"
+  },
+  {
+    "id": "project-clone-registration",
+    "path": "apps/web/src/components/CommandPalette.tsx",
+    "start": 1950,
+    "end": 1980,
+    "kind": "file",
+    "label": "Web resolves one clone destination and registers the returned checkout through the normal add-project flow"
+  },
+  {
+    "id": "project-script-durable-save",
+    "path": "apps/web/src/components/ChatView.tsx",
+    "start": 3188,
+    "end": 3252,
+    "kind": "file",
+    "label": "Imported or edited scripts are saved into the durable project scripts list"
+  },
+  {
+    "id": "project-script-setup-selection",
+    "path": "packages/shared/src/projectScripts.ts",
+    "start": 31,
+    "end": 37,
+    "kind": "file",
+    "label": "Setup selects the first opted-in durable project script"
+  },
+  {
+    "id": "client-connection-resolver",
+    "path": "packages/client-runtime/src/connection/resolver.ts",
+    "start": 51,
+    "end": 280,
+    "kind": "file",
+    "label": "Target-specific preparation into a prepared connection"
+  },
+  {
+    "id": "client-connection-driver",
+    "path": "packages/client-runtime/src/connection/driver.ts",
+    "start": 15,
+    "end": 61,
+    "kind": "file",
+    "label": "Resolver, session factory, and staged connection lease"
+  },
+  {
+    "id": "client-registry-supervisor-lease",
+    "path": "packages/client-runtime/src/connection/registry.ts",
+    "start": 171,
+    "end": 334,
+    "kind": "file",
+    "label": "Per-environment supervisor lease lock and scoped lifecycle"
+  },
+  {
+    "id": "client-connection-supervisor-state",
+    "path": "packages/client-runtime/src/connection/supervisor.ts",
+    "start": 198,
+    "end": 247,
+    "kind": "file",
+    "label": "Supervisor service state and initial lifecycle"
+  },
+  {
+    "id": "client-connection-supervisor-retry",
+    "path": "packages/client-runtime/src/connection/supervisor.ts",
+    "start": 678,
+    "end": 753,
+    "kind": "file",
+    "label": "Transient retry, backoff, and blocked retry policy"
+  },
+  {
+    "id": "client-rpc-dynamic-subscription",
+    "path": "packages/client-runtime/src/rpc/client.ts",
+    "start": 170,
+    "end": 280,
+    "kind": "file",
+    "label": "Session-aware dynamic subscription replacement"
+  },
+  {
+    "id": "client-state-runtime-families",
+    "path": "packages/client-runtime/src/state/runtime.ts",
+    "start": 480,
+    "end": 567,
+    "kind": "file",
+    "label": "Environment-keyed Atom query, subscription, and command families"
+  },
+  {
+    "id": "client-shell-reconnect",
+    "path": "packages/client-runtime/src/state/shell.ts",
+    "start": 52,
+    "end": 254,
+    "kind": "file",
+    "label": "Shell cache persistence and session-aware snapshot/resume"
+  },
+  {
+    "id": "client-thread-race-guards",
+    "path": "packages/client-runtime/src/state/threads.ts",
+    "start": 134,
+    "end": 530,
+    "kind": "file",
+    "label": "Thread cache, cursor, epoch, and older-page race guards"
+  },
+  {
+    "id": "client-thread-subscription",
+    "path": "packages/client-runtime/src/state/threads.ts",
+    "start": 534,
+    "end": 693,
+    "kind": "file",
+    "label": "Thread session subscription, capability gating, and older-page request queue"
+  },
+  {
+    "id": "mobile-stack-continuity-workers",
+    "path": "apps/mobile/src/Stack.tsx",
+    "start": 338,
+    "end": 405,
+    "kind": "file",
+    "label": "Route-persistent outbox drain, share presentation, and adaptive workspace layout"
+  },
+  {
+    "id": "mobile-platform-connection-services",
+    "path": "apps/mobile/src/connection/platform.ts",
+    "start": 29,
+    "end": 229,
+    "kind": "file",
+    "label": "Mobile connectivity, wakeups, capabilities, and environment-owned cleanup"
+  },
+  {
+    "id": "mobile-environment-cache-store",
+    "path": "apps/mobile/src/connection/environment-cache-store.ts",
+    "start": 1,
+    "end": 247,
+    "kind": "file",
+    "label": "Schema-versioned SQLite adapters for environment client caches"
+  },
+  {
+    "id": "mobile-persistence-layer",
+    "path": "apps/mobile/src/persistence/layer.ts",
+    "start": 1,
+    "end": 16,
+    "kind": "file",
+    "label": "Mobile database, secure storage, preferences, and cache layer composition"
+  },
+  {
+    "id": "mobile-secure-connection-catalog",
+    "path": "apps/mobile/src/connection/catalog-store.ts",
+    "start": 1,
+    "end": 121,
+    "kind": "file",
+    "label": "Locked and migrated connection catalog in mobile secure storage"
+  },
+  {
+    "id": "mobile-storage-domain",
+    "path": "apps/mobile/src/persistence/mobile-storage.ts",
+    "start": 16,
+    "end": 264,
+    "kind": "file",
+    "label": "Saved connections, device registration identity, and shortcuts storage domain"
+  },
+  {
+    "id": "mobile-outbox-model",
+    "path": "apps/mobile/src/state/thread-outbox-model.ts",
+    "start": 24,
+    "end": 227,
+    "kind": "file",
+    "label": "Versioned queued-turn model, delivery decision, and retry classification"
+  },
+  {
+    "id": "mobile-outbox-manager",
+    "path": "apps/mobile/src/state/thread-outbox-manager.ts",
+    "start": 40,
+    "end": 227,
+    "kind": "file",
+    "label": "Serialized optimistic and durable mobile outbox manager"
+  },
+  {
+    "id": "mobile-share-config",
+    "path": "apps/mobile/app.config.ts",
+    "start": 111,
+    "end": 153,
+    "kind": "file",
+    "label": "iOS widget and cross-platform incoming-share capability configuration"
+  },
+  {
+    "id": "mobile-share-provider",
+    "path": "apps/mobile/src/features/sharing/IncomingShareProvider.tsx",
+    "start": 1,
+    "end": 316,
+    "kind": "file",
+    "label": "Native payload ingestion, persisted inbox projection, and app-active refresh"
+  },
+  {
+    "id": "mobile-share-inbox",
+    "path": "apps/mobile/src/features/sharing/incoming-share-inbox.ts",
+    "start": 31,
+    "end": 193,
+    "kind": "file",
+    "label": "Serialized incoming-share ingestion, reservation, release, and consumption"
+  },
+  {
+    "id": "mobile-share-storage",
+    "path": "apps/mobile/src/features/sharing/incoming-share-storage.ts",
+    "start": 1,
+    "end": 80,
+    "kind": "file",
+    "label": "One persisted JSON document per incoming mobile share"
+  },
+  {
+    "id": "mobile-thread-feed",
+    "path": "apps/mobile/src/features/threads/ThreadFeed.tsx",
+    "start": 1475,
+    "end": 2165,
+    "kind": "file",
+    "label": "Virtualized native thread feed, visible-position preservation, and keyboard-aware end following"
+  },
+  {
+    "id": "mobile-native-review-adapter",
+    "path": "apps/mobile/src/features/review/nativeReviewDiffAdapter.ts",
+    "start": 1,
+    "end": 526,
+    "kind": "file",
+    "label": "Parsed review diff to cached native row and theme model"
+  },
+  {
+    "id": "mobile-hardware-keyboard",
+    "path": "apps/mobile/src/features/keyboard/hardwareKeyboardCommands.ts",
+    "start": 1,
+    "end": 78,
+    "kind": "file",
+    "label": "Route-scoped most-recent-first hardware keyboard command dispatch"
+  },
+  {
+    "id": "mobile-agent-activity-widget",
+    "path": "apps/mobile/src/widgets/AgentActivity.tsx",
+    "start": 21,
+    "end": 381,
+    "kind": "file",
+    "label": "iOS Agent Activity widget and Live Activity projection"
+  },
+  {
+    "id": "mobile-update-flow",
+    "path": "apps/mobile/src/features/updates/app-updates.ts",
+    "start": 253,
+    "end": 539,
+    "kind": "file",
+    "label": "OTA check, download, deferral, persistence flush, and reload coordination"
+  },
+  {
+    "id": "mobile-foreground-handoff",
+    "path": "apps/mobile/src/lib/foreground-handoff.ts",
+    "start": 1,
+    "end": 22,
+    "kind": "file",
+    "label": "Reference-counted app-initiated native foreground handoff guard"
+  },
+  {
+    "id": "desktop-primary-platform-selection",
+    "path": "apps/desktop/src/backend/DesktopBackendConfiguration.ts",
+    "start": 677,
+    "end": 743,
+    "kind": "file",
+    "label": "Host-local primary configuration with optional Windows WSL-only resolution"
+  },
+  {
+    "id": "desktop-backend-pool-lifecycle",
+    "path": "apps/desktop/src/backend/DesktopBackendPool.ts",
+    "start": 139,
+    "end": 440,
+    "kind": "file",
+    "label": "Primary lifetime, per-instance child scopes, registration, and unregister protection"
+  },
+  {
+    "id": "desktop-backend-process-supervision",
+    "path": "apps/desktop/src/backend/DesktopBackendManager.ts",
+    "start": 626,
+    "end": 1150,
+    "kind": "file",
+    "label": "Independent instance state, readiness, restart scheduling, and graceful stop"
+  },
+  {
+    "id": "desktop-backend-process-wiring",
+    "path": "apps/desktop/src/backend/DesktopBackendManager.ts",
+    "start": 440,
+    "end": 610,
+    "kind": "file",
+    "label": "Child-process bootstrap channels, diagnostics demand, and repeated HTTP readiness"
+  },
+  {
+    "id": "desktop-wsl-reconciliation",
+    "path": "apps/desktop/src/wsl/DesktopWslBackend.ts",
+    "start": 97,
+    "end": 265,
+    "kind": "file",
+    "label": "Serialized WSL secondary reconciliation and WSL-only primary exclusion"
+  },
+  {
+    "id": "desktop-ssh-gateway",
+    "path": "apps/desktop/src/ssh/DesktopSshEnvironment.ts",
+    "start": 51,
+    "end": 166,
+    "kind": "file",
+    "label": "Desktop SSH discovery, managed remote environment, and password-prompt gateway"
+  },
+  {
+    "id": "desktop-lifecycle-quit",
+    "path": "apps/desktop/src/app/DesktopLifecycle.ts",
+    "start": 190,
+    "end": 254,
+    "kind": "file",
+    "label": "Ordinary, updater-controlled, window, activation, and signal quit paths"
+  },
+  {
+    "id": "desktop-app-pool-shutdown",
+    "path": "apps/desktop/src/app/DesktopApp.ts",
+    "start": 295,
+    "end": 315,
+    "kind": "file",
+    "label": "Concurrent graceful shutdown of every registered local backend instance"
+  },
+  {
+    "id": "distribution-root-build-scripts",
+    "path": "package.json",
+    "start": 21,
+    "end": 45,
+    "kind": "file",
+    "label": "Monorepo build and desktop artifact entrypoints"
+  },
+  {
+    "id": "distribution-cli-package",
+    "path": "apps/server/package.json",
+    "start": 1,
+    "end": 52,
+    "kind": "file",
+    "label": "Published t3 package metadata, executable, payload, and runtime dependencies"
+  },
+  {
+    "id": "distribution-cli-build-publish",
+    "path": "apps/server/scripts/cli.ts",
+    "start": 143,
+    "end": 304,
+    "kind": "file",
+    "label": "CLI bundle composition and temporary npm publication metadata"
+  },
+  {
+    "id": "distribution-cli-bundle-config",
+    "path": "apps/server/vite.config.ts",
+    "start": 23,
+    "end": 75,
+    "kind": "file",
+    "label": "Server bundling policy and release-time public configuration"
+  },
+  {
+    "id": "distribution-desktop-build-config",
+    "path": "scripts/build-desktop-artifact.ts",
+    "start": 2038,
+    "end": 2177,
+    "kind": "file",
+    "label": "Electron-builder platform, artifact, update, protocol, and signing configuration"
+  },
+  {
+    "id": "distribution-desktop-stage-pipeline",
+    "path": "scripts/build-desktop-artifact.ts",
+    "start": 2650,
+    "end": 3070,
+    "kind": "file",
+    "label": "Desktop staging, dependency closure, sidecars, and artifact build pipeline"
+  },
+  {
+    "id": "distribution-release-workflow",
+    "path": ".github/workflows/release.yml",
+    "start": 1,
+    "end": 1156,
+    "kind": "file",
+    "label": "Stable and nightly release graph"
+  },
+  {
+    "id": "distribution-release-artifact-matrix",
+    "path": ".github/workflows/release.yml",
+    "start": 342,
+    "end": 397,
+    "kind": "file",
+    "label": "Desktop release artifact matrix and latent Windows arm64 entry"
+  },
+  {
+    "id": "distribution-release-publish-dag",
+    "path": ".github/workflows/release.yml",
+    "start": 709,
+    "end": 1035,
+    "kind": "file",
+    "label": "CLI, GitHub Release, AUR, and hosted-web dependency graph"
+  },
+  {
+    "id": "distribution-mobile-production-workflow",
+    "path": ".github/workflows/mobile-eas-production.yml",
+    "start": 1,
+    "end": 290,
+    "kind": "file",
+    "label": "Store-build reconciliation and fingerprint-gated production OTA workflow"
+  },
+  {
+    "id": "distribution-mobile-eas-profiles",
+    "path": "apps/mobile/eas.json",
+    "start": 1,
+    "end": 63,
+    "kind": "file",
+    "label": "Development, preview, production, and store submission profiles"
+  },
+  {
+    "id": "distribution-mobile-app-config",
+    "path": "apps/mobile/app.config.ts",
+    "start": 159,
+    "end": 235,
+    "kind": "file",
+    "label": "Native identities, runtime fingerprint, OTA source, and platform configuration"
+  },
+  {
+    "id": "distribution-hosted-router",
+    "path": "apps/web/vercel.ts",
+    "start": 1,
+    "end": 66,
+    "kind": "file",
+    "label": "Release-controlled hosted channel router and disabled Git deploys"
+  },
+  {
+    "id": "distribution-marketing-release-fetch",
+    "path": "apps/marketing/src/lib/releases.ts",
+    "start": 1,
+    "end": 30,
+    "kind": "file",
+    "label": "Latest GitHub Release lookup and session cache"
+  },
+  {
+    "id": "distribution-marketing-download-page",
+    "path": "apps/marketing/src/pages/download.astro",
+    "start": 1,
+    "end": 132,
+    "kind": "file",
+    "label": "Desktop asset and mobile store download resolution"
+  },
+  {
+    "id": "distribution-aur-workflow",
+    "path": ".github/workflows/publish-aur.yml",
+    "start": 1,
+    "end": 65,
+    "kind": "file",
+    "label": "Containerized AUR validation and publishing workflow"
+  },
+  {
+    "id": "distribution-aur-release-script",
+    "path": "packaging/aur/scripts/release.sh",
+    "start": 1,
+    "end": 91,
+    "kind": "file",
+    "label": "Release asset digest verification, package build, and AUR push"
+  },
+  {
+    "id": "distribution-aur-stable-package",
+    "path": "packaging/aur/t3code-bin/PKGBUILD",
+    "start": 1,
+    "end": 104,
+    "kind": "file",
+    "label": "Stable AppImage extraction and Arch package layout"
+  },
+  {
+    "id": "distribution-aur-nightly-package",
+    "path": "packaging/aur/t3code-nightly-bin/PKGBUILD",
+    "start": 1,
+    "end": 105,
+    "kind": "file",
+    "label": "Nightly AppImage extraction and channel-isolated Arch package layout"
+  },
+  {
+    "id": "release-operations-guide",
+    "path": "docs/operations/release.md",
+    "start": 1,
+    "end": 281,
+    "kind": "file",
+    "label": "Release triggers, artifacts, hosted channels, exact-version invariant, and updater assets"
+  },
+  {
+    "id": "release-desktop-update-service",
+    "path": "apps/desktop/src/updates/DesktopUpdates.ts",
+    "start": 151,
+    "end": 760,
+    "kind": "file",
+    "label": "Desktop updater state, channel, polling, download, install, and IPC ownership"
+  },
+  {
+    "id": "release-desktop-update-reducers",
+    "path": "apps/desktop/src/updates/updateMachine.ts",
+    "start": 1,
+    "end": 209,
+    "kind": "file",
+    "label": "Pure desktop updater state transitions"
+  },
+  {
+    "id": "release-server-update-capability",
+    "path": "packages/contracts/src/environment.ts",
+    "start": 31,
+    "end": 92,
+    "kind": "file",
+    "label": "Server version and self-update capability negotiation"
+  },
+  {
+    "id": "release-server-self-update",
+    "path": "apps/server/src/cloud/selfUpdate.ts",
+    "start": 30,
+    "end": 199,
+    "kind": "file",
+    "label": "Exact-version preparation, preflight, and stable-launcher handoff"
+  },
+  {
+    "id": "release-server-update-client",
+    "path": "packages/client-runtime/src/state/server.ts",
+    "start": 517,
+    "end": 683,
+    "kind": "file",
+    "label": "Client update progress, reconnect nudging, and ready-event correlation"
+  },
+  {
+    "id": "release-server-update-architecture",
+    "path": "docs/internals/server-updates.md",
+    "start": 1,
+    "end": 99,
+    "kind": "file",
+    "label": "Stable launcher, reversible trial, database snapshot, and client correlation"
+  },
+  {
+    "id": "release-mobile-update-runtime",
+    "path": "apps/mobile/src/features/updates/app-updates.ts",
+    "start": 1,
+    "end": 480,
+    "kind": "file",
+    "label": "Expo update check, download, foreground deferral, flush, and safe reload"
+  },
+  {
+    "id": "telemetry-analytics-service",
+    "path": "apps/server/src/telemetry/AnalyticsService.ts",
+    "start": 1,
+    "end": 186,
+    "kind": "file",
+    "label": "Best-effort bounded PostHog product analytics"
+  },
+  {
+    "id": "telemetry-identity-resolution",
+    "path": "apps/server/src/telemetry/Identify.ts",
+    "start": 1,
+    "end": 300,
+    "kind": "file",
+    "label": "Hashed account or installation-scoped analytics identity selection"
+  },
+  {
+    "id": "telemetry-server-observability",
+    "path": "apps/server/src/observability/Layers/Observability.ts",
+    "start": 1,
+    "end": 94,
+    "kind": "file",
+    "label": "Server logs, local traces, optional OTLP traces, and optional metrics"
+  },
+  {
+    "id": "telemetry-browser-client-tracing",
+    "path": "apps/web/src/observability/clientTracing.ts",
+    "start": 16,
+    "end": 133,
+    "kind": "file",
+    "label": "Web tracer delegates OTLP batches through the selected primary environment"
+  },
+  {
+    "id": "telemetry-browser-ingest-route",
+    "path": "apps/server/src/http.ts",
+    "start": 141,
+    "end": 199,
+    "kind": "file",
+    "label": "Operate-scoped browser trace ingestion and optional remote forwarding"
+  },
+  {
+    "id": "telemetry-resource-architecture",
+    "path": "docs/internals/resource-telemetry.md",
+    "start": 1,
+    "end": 352,
+    "kind": "file",
+    "label": "Native resource telemetry topology, demand, retention, and packaging"
+  },
+  {
+    "id": "telemetry-resource-server",
+    "path": "apps/server/src/resourceTelemetry",
+    "kind": "directory",
+    "label": "Resource-monitor supervision, merge, history, and attribution services"
+  },
+  {
+    "id": "telemetry-resource-native",
+    "path": "native/resource-monitor/src",
+    "kind": "directory",
+    "label": "Standalone Rust resource monitor implementation"
+  },
+  {
+    "id": "access-target-model",
+    "path": "packages/client-runtime/src/connection/model.ts",
+    "start": 4,
+    "end": 54,
+    "kind": "file",
+    "label": "Primary, Bearer, Relay, and SSH target union"
+  },
+  {
+    "id": "access-connection-catalog",
+    "path": "packages/client-runtime/src/connection/catalog.ts",
+    "start": 19,
+    "end": 105,
+    "kind": "file",
+    "label": "Persisted target, profile, credential, and registration catalog"
+  },
+  {
+    "id": "access-connection-resolver",
+    "path": "packages/client-runtime/src/connection/resolver.ts",
+    "start": 51,
+    "end": 277,
+    "kind": "file",
+    "label": "Route-specific target resolution into a common prepared connection"
+  },
+  {
+    "id": "access-desktop-exposure",
+    "path": "apps/desktop/src/backend/DesktopServerExposure.ts",
+    "start": 101,
+    "end": 133,
+    "kind": "file",
+    "label": "Loopback versus network bind and LAN endpoint advertisement"
+  },
+  {
+    "id": "access-environment-auth-policy",
+    "path": "apps/server/src/auth/EnvironmentAuthPolicy.ts",
+    "start": 16,
+    "end": 47,
+    "kind": "file",
+    "label": "Runtime-mode and reachability-derived authentication policy"
+  },
+  {
+    "id": "access-pairing-grant",
+    "path": "apps/server/src/auth/PairingGrantStore.ts",
+    "start": 379,
+    "end": 567,
+    "kind": "file",
+    "label": "Time-bounded one-time pairing issuance and atomic consumption"
+  },
+  {
+    "id": "access-pairing-delegation",
+    "path": "apps/server/src/auth/http.ts",
+    "start": 335,
+    "end": 355,
+    "kind": "file",
+    "label": "Access-write and delegated-scope subset enforcement"
+  },
+  {
+    "id": "access-bearer-registration",
+    "path": "packages/client-runtime/src/connection/onboarding.ts",
+    "start": 73,
+    "end": 211,
+    "kind": "file",
+    "label": "Pairing exchange to associated bearer target, profile, and credential"
+  },
+  {
+    "id": "access-tailscale-endpoints",
+    "path": "apps/desktop/src/backend/tailscaleEndpointProvider.ts",
+    "start": 19,
+    "end": 145,
+    "kind": "file",
+    "label": "Tailnet IP and MagicDNS HTTPS advertised endpoints"
+  },
+  {
+    "id": "access-tailscale-serve",
+    "path": "packages/tailscale/src/tailscale.ts",
+    "start": 278,
+    "end": 365,
+    "kind": "file",
+    "label": "Tailscale HTTPS URL and Serve proxy lifecycle"
+  },
+  {
+    "id": "access-desktop-ssh-gateway",
+    "path": "apps/desktop/src/ssh/DesktopSshEnvironment.ts",
+    "start": 127,
+    "end": 155,
+    "kind": "file",
+    "label": "Desktop-owned SSH ensure and disconnect gateway"
+  },
+  {
+    "id": "access-ssh-forward",
+    "path": "packages/ssh/src/tunnel.ts",
+    "start": 942,
+    "end": 1442,
+    "kind": "file",
+    "label": "Remote server launch, local SSH forwarding, readiness, and finalization"
+  },
+  {
+    "id": "access-ssh-registration",
+    "path": "packages/client-runtime/src/connection/onboarding.ts",
+    "start": 213,
+    "end": 243,
+    "kind": "file",
+    "label": "SSH environment target and profile registration"
+  },
+  {
+    "id": "connect-relay-control-plane",
+    "path": "infra/relay/README.md",
+    "start": 6,
+    "end": 29,
+    "kind": "file",
+    "label": "Relay responsibility and direct post-launch environment traffic"
+  },
+  {
+    "id": "connect-maintainer-doc",
+    "path": "docs/internals/t3-connect.md",
+    "start": 1,
+    "end": 33,
+    "kind": "file",
+    "label": "Maintainer-documented Clerk application and OAuth configuration"
+  },
+  {
+    "id": "remote-explicit-future-work",
+    "path": "docs/internals/remote.md",
+    "start": 223,
+    "end": 229,
+    "kind": "file",
+    "label": "Explicitly unbuilt remote endpoint-provider, callback-broker, and multi-environment work"
+  },
+  {
+    "id": "plan-ui-transition",
+    "path": "apps/web/src/planAgentSelectionHeal.tsx",
+    "start": 10,
+    "end": 51,
+    "kind": "file",
+    "label": "Web legacy plan-mode selection healing after settings hydration"
+  },
+  {
+    "id": "plan-ui-capability-filter",
+    "path": "apps/web/src/providerModels.ts",
+    "start": 80,
+    "end": 112,
+    "kind": "file",
+    "label": "Legacy plan-mode capability filtering before model dispatch"
+  },
+  {
+    "id": "plan-ui-mobile-legacy",
+    "path": "apps/mobile/src/persistence/mobile-preferences.ts",
+    "start": 34,
+    "end": 45,
+    "kind": "file",
+    "label": "Device-local mobile legacy plan-mode preference"
+  }
+]

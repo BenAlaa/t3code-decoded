@@ -1,0 +1,25 @@
+---
+import { getSourceReference, sourceReferenceHref, sourceReferenceLabel } from "../lib/sources";
+
+interface Props {
+  number: string;
+  title: string;
+  hint?: string;
+  caption: string;
+  textEquivalent: string;
+  sources: string[];
+}
+const { number, title, hint, caption, textEquivalent, sources } = Astro.props;
+if (sources.length === 0) throw new Error(`Figure ${number} requires at least one source reference.`);
+const sourceRefs = sources.map(getSourceReference);
+---
+
+<figure class="figure">
+  <div class="figure-head"><strong>Figure {number} · {title}</strong>{hint && <span>{hint}</span>}</div>
+  <div class="figure-body"><slot /></div>
+  <details class="figure-text"><summary>Text equivalent</summary><p>{textEquivalent}</p></details>
+  <figcaption><strong>Figure {number}.</strong> {caption}</figcaption>
+  <div class="figure-sources" aria-label={`Sources for figure ${number}`}>
+    {sourceRefs.map((source) => <a href={sourceReferenceHref(source)} rel="noreferrer"><code>{sourceReferenceLabel(source)}</code> ↗</a>)}
+  </div>
+</figure>

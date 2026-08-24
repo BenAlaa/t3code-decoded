@@ -1,0 +1,176 @@
+---
+interface Props { id: string; }
+const { id } = Astro.props;
+if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(id)) {
+  throw new Error("WorkbenchCapabilityLab requires a stable kebab-case id.");
+}
+
+const services = {
+  terminal: {
+    label: "Terminal",
+    owner: "Server PTY manager",
+    transport: "RPC command + attach stream",
+    path: ["Client names thread + terminal id", "Server opens or restores PTY history", "Attach receives snapshot, then live output / exit / activity events"],
+    boundary: "The client renders a terminal; the process and its environment stay with the server.",
+    surfaces: { web: "Ghostty web surface", desktop: "web renderer inside Electron", mobile: "native terminal surface", provider: "No provider terminal endpoint" },
+  },
+  files: {
+    label: "Files",
+    owner: "Server workspace services",
+    transport: "Authenticated project RPC",
+    path: ["Client asks for bounded entries, search, read, or write", "Server resolves the workspace operation", "Client renders a tree, source/file preview, or editor state"],
+    boundary: "A file pane is not a local filesystem mirror; operations address the selected server environment.",
+    surfaces: { web: "tree, preview, and editor paths", desktop: "same web renderer path", mobile: "tree and file-preview paths", provider: "Provider tools are a separate harness contract" },
+  },
+  assets: {
+    label: "Assets",
+    owner: "Server asset access",
+    transport: "RPC URL issue → signed HTTP GET",
+    path: ["Client requests a URL for an attachment, workspace file, or favicon", "Server validates scope/type and signs expiring claims", "Browser or native image/web view fetches the relative asset URL"],
+    boundary: "A signed URL grants only the claimed resource/path until expiry; it is not a filesystem browse token.",
+    surfaces: { web: "uses shared asset URL state", desktop: "uses the web renderer path", mobile: "workspace-file asset hook", provider: "May receive attachment paths through its own adapter flow" },
+  },
+  preview: {
+    label: "Preview & browser",
+    owner: "Desktop Electron host + server preview metadata",
+    transport: "Server RPC/event model + desktop IPC/webview",
+    path: ["Server records per-thread tab metadata and revisions", "Desktop renderer requests actions through curated preload IPC; Electron's preview manager owns the guest Chromium WebContents", "Status/navigation are reported back and fan out to subscribers"],
+    boundary: "The server tracks collaboration state; it does not itself render or automate a browser page.",
+    surfaces: { web: "explicitly unavailable", desktop: "native webview host", mobile: "no matching in-app browser host", provider: "can request automation only through an available desktop host" },
+  },
+  mcp: {
+    label: "MCP preview toolkit",
+    owner: "Provider-session credential registry + MCP HTTP server",
+    transport: "Provider-scoped bearer HTTP + broker stream",
+    path: ["Provider service optionally issues one thread-scoped credential carrying a registry-generated MCP session id", "Provider adapter receives t3-code MCP configuration", "MCP request is authenticated, scoped, then brokered to a compatible desktop host"],
+    boundary: "This is T3's preview toolkit, not a universal inventory or controller for every MCP server a provider may know.",
+    surfaces: { web: "not an automation host", desktop: "can register an automation host", mobile: "not an automation host", provider: "uses t3-code only when the session is configured and authorized" },
+  },
+  vcs: {
+    label: "VCS & worktrees",
+    owner: "Server VCS driver",
+    transport: "Authenticated RPC commands and snapshots",
+    path: ["Client selects a project/thread workspace", "Server driver reads Git/VCS state or performs a requested operation", "Clients render the returned state; worktree creation remains a server-side saga"],
+    boundary: "VCS capability is environment-local. A UI view is not a promise that a remote checkout, branch, or worktree exists everywhere.",
+    surfaces: { web: "server-backed source-control views", desktop: "same web renderer path", mobile: "server-backed VCS state/actions", provider: "provider changes files through its own session cwd" },
+  },
+  pullRequests: {
+    label: "Pull requests",
+    owner: "Server host-provider service",
+    transport: "RPC controls + authenticated HTTP diff slices",
+    path: ["Web selects a capable environment and repository", "Server validates project/host/capability and fresh viewer permissions for writes", "Large diff slices travel over HTTP; mutations invalidate server-side listing epochs"],
+    boundary: "A visible action is never the authorization decision. The server re-checks host capability and current viewer permission before writes.",
+    surfaces: { web: "dedicated capability-gated route", desktop: "same web renderer route", mobile: "no matching pull-request route in this pinned mobile source audit", provider: "No provider turn-control path implied" },
+  },
+} as const;
+
+const serviceEntries = Object.entries(services);
+const initialKey = "terminal" as const;
+const initial = services[initialKey];
+const labId = `workbench-capability-${id}`;
+const payload = JSON.stringify({ services }).replaceAll("<", "\\u003c");
+---
+
+<section class="workbench-capability-lab" data-workbench-lab data-ready="pending" aria-labelledby={`${labId}-title`}>
+  <header>
+    <span>Interactive capability and path matrix</span>
+    <h3 id={`${labId}-title`}>Choose a workbench service; then inspect its owner, transport, and surface edge</h3>
+    <p>Each path is an architecture summary of the pinned source, not a live T3 environment.</p>
+  </header>
+
+  <div class="workbench-controls" role="tablist" aria-label="Workbench services">
+    {serviceEntries.map(([key, service], index) => (
+      <button type="button" role="tab" id={`${labId}-${key}`} aria-controls={`${labId}-panel`} aria-selected={index === 0 ? "true" : "false"} tabindex={index === 0 ? "0" : "-1"} data-service={key}>{service.label}</button>
+    ))}
+  </div>
+
+  <div class="workbench-board" id={`${labId}-panel`} role="tabpanel" aria-labelledby={`${labId}-${initialKey}`} tabindex="0">
+    <p class="sr-only" role="status" aria-live="polite" aria-atomic="true" data-status>{initial.label}. {initial.owner}. {initial.transport}.</p>
+    <div class="workbench-summary">
+      <span data-label>{initial.label}</span>
+      <dl>
+        <div><dt>Primary owner</dt><dd data-owner>{initial.owner}</dd></div>
+        <div><dt>Transport model</dt><dd data-transport>{initial.transport}</dd></div>
+      </dl>
+    </div>
+    <ol class="workbench-path" data-path>
+      {initial.path.map((step, index) => <li><b>{index + 1}</b><span>{step}</span></li>)}
+    </ol>
+    <aside class="workbench-boundary"><strong>Boundary:</strong> <span data-boundary>{initial.boundary}</span></aside>
+    <div class="workbench-surfaces" aria-label="Surface availability">
+      <h4>Surface edge</h4>
+      <dl data-surfaces>
+        {Object.entries(initial.surfaces).map(([surface, detail]) => <div><dt>{surface === "provider" ? "Provider" : surface}</dt><dd>{detail}</dd></div>)}
+      </dl>
+    </div>
+  </div>
+
+  <details class="workbench-static" open>
+    <summary>Static matrix and reading rules</summary>
+    <div tabindex="0" role="region" aria-label="Workbench capability matrix">
+      <table>
+        <thead><tr><th scope="col">Service</th><th scope="col">Owner</th><th scope="col">Transport</th><th scope="col">Important edge</th></tr></thead>
+        <tbody>{serviceEntries.map(([, service]) => <tr><th scope="row">{service.label}</th><td>{service.owner}</td><td>{service.transport}</td><td>{service.boundary}</td></tr>)}</tbody>
+      </table>
+    </div>
+    <p>“Desktop uses the web renderer path” does not erase Electron-only authority: preview’s actual webview and automation host are desktop-owned. “No matching route” records this source audit; it is not a product roadmap claim.</p>
+  </details>
+  <noscript><p class="workbench-noscript">JavaScript is off; the complete static matrix remains available above.</p></noscript>
+  <script type="application/json" data-workbench-data set:html={payload}></script>
+</section>
+
+<script>
+  type WorkbenchService = { label: string; owner: string; transport: string; path: string[]; boundary: string; surfaces: Record<string, string> };
+  document.querySelectorAll<HTMLElement>("[data-workbench-lab]").forEach((lab) => {
+    if (lab.dataset.ready === "true") return;
+    try {
+      const data = JSON.parse(lab.querySelector<HTMLScriptElement>("[data-workbench-data]")?.textContent ?? "") as { services: Record<string, WorkbenchService> };
+      const tabs = [...lab.querySelectorAll<HTMLButtonElement>("[data-service]")];
+      const panel = lab.querySelector<HTMLElement>("[role=tabpanel]");
+      let initialized = false;
+      const text = (selector: string, value: string) => { const node = lab.querySelector<HTMLElement>(selector); if (node) node.textContent = value; };
+      const render = (key: string) => {
+        const service = data.services[key] ?? data.services.terminal;
+        if (!service) return;
+        tabs.forEach((tab) => {
+          const active = tab.dataset.service === key;
+          tab.setAttribute("aria-selected", String(active));
+          tab.tabIndex = active ? 0 : -1;
+        });
+        const activeTab = tabs.find((tab) => tab.dataset.service === key);
+        if (activeTab && panel) panel.setAttribute("aria-labelledby", activeTab.id);
+        lab.dataset.service = key;
+        text("[data-label]", service.label); text("[data-owner]", service.owner); text("[data-transport]", service.transport); text("[data-boundary]", service.boundary); text("[data-status]", `${service.label}. ${service.owner}. ${service.transport}.`);
+        const path = lab.querySelector<HTMLOListElement>("[data-path]");
+        if (path) path.replaceChildren(...service.path.map((step, index) => { const item = document.createElement("li"); const number = document.createElement("b"); number.textContent = String(index + 1); const copy = document.createElement("span"); copy.textContent = step; item.append(number, copy); return item; }));
+        const surfaces = lab.querySelector<HTMLElement>("[data-surfaces]");
+        if (surfaces) surfaces.replaceChildren(...Object.entries(service.surfaces).map(([surface, detail]) => { const row = document.createElement("div"); const term = document.createElement("dt"); term.textContent = surface === "provider" ? "Provider" : surface; const definition = document.createElement("dd"); definition.textContent = detail; row.append(term, definition); return row; }));
+        const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+        if (initialized && !reduced) panel?.animate([{ opacity: .6, transform: "translateY(4px)" }, { opacity: 1, transform: "translateY(0)" }], { duration: 150, easing: "ease-out" });
+        initialized = true;
+      };
+      tabs.forEach((tab, index) => {
+        tab.addEventListener("click", () => render(tab.dataset.service ?? "terminal"));
+        tab.addEventListener("keydown", (event) => {
+          if (!(["ArrowRight", "ArrowLeft", "Home", "End"] as string[]).includes(event.key)) return;
+          event.preventDefault();
+          const next = event.key === "Home" ? 0 : event.key === "End" ? tabs.length - 1 : (index + (event.key === "ArrowRight" ? 1 : -1) + tabs.length) % tabs.length;
+          tabs[next]?.focus(); render(tabs[next]?.dataset.service ?? "terminal");
+        });
+      });
+      render("terminal"); lab.dataset.ready = "true";
+    } catch { lab.dataset.ready = "error"; }
+  });
+</script>
+
+<style>
+  .workbench-capability-lab { margin:2rem 0; overflow:hidden; border:1px solid var(--line-strong); border-radius:14px; background:var(--paper-raised); font-family:var(--font-ui); }
+  .workbench-capability-lab > header { padding:1rem 1.2rem; border-bottom:1px solid var(--line); } .workbench-capability-lab > header span { color:var(--signal-deep); font:750 .65rem/1 var(--font-ui); letter-spacing:.1em; text-transform:uppercase; } .workbench-capability-lab h3 { margin:.35rem 0; font-size:1.05rem; } .workbench-capability-lab > header p { margin:0; color:var(--ink-soft); font-size:.82rem; line-height:1.5; }
+  .workbench-controls { display:none; gap:.45rem; overflow-x:auto; padding:.9rem 1.2rem .65rem; border-bottom:1px solid var(--line); background:var(--paper-muted); } .workbench-controls button { flex:0 0 auto; min-height:2.35rem; border:1px solid var(--line); border-radius:999px; padding:.35rem .7rem; background:var(--paper); color:var(--ink-soft); cursor:pointer; font:700 .72rem/1.2 var(--font-ui); } .workbench-controls button[aria-selected="true"] { border-color:var(--signal); background:var(--signal-soft); color:var(--signal-deep); } .workbench-controls button:focus-visible { outline:3px solid color-mix(in srgb,var(--signal) 45%,transparent); outline-offset:2px; }
+  .workbench-board { display:none; padding:1rem 1.2rem 1.2rem; outline:0; } .workbench-summary { display:grid; grid-template-columns:minmax(8rem,.55fr) 1.45fr; gap:.8rem; padding:.85rem; border:1px solid var(--line); border-radius:.65rem; background:var(--paper-muted); } .workbench-summary > span { align-self:center; color:var(--signal-deep); font:800 .83rem/1.2 var(--font-ui); } .workbench-summary dl { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:.5rem; margin:0; } .workbench-summary dl div,.workbench-surfaces dl div { min-width:0; } .workbench-summary dt,.workbench-surfaces dt { color:var(--ink-faint); font:750 .62rem/1 var(--font-ui); letter-spacing:.08em; text-transform:uppercase; } .workbench-summary dd,.workbench-surfaces dd { margin:.3rem 0 0; color:var(--ink-soft); font-size:.76rem; line-height:1.45; }
+  .workbench-path { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:.55rem; margin:1rem 0; padding:0; list-style:none; } .workbench-path li { display:grid; grid-template-columns:1.55rem 1fr; gap:.45rem; min-width:0; padding:.7rem; border:1px solid var(--line); background:var(--paper); font-size:.76rem; line-height:1.45; } .workbench-path b { display:grid; width:1.45rem; height:1.45rem; place-items:center; border-radius:50%; background:var(--signal-soft); color:var(--signal-deep); font-size:.68rem; } .workbench-path span { color:var(--ink-soft); }
+  .workbench-boundary { margin:0; padding:.75rem .85rem; border-left:4px solid var(--signal); background:var(--paper-muted); color:var(--ink-soft); font-size:.78rem; line-height:1.5; } .workbench-boundary strong { color:var(--ink); } .workbench-surfaces { margin-top:1rem; } .workbench-surfaces h4 { margin:0 0 .55rem; color:var(--ink); font-size:.82rem; } .workbench-surfaces dl { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:.55rem; margin:0; } .workbench-surfaces dl div { padding:.65rem; border-top:2px solid var(--line-strong); background:var(--paper-muted); }
+  .workbench-static { margin:0 1.2rem 1.2rem; } .workbench-static summary { cursor:pointer; color:var(--ink); font-size:.82rem; font-weight:700; } .workbench-static > div { overflow-x:auto; margin-top:.65rem; border:1px solid var(--line); border-radius:.55rem; } .workbench-static table { width:100%; min-width:58rem; border-collapse:collapse; color:var(--ink-soft); font-size:.75rem; } .workbench-static th,.workbench-static td { padding:.6rem; border-bottom:1px solid var(--line); text-align:left; vertical-align:top; line-height:1.45; } .workbench-static thead { background:var(--paper-muted); } .workbench-static tbody tr:last-child > * { border-bottom:0; } .workbench-static th[scope="row"] { color:var(--ink); } .workbench-static > p,.workbench-noscript { margin:.75rem 0 0; color:var(--ink-soft); font-size:.76rem; line-height:1.5; }
+  .workbench-capability-lab[data-ready="true"] .workbench-controls,.workbench-capability-lab[data-ready="true"] .workbench-board { display:flex; } .workbench-capability-lab[data-ready="true"] .workbench-board { display:block; } .workbench-capability-lab[data-ready="true"] .workbench-static { display:none; } .workbench-capability-lab[data-ready="true"] .workbench-noscript { display:none; }
+  @media (max-width:52rem) { .workbench-summary { grid-template-columns:1fr; } .workbench-summary dl,.workbench-surfaces dl { grid-template-columns:repeat(2,minmax(0,1fr)); } .workbench-path { grid-template-columns:1fr; } } @media (max-width:36rem) { .workbench-capability-lab > header,.workbench-board,.workbench-controls { padding-left:1rem; padding-right:1rem; } .workbench-static { margin-left:1rem; margin-right:1rem; } .workbench-summary dl,.workbench-surfaces dl { grid-template-columns:1fr; } } @media (prefers-reduced-motion:reduce) { .workbench-capability-lab *, .workbench-capability-lab *::before,.workbench-capability-lab *::after { animation:none !important; transition:none !important; scroll-behavior:auto !important; } } @media print { .workbench-controls,.workbench-board,.workbench-noscript { display:none !important; } .workbench-static { display:block !important; } .workbench-static summary { display:none; } }
+</style>

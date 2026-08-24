@@ -1,0 +1,223 @@
+---
+const lanes = [
+  { id: "projects", label: "Projects", table: "projection_projects", role: "project fields", required: true },
+  { id: "messages", label: "Messages", table: "projection_thread_messages", role: "message bodies", required: true },
+  { id: "plans", label: "Plans", table: "projection_thread_proposed_plans", role: "proposed plans", required: true },
+  { id: "activities", label: "Activities", table: "projection_thread_activities", role: "activity log", required: true },
+  { id: "sessions", label: "Sessions", table: "projection_thread_sessions", role: "runtime session", required: true },
+  { id: "turns", label: "Turns", table: "projection_turns", role: "turns + checkpoint metadata", required: false },
+  { id: "checkpoints", label: "Checkpoints", table: "no table", role: "registered no-op", required: true },
+  { id: "approvals", label: "Approvals", table: "projection_pending_approvals", role: "approval state", required: false },
+  { id: "threads", label: "Threads", table: "projection_threads", role: "shell summary (last)", required: true },
+] as const;
+
+const events = [
+  "project.created",
+  "thread.created",
+  "thread.message-sent",
+] as const;
+---
+
+<section class="projection-lab" data-projection-lab aria-labelledby="projection-lab-title">
+  <header class="projection-lab__head">
+    <span>Interactive fold lab</span>
+    <h3 id="projection-lab-title">One event stream, nine projector cursors</h3>
+    <p>
+      Step through three durable events. Every registered projector is considered in
+      order, including no-ops; the safe snapshot watermark is the slowest required
+      cursor, not the event-store head.
+    </p>
+  </header>
+
+  <div class="projection-lab__controls" aria-label="Projection lab controls">
+    <button type="button" data-projection-next>Project next event</button>
+    <button type="button" data-projection-lag aria-pressed="false" disabled>Lag Activities one event</button>
+    <button type="button" data-projection-cap aria-pressed="false">Simulate 1,001-event projector lag</button>
+    <button type="button" data-projection-reset>Reset</button>
+  </div>
+
+  <p class="projection-lab__status" role="status" aria-live="polite" aria-atomic="true" data-projection-status>
+    No sample event has been folded. All projector cursors are at 0.
+  </p>
+
+  <div class="projection-lab__metrics" aria-label="Current projection watermarks">
+    <div><span>Event-store head</span><output data-projection-head>0</output></div>
+    <div><span>Safe snapshot sequence</span><output data-projection-safe>0</output></div>
+    <div><span>Current event</span><output data-projection-event>none</output></div>
+  </div>
+
+  <div class="projection-lab__transaction" data-projection-transaction>
+    <strong>Normal command control flow</strong>
+    <span>outer SQL begins → append → projector SQL + cursor → optional filesystem cleanup → accepted receipt → outer commit</span>
+    <em>Cleanup runs before commit but is not enlisted in SQL rollback.</em>
+  </div>
+
+  <div class="projection-lab__lanes" role="region" aria-label="Ordered projector lanes" tabindex="0">
+    <ol>
+      {lanes.map((lane, index) => (
+        <li data-projection-lane={lane.id}>
+          <span class="projection-lab__order" aria-hidden="true">{index + 1}</span>
+          <div>
+            <strong>{lane.label}</strong>
+            <small>
+              <code>{lane.table}</code> · {lane.role} ·
+              {lane.required ? " snapshot-required" : " auxiliary cursor"}
+            </small>
+          </div>
+          <output aria-label={`${lane.label} last applied sequence`} data-projection-cursor={lane.id}>0</output>
+        </li>
+      ))}
+    </ol>
+  </div>
+
+  <div class="projection-lab__explain" data-projection-explain>
+    <strong>Start with the cursor, not a promise of eventual consistency.</strong>
+    <p>On a normal command, all nine folds run sequentially before the command transaction commits.</p>
+  </div>
+
+  <div class="projection-lab__cap" data-projection-cap-result hidden>
+    <strong>Projector catch-up stops at sequence 1,000</strong>
+    <p>
+      The event store is at 1,001, but bootstrap calls its reader with the default
+      total limit of 1,000. The stream completes with every projector cursor one
+      event behind; this path has no second catch-up call in the same bootstrap.
+    </p>
+  </div>
+
+  <div class="projection-static" aria-label="Static projector order fallback">
+    <p><strong>Static reference:</strong> the normal third event leaves every required cursor at 3, so the safe snapshot sequence is 3.</p>
+    <p><strong>1,001-event bootstrap case:</strong> the default total read limit stops every lane at 1,000 while the event-store head is 1,001.</p>
+    <table>
+      <thead><tr><th scope="col">Order</th><th scope="col">Projector</th><th scope="col">Read side</th><th scope="col">Watermark role</th><th scope="col">At sequence 3</th></tr></thead>
+      <tbody>
+        {lanes.map((lane, index) => <tr><td>{index + 1}</td><td>{lane.label}</td><td><code>{lane.table}</code></td><td>{lane.required ? "required" : "auxiliary"}</td><td>3</td></tr>)}
+      </tbody>
+    </table>
+  </div>
+
+  <noscript><p class="projection-lab__noscript">JavaScript is off; the static reference table records the normal folded state and the chapter explains the recovery cases.</p></noscript>
+</section>
+
+<script>
+  const laneIds = ["projects", "messages", "plans", "activities", "sessions", "turns", "checkpoints", "approvals", "threads"];
+  const requiredLaneIds = ["projects", "messages", "plans", "activities", "sessions", "checkpoints", "threads"];
+  const eventNames = ["project.created", "thread.created", "thread.message-sent"];
+
+  document.querySelectorAll<HTMLElement>("[data-projection-lab]").forEach((lab) => {
+    if (lab.dataset.projectionReady) return;
+    lab.dataset.projectionReady = "initializing";
+    const next = lab.querySelector<HTMLButtonElement>("[data-projection-next]");
+    const lagButton = lab.querySelector<HTMLButtonElement>("[data-projection-lag]");
+    const capButton = lab.querySelector<HTMLButtonElement>("[data-projection-cap]");
+    const reset = lab.querySelector<HTMLButtonElement>("[data-projection-reset]");
+    const status = lab.querySelector<HTMLElement>("[data-projection-status]");
+    const head = lab.querySelector<HTMLOutputElement>("[data-projection-head]");
+    const safe = lab.querySelector<HTMLOutputElement>("[data-projection-safe]");
+    const currentEvent = lab.querySelector<HTMLOutputElement>("[data-projection-event]");
+    const explanation = lab.querySelector<HTMLElement>("[data-projection-explain]");
+    const capResult = lab.querySelector<HTMLElement>("[data-projection-cap-result]");
+    const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+    let applied = 0;
+    let lagActivities = false;
+    let capScenario = false;
+
+    const cursorFor = (id: string) => {
+      const baseline = capScenario ? 1000 : applied;
+      return id === "activities" && lagActivities ? Math.max(0, baseline - 1) : baseline;
+    };
+    const text = (node: Element | null, value: string) => { if (node) node.textContent = value; };
+    const paint = () => {
+      const requiredCursors = requiredLaneIds.map(cursorFor);
+      const minimum = Math.min(...requiredCursors);
+      const visibleHead = capScenario ? 1001 : applied;
+      text(head, String(visibleHead));
+      text(safe, String(minimum));
+      text(currentEvent, capScenario ? "catch-up ended at #1000" : applied === 0 ? "none" : `#${applied} ${eventNames[applied - 1]}`);
+      laneIds.forEach((id) => {
+        const lane = lab.querySelector<HTMLElement>(`[data-projection-lane="${id}"]`);
+        const cursor = lab.querySelector<HTMLOutputElement>(`[data-projection-cursor="${id}"]`);
+        const value = cursorFor(id);
+        text(cursor, String(value));
+        lane?.classList.toggle("is-lagging", value < visibleHead);
+        lane?.classList.toggle("is-current", value === visibleHead && visibleHead > 0);
+      });
+      if (next) next.disabled = capScenario || applied === eventNames.length;
+      if (lagButton) {
+        lagButton.setAttribute("aria-pressed", String(lagActivities));
+        lagButton.disabled = capScenario || applied === 0;
+      }
+      if (capButton) capButton.setAttribute("aria-pressed", String(capScenario));
+      if (capResult) capResult.hidden = !capScenario;
+      if (capScenario) {
+        text(status, `Projection bootstrap stopped at its 1,000-event total read limit. Event-store head is 1,001 and the safe snapshot sequence is ${minimum}.`);
+        if (explanation) explanation.innerHTML = "<strong>This is a bootstrap limit, not the WebSocket snapshot fallback.</strong><p>The projector pipeline invokes the default-limited event stream once for each lane. The pinned code has no same-startup loop that asks for event 1,001.</p>";
+      } else if (lagActivities) {
+        text(status, `Activities is intentionally one event behind. The safe snapshot sequence is ${minimum}, even though event-store head is ${visibleHead}.`);
+        if (explanation) explanation.innerHTML = "<strong>One lane can lower the globally safe read point.</strong><p>Each projector resumes from its own durable cursor at bootstrap. A snapshot must use the minimum required cursor so it never claims rows all read models have not reached.</p>";
+      } else if (applied === 0) {
+        text(status, "No sample event has been folded. All projector cursors are at 0.");
+        if (explanation) explanation.innerHTML = "<strong>Start with the cursor, not a promise of eventual consistency.</strong><p>On a normal command, all nine folds run sequentially before the command transaction commits.</p>";
+      } else {
+        text(status, `Event #${applied}, ${eventNames[applied - 1]}, has been folded through the ordered projector list. Safe snapshot sequence is ${minimum}.`);
+        if (explanation) explanation.innerHTML = `<strong>Event #${applied} reaches every registered lane.</strong><p>The Checkpoints lane advances its cursor although its projector is a literal no-op; checkpoint metadata is read from Turns. Threads runs last and derives its shell summary from dependent projection rows.</p>`;
+      }
+      lab.classList.toggle("is-reduced", reduceMotion.matches);
+    };
+    next?.addEventListener("click", () => { applied = Math.min(eventNames.length, applied + 1); paint(); });
+    lagButton?.addEventListener("click", () => { lagActivities = !lagActivities; paint(); });
+    capButton?.addEventListener("click", () => {
+      capScenario = !capScenario;
+      if (capScenario) lagActivities = false;
+      paint();
+    });
+    reset?.addEventListener("click", () => { applied = 0; lagActivities = false; capScenario = false; paint(); });
+    const onMotionChange = () => paint();
+    reduceMotion.addEventListener("change", onMotionChange);
+    window.addEventListener("pagehide", () => reduceMotion.removeEventListener("change", onMotionChange), { once: true });
+    paint();
+    lab.dataset.projectionReady = "true";
+  });
+</script>
+
+<style>
+  .projection-lab { border: 1px solid var(--line-strong); border-radius: 1rem; background: var(--paper-raised); color: var(--ink); overflow: clip; margin: 2.5rem 0; }
+  .projection-lab__head { padding: 1.3rem 1.35rem 0; }
+  .projection-lab__head > span { color: var(--signal-deep); text-transform: uppercase; font-size: .75rem; font-weight: 750; letter-spacing: .08em; }
+  .projection-lab__head h3 { margin: .3rem 0 .45rem; font-size: 1.2rem; }
+  .projection-lab__head p { margin: 0; max-width: 70ch; color: var(--ink-soft); }
+  .projection-lab__controls { display: flex; flex-wrap: wrap; gap: .55rem; padding: 1.2rem 1.35rem .75rem; }
+  .projection-lab button { border: 1px solid var(--line-strong); background: var(--paper); color: var(--ink); padding: .48rem .66rem; border-radius: .45rem; font: inherit; font-size: .84rem; cursor: pointer; }
+  .projection-lab button:hover:not(:disabled), .projection-lab button:focus-visible { border-color: var(--signal); outline: 2px solid color-mix(in srgb, var(--signal) 30%, transparent); outline-offset: 2px; }
+  .projection-lab button[aria-pressed="true"] { background: var(--signal-soft); border-color: var(--signal); }
+  .projection-lab button:disabled { opacity: .55; cursor: not-allowed; }
+  .projection-lab__status { margin: 0 1.35rem .85rem; color: var(--ink-soft); font-size: .9rem; min-height: 2.8em; }
+  .projection-lab__metrics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1px; background: var(--line); border-block: 1px solid var(--line); }
+  .projection-lab__metrics div { padding: .75rem 1rem; background: var(--paper-raised); }
+  .projection-lab__metrics span, .projection-lab__lanes small { display: block; color: var(--ink-faint); font-size: .74rem; }
+  .projection-lab__metrics output { display: block; font-family: var(--font-mono, ui-monospace, monospace); font-weight: 750; margin-top: .15rem; overflow-wrap: anywhere; }
+  .projection-lab__transaction { display: grid; gap: .18rem; padding: .9rem 1.35rem; background: color-mix(in srgb, var(--signal) 6%, var(--paper-raised)); border-bottom: 1px solid var(--line); font-size: .88rem; }
+  .projection-lab__transaction em { font-style: normal; color: var(--ink-faint); }
+  .projection-lab__lanes { max-height: 30rem; overflow: auto; }
+  .projection-lab__lanes:focus-visible { outline: 2px solid var(--signal); outline-offset: -2px; }
+  .projection-lab__lanes ol { list-style: none; padding: 0; margin: 0; }
+  .projection-lab__lanes li { display: grid; grid-template-columns: 2.1rem minmax(0, 1fr) 2.5rem; gap: .55rem; align-items: center; padding: .6rem 1.35rem; border-bottom: 1px solid color-mix(in srgb, var(--line) 70%, transparent); }
+  .projection-lab__lanes li:last-child { border-bottom: 0; }
+  .projection-lab__order { color: var(--ink-faint); font-family: var(--font-mono, ui-monospace, monospace); }
+  .projection-lab__lanes strong { font-size: .9rem; }
+  .projection-lab__lanes code { font-size: .76rem; }
+  .projection-lab__lanes output { justify-self: end; min-width: 1.85rem; text-align: center; border-radius: 999px; background: var(--paper-muted); color: var(--ink); font-family: var(--font-mono, ui-monospace, monospace); font-weight: 800; padding: .2rem .35rem; }
+  .projection-lab__lanes .is-current output { background: color-mix(in srgb, var(--signal) 20%, var(--paper-raised)); color: var(--signal-deep); }
+  .projection-lab__lanes .is-lagging { background: color-mix(in srgb, var(--orange) 8%, var(--paper-raised)); }
+  .projection-lab__lanes .is-lagging output { background: color-mix(in srgb, var(--orange) 22%, var(--paper-raised)); color: var(--orange); }
+  .projection-lab__explain, .projection-lab__cap { margin: 1rem 1.35rem; padding: .85rem 1rem; border-left: 3px solid var(--signal); background: color-mix(in srgb, var(--signal) 5%, var(--paper-raised)); font-size: .9rem; }
+  .projection-lab__explain p, .projection-lab__cap p { margin: .35rem 0 0; }
+  .projection-lab__cap { border-left-color: var(--orange); background: color-mix(in srgb, var(--orange) 7%, var(--paper-raised)); }
+  .projection-static { display: block; padding: 1rem 1.35rem; }
+  .projection-static table { width: 100%; border-collapse: collapse; font-size: .85rem; }
+  .projection-static th, .projection-static td { border: 1px solid var(--line-strong); padding: .35rem; text-align: left; }
+  .projection-lab[data-projection-ready="true"] .projection-static { display: none; }
+  .projection-lab__noscript { margin: 1rem 1.35rem; }
+  @media (max-width: 42rem) { .projection-lab__metrics { grid-template-columns: 1fr; } .projection-lab__lanes li { padding-inline: .8rem; } .projection-lab__controls, .projection-lab__head { padding-inline: .9rem; } .projection-lab__status, .projection-lab__explain, .projection-lab__cap { margin-inline: .9rem; } }
+  @media (prefers-reduced-motion: no-preference) { .projection-lab__lanes li, .projection-lab__lanes output, .projection-lab__cap { transition: background-color 160ms ease, color 160ms ease; } }
+  @media print { .projection-lab__controls, .projection-lab__status, .projection-lab__metrics, .projection-lab__transaction, .projection-lab__lanes, .projection-lab__explain, .projection-lab__cap { display: none !important; } .projection-static { display: block !important; } }
+</style>

@@ -1,0 +1,49 @@
+name: Source correction
+description: Report a factual, source-link, or evidence-class problem in the book.
+title: "fix(book): "
+labels: [source-correction]
+body:
+  - type: markdown
+    attributes:
+      value: Thank you for helping keep the book grounded. Please cite the pinned source when possible.
+  - type: input
+    id: chapter
+    attributes:
+      label: Chapter or page
+      placeholder: Chapter 10 · Events, receipts, and idempotency
+    validations:
+      required: true
+  - type: textarea
+    id: current
+    attributes:
+      label: Current claim
+      description: Quote or summarize the claim that needs correction.
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Source evidence
+      description: Add repository paths, line ranges, tests, or immutable links.
+      placeholder: apps/server/src/...:120-150
+    validations:
+      required: true
+  - type: dropdown
+    id: classification
+    attributes:
+      label: Suspected problem
+      options:
+        - Incorrect verified behavior
+        - Documented intent presented as behavior
+        - Inference not labeled
+        - Future or latent capability presented as shipped
+        - Stale or broken source reference
+        - Other evidence problem
+    validations:
+      required: true
+  - type: textarea
+    id: correction
+    attributes:
+      label: Suggested correction
+    validations:
+      required: false

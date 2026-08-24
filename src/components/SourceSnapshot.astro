@@ -1,0 +1,10 @@
+---
+import lock from "../../sources/t3code.lock.json";
+import Stats from "./Stats.astro";
+---
+
+<Stats items={[
+  { value: lock.shortCommit, label: "Pinned source commit" },
+  { value: lock.productionFiles.toLocaleString("en-US"), label: "Production/build source files" },
+  { value: lock.productionLines.toLocaleString("en-US"), label: "Production/build source lines" }
+]} />

@@ -1,0 +1,124 @@
+---
+import { getSourceReference, sourceReferenceHref, sourceReferenceLabel } from "../lib/sources";
+
+interface Scenario {
+  label: string;
+  title: string;
+  summary: string;
+  facts: string[];
+  sourceIds: string[];
+  tone?: "safe" | "warning" | "failure" | "neutral";
+}
+interface Props {
+  id: string;
+  title: string;
+  prompt: string;
+  scenarios: Scenario[];
+}
+const { id, title, prompt, scenarios } = Astro.props;
+if (scenarios.length < 2) throw new Error(`ScenarioLab '${title}' requires at least two scenarios.`);
+if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(id)) throw new Error(`ScenarioLab '${title}' requires a stable kebab-case id.`);
+const labId = `scenario-${id}`;
+const toneLabels = { safe: "Expected path", warning: "Caveat", failure: "Failure path", neutral: "Alternative" } as const;
+const resolved = scenarios.map(({ sourceIds, ...scenario }) => ({
+  ...scenario,
+  toneLabel: toneLabels[scenario.tone ?? "neutral"],
+  sources: sourceIds.map((id) => {
+    const source = getSourceReference(id);
+    return { label: sourceReferenceLabel(source), href: sourceReferenceHref(source) };
+  }),
+}));
+const payload = JSON.stringify(resolved).replaceAll("<", "\\u003c");
+---
+
+<section class="scenario-lab" data-scenario-lab aria-labelledby={`${labId}-title`}>
+  <header class="scenario-head"><span>Interactive lab</span><h3 id={`${labId}-title`}>{title}</h3><p>{prompt}</p></header>
+  <div class="scenario-tabs" role="tablist" aria-label="Scenarios">
+    {resolved.map((scenario, index) => (
+      <button type="button" role="tab" id={`${labId}-tab-${index}`} data-scenario-index={index} aria-selected={index === 0 ? "true" : "false"} tabindex={index === 0 ? 0 : -1} aria-controls={`${labId}-detail`}>{scenario.label}</button>
+    ))}
+  </div>
+  <p class="sr-only" role="status" aria-live="polite" aria-atomic="true" data-scenario-status>Scenario 1 of {scenarios.length}: {resolved[0].label}</p>
+  <div id={`${labId}-detail`} role="tabpanel" aria-labelledby={`${labId}-tab-0`} class:list={["scenario-detail", `tone-${resolved[0].tone ?? "neutral"}`]} data-scenario-detail>
+    <div class="scenario-meta"><span data-scenario-label>{resolved[0].label}</span><strong data-scenario-tone>{resolved[0].toneLabel}</strong></div>
+    <h4 data-scenario-title>{resolved[0].title}</h4>
+    <p data-scenario-summary>{resolved[0].summary}</p>
+    <ul data-scenario-facts>{resolved[0].facts.map((fact) => <li>{fact}</li>)}</ul>
+    <div class="scenario-sources" data-scenario-sources>
+      {resolved[0].sources.map((source) => <a href={source.href} rel="noreferrer"><code>{source.label}</code> ↗</a>)}
+    </div>
+  </div>
+  <ol class="scenario-print" aria-label={`${title}, all scenarios`}>
+    {resolved.map((scenario) => (
+      <li><strong>{scenario.label} · {scenario.title}</strong> <span>({scenario.toneLabel})</span><p>{scenario.summary}</p><ul>{scenario.facts.map((fact) => <li>{fact}</li>)}</ul>{scenario.sources.map((source) => <a href={source.href} rel="noreferrer"><code>{source.label}</code> ↗</a>)}</li>
+    ))}
+  </ol>
+  <script type="application/json" data-scenario-data set:html={payload}></script>
+</section>
+
+<script>
+  import { animateLabPanel, handleRovingKeys } from "../lib/lab-motion";
+
+  document.querySelectorAll<HTMLElement>("[data-scenario-lab]").forEach((lab) => {
+    if (lab.dataset.scenarioReady === "true") return;
+    lab.dataset.scenarioReady = "true";
+    const scenarios = JSON.parse(lab.querySelector("[data-scenario-data]")?.textContent ?? "[]");
+    const detail = lab.querySelector<HTMLElement>("[data-scenario-detail]");
+    const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const tabs = [...lab.querySelectorAll<HTMLButtonElement>("[data-scenario-index]")];
+    let index = 0;
+    let panelAnimation: Animation | undefined;
+    const set = (selector: string, value: string) => {
+      const node = lab.querySelector(selector);
+      if (node) node.textContent = value;
+    };
+    const paint = (nextIndex: number) => {
+      const scenario = scenarios[nextIndex];
+      if (!scenario) return;
+      index = nextIndex;
+      tabs.forEach((button, buttonIndex) => {
+        button.setAttribute("aria-selected", String(buttonIndex === nextIndex));
+        button.tabIndex = buttonIndex === nextIndex ? 0 : -1;
+      });
+      if (detail) {
+        detail.className = `scenario-detail tone-${scenario.tone ?? "neutral"}`;
+        detail.setAttribute("aria-labelledby", tabs[nextIndex]?.id ?? "");
+      }
+      set("[data-scenario-label]", scenario.label);
+      set("[data-scenario-tone]", scenario.toneLabel);
+      set("[data-scenario-title]", scenario.title);
+      set("[data-scenario-summary]", scenario.summary);
+      set("[data-scenario-status]", `Scenario ${nextIndex + 1} of ${scenarios.length}: ${scenario.label}`);
+      const facts = lab.querySelector("[data-scenario-facts]");
+      if (facts) facts.innerHTML = scenario.facts.map((fact: string) => `<li>${fact.replace(/[&<>]/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[char])}</li>`).join("");
+      const sources = lab.querySelector("[data-scenario-sources]");
+      if (sources) {
+        sources.replaceChildren(...scenario.sources.map((source: { label: string; href: string }) => {
+          const link = document.createElement("a");
+          link.href = source.href;
+          link.rel = "noreferrer";
+          const code = document.createElement("code");
+          code.textContent = source.label;
+          link.append(code, " ↗");
+          return link;
+        }));
+      }
+      panelAnimation?.cancel();
+      panelAnimation = animateLabPanel(detail, 0, reduceMotion.matches);
+    };
+    tabs.forEach((button) => {
+      button.addEventListener("click", () => paint(Number(button.dataset.scenarioIndex)));
+      button.addEventListener("keydown", (event) =>
+        handleRovingKeys(event, tabs, index, paint),
+      );
+    });
+    const updateMotionPreference = () => {
+      if (reduceMotion.matches) panelAnimation?.cancel();
+    };
+    reduceMotion.addEventListener("change", updateMotionPreference);
+    window.addEventListener("pagehide", () => {
+      panelAnimation?.cancel();
+      reduceMotion.removeEventListener("change", updateMotionPreference);
+    }, { once: true });
+  });
+</script>

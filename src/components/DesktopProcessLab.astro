@@ -1,0 +1,104 @@
+---
+interface Props { id?: string; }
+const { id = "desktop-process" } = Astro.props;
+const labId = `desktop-process-${id}`;
+const modes = {
+  local: { label: "Host-local primary", process: "Electron main → primary local server child on macOS, Linux, or Windows → renderer window", transport: "fd3 bootstrap; fd4 host telemetry; fd5 diagnostics-demand control; HTTP / WebSocket", authority: "Electron main selects the child configuration and owns native APIs; renderer receives only curated IPC.", boot: "Main resolves the primary configuration, starts the host-local child, and probes its HTTP endpoint.", ready: "The ready callback gives the primary URL to the window service; the renderer is then served from the desktop target.", shutdown: "The pool stops the primary with SIGTERM and grace; an unexpected exit may instead enter the instance restart loop." },
+  wsl: { label: "Windows + WSL", process: "Electron main → either a WSL-only primary, or a Windows primary plus optional WSL secondary → renderer connections", transport: "A Windows host-local primary uses fd3/fd4/fd5. WSL receives bootstrap on stdin because wsl.exe drops forwarded extra descriptors.", authority: "The pool owns these local child instances. WSL is a distinct Linux environment, not a replacement for the SSH gateway.", boot: "WSL-only resolves the primary as WSL. Dual mode starts Windows primary first, then forks reconciliation for a distro-specific secondary on a distinct port.", ready: "A WSL-only primary opens the window after its probe. In dual mode, Windows primary opens it while the WSL secondary reaches readiness independently.", shutdown: "Unregistering a WSL secondary closes its child scope; application finalization stops every registered instance concurrently." },
+  ssh: { label: "SSH gateway", process: "Electron main → SSH environment manager → remote t3 process / tunnel → renderer connection", transport: "Curated renderer IPC asks main to discover, ensure, bootstrap, or disconnect an SSH environment; the remote endpoint is reached through the SSH path.", authority: "SSH is a remote environment gateway owned by the desktop SSH service. It is not an entry in the local backend-process pool.", boot: "The renderer requests a target; main delegates to the SSH environment manager, which can launch or connect to the remote environment.", ready: "A remote descriptor, bearer bootstrap, and WebSocket token establish a normal environment connection; primary-child readiness is unrelated.", shutdown: "Disconnecting the SSH environment tears down the gateway path. It is distinct from stopping local pool children during app shutdown." },
+} as const;
+type ModeKey = keyof typeof modes;
+const stages = ["boot", "ready", "shutdown"] as const;
+type StageKey = typeof stages[number];
+const initialMode: ModeKey = "local";
+const initialStage: StageKey = "boot";
+---
+
+<section class="desktop-process-lab" data-desktop-process-lab data-ready="pending" aria-labelledby={`${labId}-title`}>
+  <header class="desktop-process-lab__head"><span>Interactive process lab · Chapter 32</span><h3 id={`${labId}-title`}>Choose a delivery path, then advance its lifecycle</h3><p>The same renderer can observe different transports; native and process authority stays in Electron main.</p></header>
+  <div class="desktop-process-lab__controls">
+    <fieldset><legend>Delivery path</legend><div class="desktop-process-lab__choices" role="radiogroup" aria-label="Desktop delivery path">{Object.entries(modes).map(([key, mode]) => <button type="button" role="radio" aria-checked={key === initialMode ? "true" : "false"} tabindex={key === initialMode ? 0 : -1} data-mode={key}>{mode.label}</button>)}</div></fieldset>
+    <div class="desktop-process-lab__step-controls" aria-label="Lifecycle step controls"><button type="button" data-previous>Previous step</button><button type="button" data-next>Next step</button><button type="button" data-reset>Reset</button></div>
+  </div>
+  <p class="desktop-process-lab__status" aria-live="polite" aria-atomic="true" data-status>{modes[initialMode].label} · Boot</p>
+  <ol class="desktop-process-lab__stages" aria-label="Lifecycle stages">{stages.map((stage, index) => <li data-stage={stage} aria-current={index === 0 ? "step" : "false"}><span>{index + 1}</span><strong>{stage === "boot" ? "Boot" : stage === "ready" ? "Readiness" : "Shutdown"}</strong></li>)}</ol>
+  <div class="desktop-process-lab__panel" tabindex="0" data-panel><p class="desktop-process-lab__eyebrow" data-stage-label>Boot</p><h4 data-title>{modes[initialMode].label}</h4><p data-stage-copy>{modes[initialMode][initialStage]}</p><dl><div><dt>Process</dt><dd data-process>{modes[initialMode].process}</dd></div><div><dt>Transport</dt><dd data-transport>{modes[initialMode].transport}</dd></div><div><dt>Authority</dt><dd data-authority>{modes[initialMode].authority}</dd></div></dl></div>
+  <details class="desktop-process-lab__fallback" open><summary>Static process map</summary><table><thead><tr><th scope="col">Path</th><th scope="col">Process / transport</th><th scope="col">Boundary</th></tr></thead><tbody>{Object.values(modes).map((mode) => <tr><th scope="row">{mode.label}</th><td>{mode.process}<br />{mode.transport}</td><td>{mode.authority}</td></tr>)}</tbody></table></details>
+  <noscript><p class="desktop-process-lab__noscript">JavaScript is off; the static process map lists the delivery paths and authority boundaries.</p></noscript>
+</section>
+
+<script define:vars={{ modes, stages }}>
+  document.querySelectorAll("[data-desktop-process-lab]").forEach((lab) => {
+    if (lab.dataset.ready === "true") return;
+    const status = lab.querySelector("[data-status]");
+    const stageLabel = lab.querySelector("[data-stage-label]");
+    const title = lab.querySelector("[data-title]");
+    const stageCopy = lab.querySelector("[data-stage-copy]");
+    const process = lab.querySelector("[data-process]");
+    const transport = lab.querySelector("[data-transport]");
+    const authority = lab.querySelector("[data-authority]");
+    const panel = lab.querySelector("[data-panel]");
+    const modeButtons = [...lab.querySelectorAll("[data-mode]")];
+    const modeKeys = Object.keys(modes);
+    let mode = "local";
+    let stageIndex = 0;
+    const stageName = (stage) => stage === "boot" ? "Boot" : stage === "ready" ? "Readiness" : "Shutdown";
+    const render = () => {
+      const current = modes[mode];
+      const stage = stages[stageIndex];
+      if (status) status.textContent = `${current.label} · ${stageName(stage)}`;
+      if (stageLabel) stageLabel.textContent = stageName(stage);
+      if (title) title.textContent = current.label;
+      if (stageCopy) stageCopy.textContent = current[stage];
+      if (process) process.textContent = current.process;
+      if (transport) transport.textContent = current.transport;
+      if (authority) authority.textContent = current.authority;
+      lab.querySelectorAll("[data-stage]").forEach((item, index) => item.setAttribute("aria-current", index === stageIndex ? "step" : "false"));
+      modeButtons.forEach((button) => {
+        const selected = button.dataset.mode === mode;
+        button.setAttribute("aria-checked", String(selected));
+        button.tabIndex = selected ? 0 : -1;
+      });
+    };
+    const selectMode = (next, focus = false) => {
+      if (!next || !modes[next]) return;
+      mode = next;
+      stageIndex = 0;
+      render();
+      if (focus) lab.querySelector(`[data-mode="${next}"]`)?.focus();
+    };
+    modeButtons.forEach((button) => {
+      button.addEventListener("click", () => selectMode(button.dataset.mode, true));
+      button.addEventListener("keydown", (event) => {
+        if (!["ArrowRight", "ArrowDown", "ArrowLeft", "ArrowUp", "Home", "End"].includes(event.key)) return;
+        event.preventDefault();
+        const current = modeKeys.indexOf(mode);
+        const next = event.key === "Home"
+          ? 0
+          : event.key === "End"
+            ? modeKeys.length - 1
+            : event.key === "ArrowRight" || event.key === "ArrowDown"
+              ? (current + 1) % modeKeys.length
+              : (current - 1 + modeKeys.length) % modeKeys.length;
+        selectMode(modeKeys[next], true);
+      });
+    });
+    lab.querySelector("[data-previous]")?.addEventListener("click", () => { stageIndex = Math.max(0, stageIndex - 1); render(); panel?.focus(); });
+    lab.querySelector("[data-next]")?.addEventListener("click", () => { stageIndex = Math.min(stages.length - 1, stageIndex + 1); render(); panel?.focus(); });
+    lab.querySelector("[data-reset]")?.addEventListener("click", () => { mode = "local"; stageIndex = 0; render(); });
+    render();
+    lab.dataset.ready = "true";
+  });
+</script>
+
+<style>
+  .desktop-process-lab { margin: 2.5rem 0; border: 1px solid var(--line-strong); border-radius: 1rem; overflow: clip; background: var(--paper-raised); color: var(--ink); }.desktop-process-lab__head { padding: 1.3rem 1.35rem 1rem; }.desktop-process-lab__head > span, .desktop-process-lab__eyebrow { color: var(--signal-deep); font-size: .72rem; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }.desktop-process-lab h3 { margin: .3rem 0 .45rem; font-size: 1.2rem; }.desktop-process-lab h4 { margin: .25rem 0 .5rem; font-size: 1.1rem; }.desktop-process-lab p { color: var(--ink-soft); }.desktop-process-lab__head p { margin: 0; max-width: 68ch; }
+  .desktop-process-lab__controls { display: flex; align-items: end; justify-content: space-between; flex-wrap: wrap; gap: .8rem; padding: .8rem 1.35rem; border-block: 1px solid var(--line); background: var(--paper); }.desktop-process-lab fieldset { margin: 0; padding: 0; border: 0; }.desktop-process-lab legend { margin-bottom: .4rem; color: var(--ink-soft); font-size: .78rem; font-weight: 700; }.desktop-process-lab__choices, .desktop-process-lab__step-controls { display: flex; flex-wrap: wrap; gap: .45rem; }.desktop-process-lab button { border: 1px solid var(--line-strong); border-radius: .45rem; padding: .45rem .65rem; background: var(--paper-raised); color: var(--ink); font: inherit; font-size: .84rem; cursor: pointer; }.desktop-process-lab button[aria-checked="true"] { border-color: var(--signal); background: var(--paper-muted); font-weight: 750; }.desktop-process-lab button:hover, .desktop-process-lab button:focus-visible { border-color: var(--signal); outline: 2px solid var(--signal); outline-offset: 2px; }
+  .desktop-process-lab__status { min-height: 1.4em; margin: .85rem 1.35rem; font-size: .84rem; }.desktop-process-lab__stages { display: grid; grid-template-columns: repeat(3, 1fr); gap: .4rem; margin: 0 1.35rem 1rem; padding: 0; list-style: none; }.desktop-process-lab__stages li { display: flex; align-items: center; gap: .45rem; padding: .55rem; border: 1px solid var(--line); border-radius: .5rem; color: var(--ink-soft); font-size: .8rem; }.desktop-process-lab__stages li[aria-current="step"] { border-color: var(--signal); color: var(--ink); }.desktop-process-lab__stages span { display: grid; place-items: center; width: 1.3rem; height: 1.3rem; border-radius: 999px; background: var(--paper-muted); font-size: .7rem; }.desktop-process-lab__stages li[aria-current="step"] span { background: var(--signal); color: var(--paper); }
+  .desktop-process-lab__panel { margin: 0 1.35rem 1rem; padding: 1rem; border: 1px solid var(--line); border-radius: .65rem; background: var(--paper); }.desktop-process-lab__panel:focus-visible { outline: 2px solid var(--signal); outline-offset: 2px; }.desktop-process-lab__panel p { margin: 0; max-width: 75ch; }.desktop-process-lab dl { display: grid; grid-template-columns: repeat(3, 1fr); gap: .6rem; margin: 1rem 0 0; }.desktop-process-lab dl div { padding: .65rem; border-radius: .45rem; background: var(--paper-muted); }.desktop-process-lab dt { color: var(--ink-faint); font-size: .7rem; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; }.desktop-process-lab dd { margin: .25rem 0 0; color: var(--ink-soft); font-size: .8rem; }
+  .desktop-process-lab__fallback { margin: 0 1.35rem 1.2rem; font-size: .82rem; }.desktop-process-lab__fallback summary { cursor: pointer; color: var(--ink-soft); }.desktop-process-lab__fallback table { width: 100%; margin-top: .65rem; border-collapse: collapse; }.desktop-process-lab__fallback th, .desktop-process-lab__fallback td { padding: .45rem; border: 1px solid var(--line-strong); text-align: left; vertical-align: top; }.desktop-process-lab__noscript { margin: 0 1.35rem 1rem; font-size: .82rem; }.desktop-process-lab[data-ready="true"] .desktop-process-lab__fallback { display: none; }
+  @media (max-width: 42rem) { .desktop-process-lab__head, .desktop-process-lab__controls { padding-inline: .85rem; }.desktop-process-lab__status, .desktop-process-lab__stages, .desktop-process-lab__panel, .desktop-process-lab__fallback { margin-inline: .85rem; }.desktop-process-lab__stages, .desktop-process-lab dl { grid-template-columns: 1fr; } }
+  @media (prefers-reduced-motion: no-preference) { .desktop-process-lab__stages li, .desktop-process-lab__stages span, .desktop-process-lab__panel { transition: border-color 170ms ease, background-color 170ms ease, color 170ms ease; } }
+  @media (prefers-reduced-motion: reduce) { .desktop-process-lab *, .desktop-process-lab *::before, .desktop-process-lab *::after { animation: none !important; transition: none !important; } }
+  @media print { .desktop-process-lab__controls, .desktop-process-lab__status, .desktop-process-lab__stages, .desktop-process-lab__panel { display: none !important; }.desktop-process-lab__fallback { display: block !important; } }
+</style>

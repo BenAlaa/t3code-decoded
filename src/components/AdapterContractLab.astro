@@ -1,0 +1,266 @@
+---
+import { getSourceReference, sourceReferenceHref, sourceReferenceLabel } from "../lib/sources";
+
+interface Props { id: string; }
+const { id } = Astro.props;
+if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(id)) {
+  throw new Error("AdapterContractLab requires a stable kebab-case id.");
+}
+
+const stages = [
+  { label: "Durable intent", short: "intent", owner: "Orchestration", boundary: "The product command has committed. No native call is part of that SQL transaction." },
+  { label: "Resolve route", short: "route", owner: "ProviderService", boundary: "The persisted binding selects one configured instance and its current live adapter." },
+  { label: "Invoke SPI", short: "call", owner: "ProviderAdapter", boundary: "A typed method crosses into provider-owned behavior." },
+  { label: "Native runtime", short: "native", owner: "Harness", boundary: "Process, SDK query, RPC request, and native session state remain outside SQLite." },
+  { label: "Canonical event", short: "event", owner: "Hot stream", boundary: "The adapter translates selected observations into ProviderRuntimeEvent values." },
+  { label: "Domain update", short: "commit", owner: "Runtime ingestion", boundary: "A selected canonical event becomes durable only after an internal command commits." },
+] as const;
+
+const scenarios = {
+  start: {
+    label: "Start an absent session",
+    state: "No live adapter session",
+    method: "startSession(input)",
+    immediate: "Returns ProviderSession after native start/resume setup; this is not assistant output.",
+    native: "Create or adopt the provider-native session and begin its event consumer.",
+    event: "session.started / thread.started may follow on the hot stream.",
+    durable: "ProviderService can upsert the thread → instance binding and opaque cursor separately.",
+    caveat: "A process crash can still lose native state or an event between hot boundaries.",
+    tone: "success",
+    sourceIds: ["provider-adapter-contract", "provider-service-start-session", "provider-runtime-event-union"],
+  },
+  send: {
+    label: "Send on a ready session",
+    state: "Live session, no active turn",
+    method: "sendTurn(input)",
+    immediate: "Returns ProviderTurnStartResult with threadId, turnId, and optional cursor—not generated text.",
+    native: "Submit a prompt/turn through the adapter's native transport.",
+    event: "turn.started, content/item activity, requests, and turn completion can arrive later.",
+    durable: "Runtime ingestion dispatches separate internal commands for selected events.",
+    caveat: "The original sequence acknowledgement proves durable intent, not native acceptance or completion.",
+    tone: "success",
+    sourceIds: ["provider-adapter-contract", "provider-turn-reactor", "provider-runtime-ingestion"],
+  },
+  running: {
+    label: "Send while a turn is running",
+    state: "Live session with active turn",
+    method: "sendTurn(input) again",
+    immediate: "The generic SPI still exposes sendTurn; it has no steer return type or steer capability.",
+    native: "Concrete adapters may steer, queue, start another native turn, or reject according to their implementation.",
+    event: "Any accepted behavior must still be expressed through canonical runtime events.",
+    durable: "The durable product command does not make the provider-specific concurrency rule universal.",
+    caveat: "OpenCode has tested steering behavior; the ProviderAdapter contract alone does not promise it.",
+    tone: "warning",
+    sourceIds: ["provider-adapter-contract", "opencode-steer-behavior"],
+  },
+  approve: {
+    label: "Resolve an approval",
+    state: "Pending native request",
+    method: "respondToRequest(threadId, requestId, decision)",
+    immediate: "Returns void when the adapter accepts the response operation.",
+    native: "Resolve the provider-native pending request or deferred handler.",
+    event: "request.resolved can describe the observed resolution.",
+    durable: "The pending/resolved product activity is durable only through ingestion commands.",
+    caveat: "Not every provider originates the same approval shapes or policies.",
+    tone: "neutral",
+    sourceIds: ["provider-adapter-interactions", "provider-command-control-forwarding", "provider-runtime-event-union"],
+  },
+  input: {
+    label: "Answer structured input",
+    state: "Pending native input request",
+    method: "respondToUserInput(threadId, requestId, answers)",
+    immediate: "Returns void when the adapter accepts the answers.",
+    native: "Resolve an SDK deferred, ACP elicitation/extension, or native question as implemented.",
+    event: "user-input.resolved can describe the observed resolution.",
+    durable: "Request state enters the domain through separate ingestion dispatches.",
+    caveat: "A method in the shared interface is not proof that every native runtime can originate the request.",
+    tone: "neutral",
+    sourceIds: ["provider-adapter-interactions", "provider-runtime-event-union"],
+  },
+  interrupt: {
+    label: "Interrupt an active turn",
+    state: "Live session with active turn",
+    method: "interruptTurn(threadId, turnId?)",
+    immediate: "Returns void after the adapter's interruption request path succeeds.",
+    native: "Send cancellation/interrupt through the provider-specific transport.",
+    event: "turn.aborted, turn.completed, warning, or error explains later observed state.",
+    durable: "The domain settles only when the corresponding runtime observation is ingested.",
+    caveat: "A successful interrupt call is not proof that no late native event can race it.",
+    tone: "warning",
+    sourceIds: ["provider-adapter-contract", "provider-command-control-forwarding", "provider-runtime-ingestion"],
+  },
+  rollback: {
+    label: "Roll back provider history",
+    state: "Routable session or recoverable binding",
+    method: "rollbackThread(threadId, numTurns)",
+    immediate: "Returns a provider-thread snapshot when implemented successfully.",
+    native: "Apply the adapter's own rollback/revert semantics.",
+    event: "No universal canonical rollback event is guaranteed by this method.",
+    durable: "T3's checkpoint/revert workflow remains a separate cross-store saga.",
+    caveat: "Grok explicitly rejects provider rollback; Cursor and other adapters differ in what is actually reverted.",
+    tone: "failure",
+    sourceIds: ["provider-adapter-contract", "grok-rollback-unsupported", "checkpoint-revert-saga"],
+  },
+} as const;
+
+const resolved = Object.fromEntries(Object.entries(scenarios).map(([key, scenario]) => [key, {
+  ...scenario,
+  sources: scenario.sourceIds.map((sourceId) => {
+    const source = getSourceReference(sourceId);
+    return { href: sourceReferenceHref(source), label: sourceReferenceLabel(source) };
+  }),
+}]));
+const initial = resolved.start;
+const labId = `adapter-contract-${id}`;
+const payload = JSON.stringify({ stages, scenarios: resolved }).replaceAll("<", "\\u003c");
+---
+
+<section class="adapter-contract-lab" data-adapter-contract-lab data-adapter-ready="initializing" aria-labelledby={`${labId}-title`}>
+  <header class="contract-head">
+    <span>Interactive contract tracer</span>
+    <h3 id={`${labId}-title`}>What does one adapter call actually prove?</h3>
+    <p>Choose a call, then move from durable intent to native work and back. The return boundary and the event boundary stay visibly separate.</p>
+  </header>
+
+  <div class="contract-interactive">
+    <div class="contract-controls">
+      <label for={`${labId}-scenario`}>Contract call
+        <select id={`${labId}-scenario`} data-contract-scenario>
+          {Object.entries(resolved).map(([key, scenario]) => <option value={key}>{scenario.label}</option>)}
+        </select>
+      </label>
+      <label for={`${labId}-step`}>Boundary <strong data-contract-count>1 / {stages.length}</strong>
+        <input id={`${labId}-step`} data-contract-step type="range" min="0" max={stages.length - 1} value="0" step="1" aria-valuetext={stages[0].label} />
+      </label>
+      <div class="contract-actions" aria-label="Move through adapter boundaries">
+        <button type="button" data-contract-prev disabled>← Earlier</button>
+        <button type="button" data-contract-next>Later →</button>
+      </div>
+    </div>
+
+    <div class="contract-track" style="--contract-step: 0; --contract-token-left: 7%" aria-hidden="true">
+      <div class="contract-rail"></div><span class="contract-token"></span>
+      <ol>{stages.map((stage, index) => <li class:list={{ current: index === 0 }}><b>{index + 1}</b><span>{stage.short}</span></li>)}</ol>
+    </div>
+
+    <p class="sr-only" role="status" aria-live="polite" aria-atomic="true" data-contract-status>
+      {initial.label}; boundary 1 of {stages.length}: {stages[0].label}.
+    </p>
+
+    <article class:list={["contract-result", `tone-${initial.tone}`]} data-contract-result>
+      <div class="contract-result-head"><div><span data-contract-owner>{stages[0].owner}</span><h4 data-contract-stage>{stages[0].label}</h4></div><code data-contract-method>{initial.method}</code></div>
+      <p data-contract-boundary>{stages[0].boundary}</p>
+      <dl>
+        <div><dt>Starting state</dt><dd data-contract-state>{initial.state}</dd></div>
+        <div><dt>Immediate result</dt><dd data-contract-immediate>{initial.immediate}</dd></div>
+        <div><dt>Native meaning</dt><dd data-contract-native>{initial.native}</dd></div>
+        <div><dt>Event lane</dt><dd data-contract-event>{initial.event}</dd></div>
+        <div><dt>Durable meaning</dt><dd data-contract-durable>{initial.durable}</dd></div>
+        <div><dt>Critical caveat</dt><dd data-contract-caveat>{initial.caveat}</dd></div>
+      </dl>
+      <div class="contract-sources" data-contract-sources>{initial.sources.map((source) => <a href={source.href} rel="noreferrer"><code>{source.label}</code> ↗</a>)}</div>
+    </article>
+  </div>
+
+  <details class="contract-fallback" open>
+    <summary>Static adapter-operation ledger</summary>
+    <div class="contract-table-scroll" tabindex="0" role="region" aria-label="All adapter operation outcomes">
+      <table>
+        <thead><tr><th scope="col">Call</th><th scope="col">Immediate/native meaning</th><th scope="col">Event/durable meaning</th><th scope="col">Caveat</th></tr></thead>
+        <tbody>{Object.values(resolved).map((scenario) => <tr><th scope="row">{scenario.label}<br /><code>{scenario.method}</code></th><td>{scenario.immediate} {scenario.native}</td><td>{scenario.event} {scenario.durable}</td><td>{scenario.caveat}</td></tr>)}</tbody>
+      </table>
+    </div>
+  </details>
+  <noscript><p class="contract-noscript">JavaScript is off; the complete static operation ledger remains open above.</p></noscript>
+  <script type="application/json" data-contract-data set:html={payload}></script>
+</section>
+
+<script>
+  interface ContractSource { href: string; label: string }
+  interface ContractScenario { label: string; state: string; method: string; immediate: string; native: string; event: string; durable: string; caveat: string; tone: string; sources: ContractSource[] }
+  interface ContractStage { label: string; short: string; owner: string; boundary: string }
+  document.querySelectorAll<HTMLElement>("[data-adapter-contract-lab]").forEach((lab) => {
+    if (lab.dataset.adapterReady === "true") return;
+    try {
+      const raw = lab.querySelector<HTMLScriptElement>("[data-contract-data]")?.textContent ?? "";
+      const data = JSON.parse(raw) as { stages: ContractStage[]; scenarios: Record<string, ContractScenario> };
+      const select = lab.querySelector<HTMLSelectElement>("[data-contract-scenario]");
+      const range = lab.querySelector<HTMLInputElement>("[data-contract-step]");
+      const previous = lab.querySelector<HTMLButtonElement>("[data-contract-prev]");
+      const next = lab.querySelector<HTMLButtonElement>("[data-contract-next]");
+      const track = lab.querySelector<HTMLElement>(".contract-track");
+      const result = lab.querySelector<HTMLElement>("[data-contract-result]");
+      const markers = [...lab.querySelectorAll<HTMLElement>(".contract-track li")];
+      let step = 0;
+      const setText = (selector: string, value: string) => { const node = lab.querySelector<HTMLElement>(selector); if (node) node.textContent = value; };
+      const scenario = () => data.scenarios[select?.value ?? "start"] ?? data.scenarios.start;
+      const paint = (requested = step) => {
+        step = Math.max(0, Math.min(data.stages.length - 1, requested));
+        const current = scenario(); const stage = data.stages[step]; if (!current || !stage) return;
+        if (range) { range.value = String(step); range.setAttribute("aria-valuetext", stage.label); }
+        if (previous) previous.disabled = step === 0; if (next) next.disabled = step === data.stages.length - 1;
+        track?.style.setProperty("--contract-step", String(step));
+        track?.style.setProperty("--contract-token-left", `${7 + step * 17.2}%`);
+        markers.forEach((marker, index) => marker.classList.toggle("current", index === step));
+        if (result) result.className = `contract-result tone-${current.tone}`;
+        setText("[data-contract-count]", `${step + 1} / ${data.stages.length}`);
+        setText("[data-contract-status]", `${current.label}; boundary ${step + 1} of ${data.stages.length}: ${stage.label}.`);
+        setText("[data-contract-owner]", stage.owner); setText("[data-contract-stage]", stage.label); setText("[data-contract-boundary]", stage.boundary);
+        setText("[data-contract-method]", current.method); setText("[data-contract-state]", current.state); setText("[data-contract-immediate]", current.immediate);
+        setText("[data-contract-native]", current.native); setText("[data-contract-event]", current.event); setText("[data-contract-durable]", current.durable); setText("[data-contract-caveat]", current.caveat);
+        const sourceHost = lab.querySelector<HTMLElement>("[data-contract-sources]");
+        if (sourceHost) { sourceHost.replaceChildren(...current.sources.map((source) => { const link = document.createElement("a"); link.href = source.href; link.rel = "noreferrer"; const code = document.createElement("code"); code.textContent = source.label; link.append(code, " ↗"); return link; })); }
+      };
+      select?.addEventListener("change", () => { step = 0; paint(); }); range?.addEventListener("input", () => paint(Number(range.value)));
+      previous?.addEventListener("click", () => paint(step - 1)); next?.addEventListener("click", () => paint(step + 1));
+      paint(); lab.dataset.adapterReady = "true";
+    } catch { lab.dataset.adapterReady = "error"; }
+  });
+</script>
+
+<style>
+  .adapter-contract-lab { margin: 34px 0; overflow: hidden; border: 1px solid var(--line-strong); border-radius: 14px; background: var(--paper-raised); font-family: var(--font-ui); }
+  .contract-head { padding: 18px 20px 14px; border-bottom: 1px solid var(--line); }
+  .contract-head > span { color: var(--signal-deep); font: 800 9px/1 var(--font-ui); letter-spacing: .12em; text-transform: uppercase; }
+  .contract-head h3 { margin: 8px 0 5px; }
+  .contract-head p { margin: 0; color: var(--ink-soft); font-size: 13px; line-height: 1.5; }
+  .adapter-contract-lab:not([data-adapter-ready="true"]) .contract-interactive { display: none; }
+  .adapter-contract-lab[data-adapter-ready="true"] .contract-fallback { display: none; }
+  .contract-controls { display: grid; grid-template-columns: minmax(200px, 1fr) minmax(220px, 1.2fr) auto; gap: 12px; align-items: end; padding: 15px 18px; border-bottom: 1px solid var(--line); background: var(--paper-muted); }
+  .contract-controls label { display: grid; gap: 6px; color: var(--ink-faint); font-size: 10px; font-weight: 750; letter-spacing: .06em; text-transform: uppercase; }
+  .contract-controls select { min-height: 44px; padding: 0 10px; border: 1px solid var(--line-strong); border-radius: 7px; background: var(--paper); color: var(--ink); font: 650 12px/1 var(--font-ui); }
+  .contract-controls input { width: 100%; accent-color: var(--signal); }
+  .contract-actions { display: flex; gap: 6px; }
+  .contract-actions button { min-height: 44px; padding: 0 11px; border: 1px solid var(--line); border-radius: 7px; background: var(--paper); color: var(--ink); cursor: pointer; font: 700 10px/1 var(--font-ui); }
+  .contract-actions button:disabled { cursor: not-allowed; opacity: .4; }
+  .contract-track { --contract-step: 0; position: relative; padding: 20px 23px 14px; overflow: hidden; }
+  .contract-track ol { position: relative; z-index: 2; display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 4px; margin: 0; padding: 0; list-style: none; }
+  .contract-rail { position: absolute; z-index: 0; top: 33px; left: 7%; width: 86%; height: 2px; background: var(--line-strong); }
+  .contract-token { position: absolute; z-index: 3; top: 26px; left: calc(var(--contract-token-left) - 8px); width: 16px; height: 16px; border: 3px solid var(--paper-raised); border-radius: 50%; background: var(--signal); box-shadow: 0 0 0 1px var(--signal); transition: left var(--motion-flow) var(--motion-ease); }
+  .contract-track li { display: grid; gap: 6px; justify-items: center; color: var(--ink-faint); font-size: 9px; text-transform: uppercase; }
+  .contract-track li b { display: grid; width: 28px; height: 28px; place-items: center; border: 2px solid var(--line-strong); border-radius: 50%; background: var(--paper-raised); color: var(--ink-faint); }
+  .contract-track li.current b { border-color: var(--signal); background: var(--signal-soft); color: var(--signal-deep); transform: scale(1.08); }
+  .contract-result { margin: 0 18px 18px; padding: 16px; border: 1px solid var(--line); border-left: 4px solid var(--blue); border-radius: 10px; background: var(--paper); }
+  .contract-result.tone-warning { border-left-color: var(--orange); } .contract-result.tone-failure { border-left-color: var(--signal); } .contract-result.tone-success { border-left-color: var(--green); }
+  .contract-result-head { display: flex; gap: 12px; align-items: start; justify-content: space-between; }
+  .contract-result-head span { color: var(--ink-faint); font-size: 9px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; }
+  .contract-result h4 { margin: 5px 0 8px; }
+  .contract-result-head > code { max-width: 48%; padding: 7px 9px; overflow-wrap: anywhere; border: 1px solid var(--line); border-radius: 6px; background: var(--paper-muted); font-size: 10px; }
+  .contract-result > p { margin: 0 0 13px; color: var(--ink-soft); font-size: 13px; }
+  .contract-result dl { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin: 0; }
+  .contract-result dl > div { padding: 10px; border: 1px solid var(--line); border-radius: 7px; background: var(--paper-raised); }
+  .contract-result dt { color: var(--ink-faint); font-size: 8px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+  .contract-result dd { margin: 5px 0 0; color: var(--ink-soft); font-size: 11px; line-height: 1.45; }
+  .contract-sources { display: flex; flex-wrap: wrap; gap: 6px 13px; margin-top: 12px; font-size: 9px; }
+  .contract-sources a { color: var(--signal-deep); text-decoration: none; }
+  .contract-fallback { margin: 14px 18px 18px; }
+  .contract-fallback summary { cursor: pointer; color: var(--ink); font-weight: 750; }
+  .contract-table-scroll { margin-top: 10px; overflow-x: auto; }
+  .contract-fallback table { width: 100%; min-width: 760px; border-collapse: collapse; font-size: 11px; }
+  .contract-fallback th, .contract-fallback td { padding: 9px; border: 1px solid var(--line); text-align: left; vertical-align: top; }
+  .contract-fallback thead th { color: var(--ink-faint); font-size: 8px; letter-spacing: .07em; text-transform: uppercase; }
+  .contract-noscript { margin: 0 18px 18px; color: var(--ink-faint); font-size: 11px; }
+  @media (max-width: 760px) { .contract-controls, .contract-result dl { grid-template-columns: 1fr; } .contract-actions { justify-content: stretch; } .contract-actions button { flex: 1; } .contract-token { display: none; } .contract-track { overflow-x: auto; } .contract-track ol { min-width: 620px; } .contract-result-head { flex-direction: column; } .contract-result-head > code { max-width: 100%; } }
+  @media (prefers-reduced-motion: reduce) { .contract-token, .contract-track li b { transition: none; } }
+  @media print { .contract-interactive, .contract-noscript { display: none !important; } .contract-fallback { display: block !important; } .contract-fallback summary { display: none; } .contract-table-scroll { overflow: visible; } .contract-fallback table { min-width: 0; } }
+</style>

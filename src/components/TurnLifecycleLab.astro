@@ -1,0 +1,162 @@
+---
+interface Props { id: string }
+
+const { id } = Astro.props;
+if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(id)) {
+  throw new Error("TurnLifecycleLab requires a stable kebab-case id.");
+}
+const labId = `turn-lifecycle-${id}`;
+---
+
+<section class="turn-lifecycle-lab" data-turn-lifecycle-lab aria-labelledby={`${labId}-title`}>
+  <header class="lab-head">
+    <span>Interactive state-machine lab</span>
+    <h3 id={`${labId}-title`}>One durable request, several live outcomes</h3>
+    <p>Choose an illustrative control for the current teaching state. A step flashes once, then rests; this is neither a live provider simulator nor the server's complete legality matrix.</p>
+  </header>
+
+  <div class="machine" data-machine>
+    <div class="machine-summary">
+      <p class="eyebrow">Current state</p>
+      <h4 data-state-name>Resting</h4>
+      <p data-state-detail>No active provider turn is projected. A new user message can create durable start intent.</p>
+    </div>
+
+    <ol class="state-track" aria-label="Turn lifecycle states">
+      <li data-state-node="resting"><strong>Resting</strong><span>no active turn</span></li>
+      <li data-state-node="starting"><strong>Starting</strong><span>intent awaits runtime</span></li>
+      <li data-state-node="running"><strong>Running</strong><span>correlated live turn</span></li>
+      <li data-state-node="approval"><strong>Approval</strong><span>waiting on a decision</span></li>
+      <li data-state-node="input"><strong>Input</strong><span>waiting on answers</span></li>
+      <li data-state-node="interrupted"><strong>Interrupted</strong><span>stop intent recorded</span></li>
+      <li data-state-node="ready"><strong>Ready</strong><span>turn ended</span></li>
+      <li data-state-node="error"><strong>Error</strong><span>new intent required</span></li>
+    </ol>
+
+    <div class="machine-lanes">
+      <article><h4>Durable record</h4><p data-durable>Nothing new is being committed for this simulated turn.</p></article>
+      <article><h4>Hot provider liveness</h4><p data-hot>No provider liveness is claimed.</p></article>
+    </div>
+
+    <div class="control-panel" aria-label="Illustrative state transitions">
+      <p class="eyebrow">Teaching paths</p>
+      <div class="controls" data-controls></div>
+    </div>
+  </div>
+
+  <p class="sr-only" data-announcement role="status" aria-live="polite" aria-atomic="true">State is Resting.</p>
+
+  <noscript><p class="noscript-note">This diagram is static without JavaScript. The illustrative transition table follows.</p></noscript>
+  <details class="static-fallback" open>
+    <summary>Static transition table and boundary notes</summary>
+    <div class="static-scroll" tabindex="0" role="region" aria-label="Turn lifecycle illustrative transition table">
+      <table>
+        <thead><tr><th scope="col">State</th><th scope="col">Illustrative controls</th><th scope="col">Durable meaning</th><th scope="col">Hot meaning</th></tr></thead>
+        <tbody>
+          <tr><th scope="row">Resting / ready / error</th><td>Start a new intent</td><td>new user message + start request + receipt can commit</td><td>no provider start is proven yet</td></tr>
+          <tr><th scope="row">Starting</th><td>Provider starts; interrupt</td><td>pending start/session projection can be present</td><td>reactor may be preparing or sending</td></tr>
+          <tr><th scope="row">Running</th><td>Stream; request approval; request input; steer*; interrupt; complete; fail</td><td>correlated runtime facts can update session/messages</td><td>provider liveness remains hot</td></tr>
+          <tr><th scope="row">Approval / input</th><td>Respond; interrupt</td><td>pending request is visible; the turn can remain running</td><td>provider waits for a response</td></tr>
+          <tr><th scope="row">Interrupted</th><td>Start a new intent</td><td>a matching projected turn can be marked interrupted</td><td>native abortion or session-state facts may still arrive later</td></tr>
+          <tr><th scope="row">Completed / ready</th><td>Start a new intent</td><td>completion may settle session; checkpoint is separate</td><td>native session may still exist or later exit</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p><small>* “Steer” is provider-specific. The generic adapter contract has no steer method; this lab models its guarded superseding-turn case. The table is intentionally selective: the start decider itself does not enforce a “must be ready” state guard.</small></p>
+  </details>
+</section>
+
+<script>
+  type State = "resting" | "starting" | "running" | "approval" | "input" | "interrupted" | "ready" | "error";
+  interface Transition { label: string; next: State; detail: string; durable: string; hot: string }
+  const transitions: Record<State, Transition[]> = {
+    resting: [{ label: "Start new intent", next: "starting", detail: "The client asks to start a turn; the provider has not yet confirmed it.", durable: "A user message and turn-start request can commit with an accepted receipt.", hot: "A command reactor may later observe the hot event and prepare a session." }],
+    starting: [
+      { label: "Provider starts", next: "running", detail: "A correlated turn.started arrives.", durable: "Ingestion can persist session running and the active turn id.", hot: "The provider reported a live turn; this observation is still stream-bound." },
+      { label: "Interrupt request", next: "interrupted", detail: "The user requests interruption before a confirmed start.", durable: "An interrupt-request event can commit; the initial receipt is unchanged.", hot: "The reactor asks the active session to interrupt if one exists." },
+    ],
+    running: [
+      { label: "Stream text", next: "running", detail: "Assistant text arrives for the correlated turn.", durable: "Buffered spill chunks or legacy deltas can become projected assistant messages.", hot: "Native tokens are live input; buffering changes delivery cadence." },
+      { label: "Ask approval", next: "approval", detail: "The provider opens an approval request.", durable: "The current assistant segment flushes/finalizes and a pending approval is projected.", hot: "The provider is waiting for a decision." },
+      { label: "Ask for input", next: "input", detail: "The provider requests structured user input.", durable: "The current assistant segment flushes/finalizes and pending input is projected.", hot: "The provider is waiting for answers." },
+      { label: "Steer (provider-specific)", next: "starting", detail: "A concrete provider may open a new expected turn while one is active.", durable: "The guard may accept a correlated superseding turn.started later; this is not a generic steer command.", hot: "Provider semantics decide whether sendTurn is interpreted as steering." },
+      { label: "Interrupt", next: "interrupted", detail: "An interruption is requested for the session.", durable: "The request can mark the matching projected turn interrupted; native terminal facts still arrive later.", hot: "Provider interruption is requested by session, not orchestration turn id." },
+      { label: "Complete", next: "ready", detail: "A correlated turn.completed closes the simulated active turn.", durable: "Ingestion can finalize buffered content and set session ready (or error for a failed completion).", hot: "Completion arrived on the provider runtime stream." },
+      { label: "Runtime failure", next: "error", detail: "A start/send/runtime failure is recorded.", durable: "A later session error and failure activity can commit; the original start receipt remains accepted.", hot: "The provider call or stream reported failure." },
+    ],
+    approval: [
+      { label: "Respond", next: "running", detail: "A human decision is forwarded to the active provider session.", durable: "The response request can commit and the pending approval can resolve.", hot: "The provider can resume only after it receives the decision." },
+      { label: "Interrupt", next: "interrupted", detail: "The user stops work while a decision is pending.", durable: "Interrupt intent is recorded separately from the original start.", hot: "The provider receives an interruption request if the session remains active." },
+    ],
+    input: [
+      { label: "Submit answers", next: "running", detail: "Structured answers are forwarded to the active provider session.", durable: "The response request can commit and pending input can resolve.", hot: "The provider may resume after receiving the answers." },
+      { label: "Interrupt", next: "interrupted", detail: "The user stops work while answers are pending.", durable: "Interrupt intent is recorded separately from the original start.", hot: "The provider receives an interruption request if the session remains active." },
+    ],
+    interrupted: [{ label: "Start new intent", next: "starting", detail: "A later user message begins a fresh requested turn.", durable: "A new command id records new intent; it does not rewrite the interrupted turn.", hot: "The provider session may be resumed, recovered, or replaced according to adapter state." }],
+    ready: [{ label: "Start new intent", next: "starting", detail: "A later user message begins a new requested turn.", durable: "A fresh command id creates a fresh durable request and receipt.", hot: "A previous native session may be resumed or a new one started." }],
+    error: [{ label: "Retry as new intent", next: "starting", detail: "Recovery uses a new request, rather than replaying the accepted start receipt.", durable: "A new command id can record a new user message and turn-start request.", hot: "The reactor may retry setup/send for this new intent." }],
+  };
+  const labels: Record<State, string> = { resting: "Resting", starting: "Starting", running: "Running", approval: "Awaiting approval", input: "Awaiting input", interrupted: "Interrupted", ready: "Ready", error: "Error" };
+
+  document.querySelectorAll<HTMLElement>("[data-turn-lifecycle-lab]").forEach((lab) => {
+    if (lab.dataset.turnLifecycleReady === "true") return;
+    lab.dataset.turnLifecycleReady = "true";
+    let state: State = "resting";
+    const controls = lab.querySelector<HTMLElement>("[data-controls]");
+    const name = lab.querySelector<HTMLElement>("[data-state-name]");
+    const detail = lab.querySelector<HTMLElement>("[data-state-detail]");
+    const durable = lab.querySelector<HTMLElement>("[data-durable]");
+    const hot = lab.querySelector<HTMLElement>("[data-hot]");
+    const announcement = lab.querySelector<HTMLElement>("[data-announcement]");
+    const nodes = [...lab.querySelectorAll<HTMLElement>("[data-state-node]")];
+    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+    const render = (transition?: Transition) => {
+      if (name) name.textContent = labels[state];
+      if (detail) detail.textContent = transition?.detail ?? "No active provider turn is projected. A new user message can create durable start intent.";
+      if (durable) durable.textContent = transition?.durable ?? "Nothing new is being committed for this simulated turn.";
+      if (hot) hot.textContent = transition?.hot ?? "No provider liveness is claimed.";
+      if (announcement) announcement.textContent = `State is ${labels[state]}. ${transition?.detail ?? ""}`;
+      nodes.forEach((node) => node.toggleAttribute("data-current", node.dataset.stateNode === state));
+      if (controls) {
+        controls.replaceChildren(...transitions[state].map((item) => {
+          const button = document.createElement("button");
+          button.type = "button";
+          button.textContent = item.label;
+          button.addEventListener("click", () => {
+            state = item.next;
+            render(item);
+            if (!reducedMotion) {
+              const machine = lab.querySelector<HTMLElement>("[data-machine]");
+              machine?.classList.remove("step");
+              void machine?.offsetWidth;
+              machine?.classList.add("step");
+            }
+          });
+          return button;
+        }));
+      }
+    };
+    lab.querySelector<HTMLElement>("[data-machine]")?.addEventListener("animationend", (event) => {
+      (event.currentTarget as HTMLElement).classList.remove("step");
+    });
+    render();
+  });
+</script>
+
+<style>
+  .turn-lifecycle-lab { border: 1px solid var(--line-strong); border-radius: .9rem; background: var(--paper-raised); overflow: hidden; margin: 2rem 0; }
+  .lab-head { padding: 1.25rem 1.25rem .5rem; } .lab-head > span, .eyebrow { color: var(--ink-soft); font: 700 .73rem/1.2 var(--font-mono); letter-spacing: .06em; text-transform: uppercase; }
+  .lab-head h3 { margin: .35rem 0; font-size: 1.25rem; } .lab-head p { margin: 0; color: var(--ink-soft); }
+  .machine { margin: 1rem 1.25rem; padding: 1rem; border: 1px solid var(--line); border-radius: .7rem; background: color-mix(in srgb, var(--paper) 72%, var(--paper-raised)); }
+  .machine.step { animation: lifecycle-step .32s ease-out 1; } @keyframes lifecycle-step { from { outline: 3px solid color-mix(in srgb, var(--signal) 58%, transparent); outline-offset: 2px; } to { outline: 0 solid transparent; outline-offset: 5px; } }
+  .machine-summary h4 { margin: .2rem 0; font-size: 1.2rem; } .machine-summary p:last-child { margin: 0; color: var(--ink-soft); }
+  .state-track { display: grid; grid-template-columns: repeat(8, minmax(7rem, 1fr)); gap: .45rem; overflow-x: auto; padding: 1rem 0; margin: 0; list-style: none; }
+  .state-track li { min-width: 7rem; padding: .55rem; border: 1px solid var(--line); border-radius: .5rem; color: var(--ink-soft); } .state-track li[data-current] { border-color: var(--signal); color: var(--ink); background: var(--signal-soft); } .state-track strong, .state-track span { display: block; } .state-track span { margin-top: .15rem; font-size: .78rem; }
+  .machine-lanes { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .7rem; } .machine-lanes article { padding: .7rem; border-left: 3px solid var(--signal); background: var(--paper-muted); } .machine-lanes h4 { margin: 0 0 .25rem; font-size: .88rem; } .machine-lanes p { margin: 0; font-size: .9rem; }
+  .control-panel { margin-top: 1rem; padding-top: .8rem; border-top: 1px solid var(--line); } .controls { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: .45rem; } .controls button { border: 1px solid var(--signal); border-radius: .4rem; padding: .42rem .65rem; background: var(--paper); color: var(--ink); font: inherit; cursor: pointer; } .controls button:hover, .controls button:focus-visible { background: var(--signal); color: var(--paper-raised); }
+  .static-fallback { margin: 0 1.25rem 1.25rem; } .static-fallback summary { cursor: pointer; font-weight: 700; } .static-scroll { overflow-x: auto; margin-top: .7rem; } table { width: 100%; border-collapse: collapse; font-size: .9rem; } th, td { padding: .55rem; border: 1px solid var(--line); text-align: left; vertical-align: top; } th { background: var(--paper-muted); } .noscript-note { margin: 1rem 1.25rem; }
+  @media (max-width: 44rem) { .machine-lanes { grid-template-columns: 1fr; } }
+  @media (prefers-reduced-motion: reduce) { .machine.step { animation: none; } }
+  @media print { .turn-lifecycle-lab { break-inside: avoid; border-color: #555; } .controls, .control-panel { display: none; } .static-fallback { display: block; } .state-track { grid-template-columns: repeat(4, 1fr); overflow: visible; } }
+</style>

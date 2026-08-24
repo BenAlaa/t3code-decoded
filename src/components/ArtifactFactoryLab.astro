@@ -1,0 +1,167 @@
+---
+interface Props { id?: string; }
+const { id = "artifact-factory" } = Astro.props;
+const labId = `artifact-factory-${id}`;
+const routes = {
+  npm: {
+    label: "npm CLI",
+    artifact: "t3 package",
+    boundary: "The published package contains dist only; publishing first proves the exact server version clients will invoke.",
+    steps: [
+      ["Build server", "The server bundle emits dist/bin.mjs and the service launcher.", "Bundled code is not yet a complete product surface."],
+      ["Embed renderer", "The CLI build copies apps/web/dist into dist/client when it is present.", "A missing web build logs a warning during build, but publication later requires client/index.html."],
+      ["Assert publish inputs", "The publish command requires the executable, launcher, and bundled client entry.", "The temporary npm manifest resolves workspace/catalog dependencies before npm sees it."],
+      ["Publish exact version", "Release CI publishes the CLI before it is allowed to create the GitHub Release.", "The release is held if npm publication fails."],
+    ],
+  },
+  desktop: {
+    label: "Desktop release",
+    artifact: "DMG · AppImage · NSIS",
+    boundary: "The build script describes broad platform targets, but release.yml decides which jobs actually run and ship.",
+    steps: [
+      ["Build inputs", "Desktop, server, web, and branded client assets must exist before staging begins.", "The artifact builder validates emitted bundles rather than trusting configuration alone."],
+      ["Stage closure", "Electron output, server dist, resources, production dependencies, native sidecars, and platform assets form a temporary app tree.", "Windows splits the server tree into a server.asar sidecar; macOS/Linux keep one merged tree."],
+      ["Package per matrix", "electron-builder creates platform-specific payloads and updater metadata.", "Builder code can target more combinations than CI has elected to ship."],
+      ["Release four lanes", "Current CI runs macOS arm64 DMG, macOS x64 DMG, Linux x64 AppImage, and Windows x64 NSIS.", "Windows arm64 is commented out in the release matrix: capability is not a published artifact."],
+    ],
+  },
+  hosted: {
+    label: "Hosted + mobile",
+    artifact: "Channel deploy · store build · OTA",
+    boundary: "Web channels are release-controlled aliases; mobile JavaScript can move only to native binaries with a matching fingerprint.",
+    steps: [
+      ["Select channel", "Stable and nightly releases derive separate versions, tags, and hosted channel names.", "Vercel Git-triggered deploys are disabled so an arbitrary commit does not become a product channel."],
+      ["Deploy web", "Release CI builds, deploys, and aliases one immutable deployment to latest or nightly.", "The public router uses a cookie to select a channel, then rewrites the app route."],
+      ["Reconcile stores", "Mobile CI compares the declared app version with finished production builds and creates/submits builds when needed.", "Store approval remains an external store process, not an OTA operation."],
+      ["Gate OTA", "An EAS production update is published only where a completed production build matches the current native fingerprint.", "Native drift skips OTA instead of shipping JavaScript into an incompatible binary."],
+    ],
+  },
+  aur: {
+    label: "AUR bridge",
+    artifact: "Arch package metadata",
+    boundary: "AUR repackages a published Linux AppImage; it does not build an independent desktop artifact from the source tree.",
+    steps: [
+      ["Accept a release tag", "The release script accepts only stable semver tags or the nightly tag shape.", "Other tag shapes exit before an AUR package is changed."],
+      ["Choose package lane", "Stable tags select t3code-bin; nightly tags select t3code-nightly-bin.", "The package names preserve channel separation for Arch users."],
+      ["Pin upstream", "The script reads the named GitHub Release asset digest and the LICENSE at that tag.", "A missing or malformed SHA-256 stops packaging."],
+      ["Validate then publish", "namcap and makepkg validate the updated PKGBUILD before an optional authenticated AUR push.", "Without the AUR SSH key, validation completes but publication is skipped."],
+    ],
+  },
+};
+const initialRoute = "npm";
+---
+
+<section class="artifact-factory" data-artifact-factory data-ready="pending" aria-labelledby={`${labId}-title`}>
+  <header class="artifact-factory__head">
+    <span>Interactive artifact factory · Chapter 37</span>
+    <h3 id={`${labId}-title`}>Choose a delivery lane, then inspect its gates</h3>
+    <p>Each lane has a different output and failure boundary. Advance manually; no state progresses on its own.</p>
+  </header>
+  <div class="artifact-factory__controls">
+    <fieldset>
+      <legend>Delivery lane</legend>
+      <div class="artifact-factory__choices" role="radiogroup" aria-label="Distribution delivery lane">
+        {Object.entries(routes).map(([key, route]) => <button type="button" role="radio" aria-checked={key === initialRoute ? "true" : "false"} tabindex={key === initialRoute ? 0 : -1} data-route={key}>{route.label}</button>)}
+      </div>
+    </fieldset>
+    <div class="artifact-factory__step-controls" aria-label="Artifact pipeline controls">
+      <button type="button" data-previous>Previous gate</button><button type="button" data-next>Next gate</button><button type="button" data-reset>Reset</button>
+    </div>
+  </div>
+  <p class="artifact-factory__status" aria-live="polite" aria-atomic="true" data-status>{routes[initialRoute].label} · Gate 1 of 4</p>
+  <ol class="artifact-factory__steps" aria-label="Artifact pipeline gates">
+    {routes[initialRoute].steps.map((step, index) => <li data-step={index} aria-current={index === 0 ? "step" : "false"}><span>{index + 1}</span><strong>{step[0]}</strong></li>)}
+  </ol>
+  <div class="artifact-factory__panel" tabindex="0" data-panel>
+    <p class="artifact-factory__eyebrow" data-route-label>{routes[initialRoute].label}</p>
+    <h4 data-title>{routes[initialRoute].steps[0][0]}</h4>
+    <p data-copy>{routes[initialRoute].steps[0][1]}</p>
+    <dl><div><dt>Output</dt><dd data-artifact>{routes[initialRoute].artifact}</dd></div><div><dt>Failure boundary</dt><dd data-boundary>{routes[initialRoute].steps[0][2]}</dd></div><div><dt>Lane rule</dt><dd data-lane-rule>{routes[initialRoute].boundary}</dd></div></dl>
+  </div>
+  <details class="artifact-factory__fallback" open>
+    <summary>Static artifact map</summary>
+    <div class="artifact-factory__table-wrap" tabindex="0"><table><thead><tr><th scope="col">Lane</th><th scope="col">Output</th><th scope="col">Last gate</th></tr></thead><tbody>{Object.values(routes).map((route) => <tr><th scope="row">{route.label}</th><td>{route.artifact}</td><td>{route.steps.at(-1)?.[0]} — {route.steps.at(-1)?.[2]}</td></tr>)}</tbody></table></div>
+  </details>
+  <noscript><p class="artifact-factory__noscript">JavaScript is off; the static artifact map remains available above.</p></noscript>
+</section>
+
+<script define:vars={{ routes }}>
+  document.querySelectorAll("[data-artifact-factory]").forEach((lab) => {
+    if (lab.dataset.ready === "true") return;
+    try {
+      const routeButtons = [...lab.querySelectorAll("[data-route]")];
+      const routeKeys = Object.keys(routes);
+      const status = lab.querySelector("[data-status]");
+      const routeLabel = lab.querySelector("[data-route-label]");
+      const title = lab.querySelector("[data-title]");
+      const copy = lab.querySelector("[data-copy]");
+      const artifact = lab.querySelector("[data-artifact]");
+      const boundary = lab.querySelector("[data-boundary]");
+      const laneRule = lab.querySelector("[data-lane-rule]");
+      const panel = lab.querySelector("[data-panel]");
+      const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+      let route = "npm";
+      let stepIndex = 0;
+      let initialized = false;
+      const render = (animate) => {
+        const current = routes[route];
+        const step = current.steps[stepIndex];
+        if (status) status.textContent = `${current.label} · Gate ${stepIndex + 1} of ${current.steps.length}: ${step[0]}.`;
+        if (routeLabel) routeLabel.textContent = current.label;
+        if (title) title.textContent = step[0];
+        if (copy) copy.textContent = step[1];
+        if (artifact) artifact.textContent = current.artifact;
+        if (boundary) boundary.textContent = step[2];
+        if (laneRule) laneRule.textContent = current.boundary;
+        lab.querySelectorAll("[data-step]").forEach((item, index) => {
+          const gate = current.steps[index];
+          item.hidden = !gate;
+          item.setAttribute("aria-current", String(index === stepIndex ? "step" : "false"));
+          const label = item.querySelector("strong");
+          if (label && gate) label.textContent = gate[0];
+        });
+        routeButtons.forEach((button) => {
+          const selected = button.dataset.route === route;
+          button.setAttribute("aria-checked", String(selected));
+          button.tabIndex = selected ? 0 : -1;
+        });
+        const previous = lab.querySelector("[data-previous]");
+        const next = lab.querySelector("[data-next]");
+        if (previous) previous.disabled = stepIndex === 0;
+        if (next) next.disabled = stepIndex === current.steps.length - 1;
+        if (initialized && animate && panel && !reducedMotion.matches) panel.animate([{ opacity: .62, transform: "translateX(7px)" }, { opacity: 1, transform: "translateX(0)" }], { duration: 170, easing: "ease-out" });
+        initialized = true;
+      };
+      const selectRoute = (nextRoute, focus) => {
+        if (!routes[nextRoute]) return;
+        route = nextRoute;
+        stepIndex = 0;
+        render(true);
+        if (focus) lab.querySelector(`[data-route="${nextRoute}"]`)?.focus();
+      };
+      routeButtons.forEach((button) => {
+        button.addEventListener("click", () => selectRoute(button.dataset.route, true));
+        button.addEventListener("keydown", (event) => {
+          if (!['ArrowRight', 'ArrowDown', 'ArrowLeft', 'ArrowUp', 'Home', 'End'].includes(event.key)) return;
+          event.preventDefault();
+          const index = routeKeys.indexOf(route);
+          const target = event.key === 'Home' ? 0 : event.key === 'End' ? routeKeys.length - 1 : ['ArrowRight', 'ArrowDown'].includes(event.key) ? (index + 1) % routeKeys.length : (index - 1 + routeKeys.length) % routeKeys.length;
+          selectRoute(routeKeys[target], true);
+        });
+      });
+      lab.querySelector("[data-previous]")?.addEventListener("click", () => { stepIndex = Math.max(0, stepIndex - 1); render(true); panel?.focus(); });
+      lab.querySelector("[data-next]")?.addEventListener("click", () => { stepIndex = Math.min(routes[route].steps.length - 1, stepIndex + 1); render(true); panel?.focus(); });
+      lab.querySelector("[data-reset]")?.addEventListener("click", () => { route = "npm"; stepIndex = 0; render(true); });
+      render(false);
+      lab.dataset.ready = "true";
+    } catch { lab.dataset.ready = "error"; }
+  });
+</script>
+
+<style>
+  .artifact-factory { margin: 2.5rem 0; overflow: clip; border: 1px solid var(--line-strong); border-radius: 1rem; background: var(--paper-raised); color: var(--ink); }.artifact-factory__head { padding: 1.3rem 1.35rem 1rem; }.artifact-factory__head > span, .artifact-factory__eyebrow { color: var(--signal-deep); font: 800 .72rem/1.2 var(--font-ui); letter-spacing: .08em; text-transform: uppercase; }.artifact-factory h3 { margin: .3rem 0 .45rem; font-size: 1.2rem; }.artifact-factory h4 { margin: .25rem 0 .5rem; font-size: 1.1rem; }.artifact-factory p { color: var(--ink-soft); }.artifact-factory__head p { max-width: 65ch; margin: 0; }.artifact-factory__controls { display: flex; align-items: end; justify-content: space-between; flex-wrap: wrap; gap: .8rem; padding: .8rem 1.35rem; border-block: 1px solid var(--line); background: var(--paper); }.artifact-factory fieldset { margin: 0; padding: 0; border: 0; }.artifact-factory legend { margin-bottom: .4rem; color: var(--ink-soft); font: 700 .78rem/1.2 var(--font-ui); }.artifact-factory__choices, .artifact-factory__step-controls { display: flex; flex-wrap: wrap; gap: .45rem; }.artifact-factory button { border: 1px solid var(--line-strong); border-radius: .45rem; padding: .45rem .65rem; background: var(--paper-raised); color: var(--ink); font: inherit; font-size: .84rem; cursor: pointer; }.artifact-factory button[aria-checked="true"] { border-color: var(--signal); background: var(--paper-muted); font-weight: 750; }.artifact-factory button:disabled { opacity: .45; cursor: default; }.artifact-factory button:not(:disabled):hover, .artifact-factory button:focus-visible, .artifact-factory__panel:focus-visible, .artifact-factory__table-wrap:focus-visible { outline: 2px solid var(--signal); outline-offset: 2px; }.artifact-factory__status { min-height: 1.4em; margin: .85rem 1.35rem; font-size: .84rem; }.artifact-factory__steps { display: grid; grid-template-columns: repeat(4, 1fr); gap: .4rem; margin: 0 1.35rem 1rem; padding: 0; list-style: none; }.artifact-factory__steps li { display: flex; align-items: center; gap: .45rem; min-width: 0; padding: .55rem; border: 1px solid var(--line); border-radius: .5rem; color: var(--ink-soft); font-size: .78rem; }.artifact-factory__steps li[aria-current="step"] { border-color: var(--signal); color: var(--ink); background: var(--signal-soft); }.artifact-factory__steps span { display: grid; flex: 0 0 auto; place-items: center; width: 1.3rem; height: 1.3rem; border-radius: 999px; background: var(--paper-muted); font-size: .7rem; }.artifact-factory__steps li[aria-current="step"] span { background: var(--signal); color: var(--paper); }.artifact-factory__panel { margin: 0 1.35rem 1rem; padding: 1rem; border: 1px solid var(--line); border-radius: .65rem; background: var(--paper); }.artifact-factory__panel p { margin: 0; max-width: 75ch; }.artifact-factory dl { display: grid; grid-template-columns: repeat(3, 1fr); gap: .6rem; margin: 1rem 0 0; }.artifact-factory dl div { min-width: 0; padding: .65rem; border-radius: .45rem; background: var(--paper-muted); }.artifact-factory dt { color: var(--ink-faint); font: 800 .7rem/1.2 var(--font-ui); letter-spacing: .04em; text-transform: uppercase; }.artifact-factory dd { margin: .25rem 0 0; color: var(--ink-soft); font-size: .8rem; }.artifact-factory__fallback { margin: 0 1.35rem 1.2rem; font-size: .82rem; }.artifact-factory__fallback summary { cursor: pointer; color: var(--ink-soft); }.artifact-factory__table-wrap { overflow-x: auto; }.artifact-factory table { width: 100%; min-width: 38rem; margin-top: .65rem; border-collapse: collapse; }.artifact-factory th, .artifact-factory td { padding: .45rem; border: 1px solid var(--line-strong); text-align: left; vertical-align: top; }.artifact-factory__noscript { margin: 0 1.35rem 1rem; font-size: .82rem; }.artifact-factory[data-ready="true"] .artifact-factory__fallback { display: none; }
+  @media (max-width: 48rem) { .artifact-factory__head, .artifact-factory__controls { padding-inline: .85rem; }.artifact-factory__status, .artifact-factory__steps, .artifact-factory__panel, .artifact-factory__fallback { margin-inline: .85rem; }.artifact-factory__steps, .artifact-factory dl { grid-template-columns: 1fr; } }
+  @media (prefers-reduced-motion: no-preference) { .artifact-factory__steps li, .artifact-factory__steps span, .artifact-factory__panel { transition: border-color 170ms ease, background-color 170ms ease, color 170ms ease; } }
+  @media (prefers-reduced-motion: reduce) { .artifact-factory *, .artifact-factory *::before, .artifact-factory *::after { animation: none !important; transition: none !important; } }
+  @media print { .artifact-factory__controls, .artifact-factory__status, .artifact-factory__steps, .artifact-factory__panel { display: none !important; }.artifact-factory__fallback { display: block !important; } }
+</style>
