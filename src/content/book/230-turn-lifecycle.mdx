@@ -1,0 +1,320 @@
+---
+slug: turn-lifecycle
+order: 230
+number: "23"
+kind: chapter
+part: Part V · The work lifecycle
+partOrder: 5
+title: Start, stream, steer, interrupt, settle
+shortTitle: Turn lifecycle
+summary: A T3 turn begins as a durably accepted command and later crosses hot reactor and provider-runtime boundaries; session state, output, checkpoints, and client liveness each have narrower guarantees.
+status: source-checked
+gates: [sources, interaction]
+objectives:
+  - Follow a thread turn from a client command through decision, commitment, reactors, and provider events.
+  - Separate durable thread and turn projections from provider-process liveness and hot delivery.
+  - Explain buffering, user-interaction pauses, interruption, failures, completion, checkpoints, and settlement without treating any one signal as universal.
+  - Use correlation and turn guards to reason about delayed, missing, or superseded provider events.
+keywords: [thread, turn, lifecycle, receipt, reactor, provider runtime, buffering, interrupt, checkpoint, settlement, liveness]
+sourceAreas: [packages/contracts/src/orchestration.ts, packages/contracts/src/providerRuntime.ts, apps/server/src/orchestration/decider.ts, apps/server/src/orchestration/Layers/ProviderCommandReactor.ts, apps/server/src/orchestration/Layers/ProviderRuntimeIngestion.ts, apps/server/src/orchestration/Layers/CheckpointReactor.ts, apps/server/src/provider/Layers/ProviderService.ts, packages/client-runtime/src/state/threads.ts]
+visuals: [turn lifecycle swimlane, illustrative-control state-machine lab]
+updatedAt: 2026-08-24
+---
+
+import Callout from "../../components/Callout.astro";
+import EvidenceClaim from "../../components/EvidenceClaim.astro";
+import Figure from "../../components/Figure.astro";
+import Mermaid from "../../components/Mermaid.astro";
+import SourceExcerpt from "../../components/SourceExcerpt.astro";
+import SourceList from "../../components/SourceList.astro";
+import TurnLifecycleLab from "../../components/TurnLifecycleLab.astro";
+
+A T3 **thread** is the durable conversation and workspace record. A **turn** is
+one requested user-to-agent cycle within it. They overlap, but they do not share
+one clock or one source of truth.
+
+The command path can durably record that a turn was requested before a provider
+process has accepted anything. Later, canonical provider events can make session
+and message projections durable. Between those crossings, a live process, a
+hot stream, and a client subscription can all disappear independently.
+
+<Callout title="The useful boundary" tone="warning">
+  An accepted command receipt proves that T3 committed the command's domain
+  event batch. It does not prove that a hot reactor observed the event, that a
+  provider started, or that the provider finished. Conversely, provider liveness
+  is operational evidence, not a durable replay log.
+</Callout>
+
+## 1. Request: a command records intent, not generated work
+
+The `thread.turn.start` command schema carries a user message, optional model/title
+choices, runtime and interaction mode fields, and optional bootstrap metadata. On
+the current web path for an already-created server thread, selected model and modes
+are first persisted with separate thread-setting commands. The turn decider then
+validates the thread (and optional source plan) and writes that target thread's
+already-stored runtime and interaction modes into a user `thread.message-sent` plus
+causally linked `thread.turn-start-requested`. Those command fields therefore should
+not be read as a separate per-turn override on this path. Activity may also unsettle
+or unsnooze the thread.
+
+<SourceExcerpt id="turn-lifecycle-start-decider" focus={[926, 944, 956, 976, 983, 998, 1036]} note="The decider first validates its target and optional source plan, then plans the user message and the turn-start request in one command result; actual provider work is absent here." />
+
+The engine appends that planned batch, applies synchronous projections, and
+writes the accepted command receipt in one SQL transaction. Only after commit
+does it publish each event to its in-memory domain stream. A same-id retry can
+return the receipt rather than create a second command batch; it does **not**
+replay the post-commit publication or provider request.
+
+<EvidenceClaim kind="verified" title="A start acknowledgement is a durable-intent acknowledgement" refs={["turn-lifecycle-start-decider", "turn-lifecycle-engine-commit", "turn-lifecycle-hot-reactor"]}>
+  T3 can acknowledge <code>thread.turn.start</code> after its event batch and
+  receipt commit, before <code>ProviderService.sendTurn</code> runs. This is
+  intentionally narrower than provider acceptance or turn completion.
+</EvidenceClaim>
+
+### Bootstrap is a surrounding saga, not a turn-state transition
+
+Bootstrap metadata can ask the command entry path to create a thread, prepare a
+worktree, and optionally launch setup before the final turn command. Those steps
+span separate commands and filesystem effects. The final `thread.turn.start` is
+still the durable intent boundary described above; a worktree or setup outcome
+does not make a provider turn running by itself.
+
+This chapter uses “start” for the final turn command. It does not imply that
+every first-message bootstrap step is atomic with that command.
+
+## 2. React: committed intent reaches a hot provider boundary
+
+`ProviderCommandReactor` subscribes to committed domain events and serializes
+its work. For a start request it finds the recorded user message, optionally
+launches first-turn naming work, ensures or resumes a provider session, marks the
+projected session `starting` while a start is pending, and calls
+`ProviderService.sendTurn`. The call is forked: its eventual failure is handled
+asynchronously.
+
+<SourceExcerpt id="turn-lifecycle-command-reactor" focus={[1060, 1063, 1073, 1086, 1117, 1153, 1171]} note="The reactor deduplicates recently handled start events in memory, reads the already-projected message, starts side work for a first turn, builds the provider request, and forks sendTurn with error recovery." />
+
+If session setup or `sendTurn` fails, the reactor writes a session with `error`
+status and appends a `provider.turn.start.failed` activity. That is a later,
+separate internal command sequence; it does not rewrite the original accepted
+receipt. Retrying is therefore a **new intent with a new command id**, not an
+automatic re-execution promised by the original receipt.
+
+<EvidenceClaim kind="verified" title="The start reactor has local suppression, not durable delivery" refs={["turn-lifecycle-start-dedupe-cache", "turn-lifecycle-hot-reactor"]}>
+  The reactor keeps a time-limited in-memory cache of handled starts and consumes
+  a hot stream. Neither mechanism is a persisted provider-outbox cursor. A
+  process loss in the post-commit bridge can leave durable intent without this
+  reactor observing it.
+</EvidenceClaim>
+
+## 3. Run: correlate provider facts before changing the thread
+
+Each adapter emits canonical `ProviderRuntimeEvent` values. The provider service
+checks that the emitting adapter's configured instance and driver agree with the
+event, fills that instance identity into the event when needed, may log it, and
+then publishes it to its own hot stream. `threadId` is the product anchor;
+`turnId`, item ids, request ids, native references, and provider-instance id are
+the correlation material around it.
+
+<SourceExcerpt id="turn-lifecycle-runtime-correlation" focus={[195, 202, 207, 212]} note="ProviderService rejects driver or instance mismatches and stamps every accepted runtime event with the source instance id." />
+
+Runtime ingestion guards lifecycle-changing facts. In particular, a completion
+for another active turn—or an untargeted completion while no active turn is
+known—is rejected from the lifecycle update. A `turn.started` that names a new
+expected turn may supersede the former turn; this supports provider-specific
+steering behavior without allowing arbitrary stale events to overwrite the
+thread.
+
+<SourceExcerpt id="turn-lifecycle-runtime-guards" focus={[1505, 1518, 1525, 1540, 1551, 1567, 1596, 1617]} note="Runtime ingestion compares incoming and active turn ids, permits a narrowly correlated superseding start, maps accepted lifecycle events to session state, and dispatches thread.session.set." />
+
+The resulting durable session projection has practical states such as
+`starting`, `running`, `ready`, `error`, and `stopped`. A turn row separately
+uses `running`, `completed`, `interrupted`, or `error`. Do not read this as a
+universal provider state machine: the runtime union has `turn.started`,
+`turn.completed`, and `turn.aborted`, while the projection chooses how to fold
+selected events into T3's user-facing state.
+
+The shared client reducer makes the same distinction: a completed assistant
+message does not settle its turn while that turn remains the session's active
+running turn; leaving `running` is the turn-end signal for the client model.
+
+<Figure number="23.1" title="One turn crosses durable and hot lanes repeatedly" hint="solid arrows are durable command paths; dashed arrows are hot provider or reactor paths" caption="The client command commits a user message, a turn-start request, projections, and a receipt together. A hot command reactor later prepares a provider session and sends the turn. A provider adapter emits canonical runtime events; ProviderService correlates them and publishes them hot. Runtime ingestion turns selected events into new durable commands for the session, messages, approvals, and turn data. Checkpoint capture is another asynchronous consumer. Completion is a provider fact folded into session readiness or error; a checkpoint is an additional filesystem-backed result, not the command receipt." textEquivalent="A client starts a turn. The engine durably stores a user message, turn-start request, projections, and accepted receipt. A hot provider reactor starts or resumes a session and sends the turn. The provider emits runtime events. ProviderService correlates them to an instance and hot-publishes them. Runtime ingestion emits later durable commands for session state, assistant messages, approvals, and turn records. A checkpoint reactor independently observes relevant events and records git checkpoints when possible. Provider completion can make the session ready or error; the initial receipt never represents provider completion or checkpoint capture." sources={["turn-lifecycle-start-decider", "turn-lifecycle-engine-commit", "turn-lifecycle-command-reactor", "turn-lifecycle-runtime-correlation", "turn-lifecycle-runtime-guards", "turn-lifecycle-checkpoint-triggers"]}>
+  <Mermaid id="turn-lifecycle-swimlane" label="Turn lifecycle across durable and hot boundaries" chart={`flowchart LR
+    C[client command] --> E[(message + start intent + receipt)]
+    E -. hot domain event .-> R[command reactor]
+    R --> P[ProviderService / adapter]
+    P -. canonical runtime event .-> S[correlate + hot PubSub]
+    S -.-> I[runtime ingestion]
+    I --> D[(session, messages, requests, turn rows)]
+    S -.-> K[checkpoint reactor]
+    K --> G[(git checkpoint when available)]`} />
+</Figure>
+
+## 4. Stream: buffering changes cadence, not ownership
+
+For `content.delta` with `assistant_text`, ingestion gets or creates an assistant
+message associated with the incoming turn. In the default buffered delivery mode,
+it collects text and dispatches only spill chunks; the legacy setting dispatches
+each delta directly. On a provider request for the user, ingestion flushes the
+buffer and finalizes the active assistant segment. On `turn.completed`, it
+finalizes remembered assistant messages and buffered proposed-plan material.
+
+<SourceExcerpt id="turn-lifecycle-buffering" focus={[1659, 1666, 1677, 1681, 1707, 1717, 1730]} note="Assistant text is either buffered or dispatched as deltas; a user request flushes and finishes the current segment." />
+
+Buffering is not a second transcript and it is not a guarantee that every native
+token becomes a durable event. It is a server-side delivery policy before the
+next internal commands commit. The durable history remains the projected messages
+that successfully pass through the orchestration engine.
+
+### Waiting is an in-flight turn that needs a person
+
+`request.opened` and `user-input.requested` are distinct runtime facts. They
+create pending interaction state and close the current assistant segment so a
+person can respond. The generic command boundary sends an approval decision or
+structured answers back to the active provider session. The turn can remain
+running while it waits; the UI deliberately keeps a Stop action available in
+this state.
+
+This is not the same as a settled thread. Settlement is a separate thread
+lifecycle classification and refuses to hide a starting/running session or an
+open approval/user-input request.
+
+## 5. Control: interrupt and steer have intentionally different meanings
+
+`thread.turn.interrupt` durably records `thread.turn-interrupt-requested` first.
+The reactor then interrupts **by session**, because an orchestration turn id is
+not a provider turn id. An interrupt request can immediately mark a matching
+turn projection interrupted, but native completion/abortion and session state
+still arrive through the provider-runtime path.
+
+<SourceExcerpt id="turn-lifecycle-interrupt" focus={[1039, 1052, 1055]} note="The decider records the interrupt request as durable intent. Provider-side interruption is a later reactor action." />
+
+There is no generic `steer` method in `ProviderAdapter`. Sending another start
+request while a provider turn is live may mean “steer” for a concrete adapter;
+the ingestion guard explicitly has a controlled superseding-start case. Treat it
+as provider-specific behavior, not a cross-provider promise.
+
+<EvidenceClaim kind="inference" title="The lab models a steer as a new expected turn, not a universal command" refs={["turn-lifecycle-runtime-guards", "turn-lifecycle-command-reactor"]}>
+  The interactive state machine shows steering as a controlled replacement of an
+  active provider turn. That is a teaching model inferred from the guarded
+  supersession path; a product control must still check its chosen adapter's
+  concrete behavior.
+</EvidenceClaim>
+
+## 6. Finish: completion, error, compaction, and checkpoint are separate signals
+
+`turn.completed` carries a runtime state and may contain stop reason, usage,
+cost, or error text. Ingestion maps a failed completion to session `error` and
+other completion to `ready`, clears its active turn id, and finalizes buffered
+content. A `runtime.error` can also record session error. `turn.aborted` clears
+plan-progress liveness, but its exact durable session fold is not equivalent to
+the `turn.completed` path in the inspected code.
+
+`context_compaction` is a canonical item type, and ingestion maps a canonical
+`thread.state.changed` value of `compacted` into a durable
+`context-compaction` activity. It is still not a documented transition in this
+chapter's session-status switch. The activity records provider-originated
+provenance; it must not be presented as a new T3 turn, completion, checkpoint,
+or a T3-owned summary artifact.
+
+<Callout title="Compaction is a signal, not an automatic lifecycle reset" tone="info">
+  At this pinned revision, the runtime vocabulary can represent context
+  compaction and ingestion can preserve its observation as activity. The lifecycle
+  folding inspected here does not establish a generic “compaction completed the
+  turn” rule. Any future product behavior that does so should be explicitly sourced
+  and tested.
+</Callout>
+
+Checkpointing is a parallel best-effort lifecycle. Its earliest baseline path
+observes the durable `thread.turn-start-requested` or qualifying user-message event
+and tries to capture the pre-turn Git state; an observed provider `turn.started`
+provides an additional baseline path. On completion, the reactor can capture a
+post-turn ref from a correlated runtime event. Because the shared runtime stream may
+miss that completion, ingestion can first create a `missing` checkpoint from
+`turn.diff.updated`, and the reactor listens to the resulting durable domain event
+to replace the placeholder with a real capture. A non-Git workspace, missing id,
+checkpoint failure, or stream gap can prevent a checkpoint without invalidating the
+turn receipt or provider completion.
+
+<SourceExcerpt id="turn-lifecycle-checkpoint-completion" focus={[356, 376, 396, 448]} note="The checkpoint reactor accepts a completed runtime turn only when it can correlate the turn id, avoids duplicating a real checkpoint, and preserves a placeholder's turn count when replacing it." />
+
+<EvidenceClaim kind="verified" title="A checkpoint is a later milestone, not turn acceptance" refs={["turn-lifecycle-engine-commit", "turn-lifecycle-domain-baseline", "turn-lifecycle-checkpoint-completion", "turn-lifecycle-checkpoint-baseline", "turn-lifecycle-checkpoint-triggers", "turn-lifecycle-runtime-receipts"]}>
+  The accepted command receipt is committed with the initial domain batch. Test
+  receipt publication for checkpoint milestones is separate, and the production
+  runtime receipt bus intentionally retains and broadcasts nothing.
+</EvidenceClaim>
+
+## Exercise illustrative paths
+
+The lab deliberately presents a small set of useful teaching paths; each click moves
+once and stops. These controls are **not** a complete server-enforced legality
+matrix. The turn-start decider validates the target thread and optional source plan,
+but it has no “must be resting/ready” guard. UI affordances and concrete provider
+behavior constrain concurrent sends elsewhere. The lab distinguishes the durable
+record from hot provider liveness and includes a static table for no-script and
+print use.
+
+<TurnLifecycleLab id="turn-lifecycle-state-machine" />
+
+## What survives which boundary?
+
+| Observation | What it establishes | What it does not establish |
+| --- | --- | --- |
+| Accepted start receipt | initial message and start intent committed with projections | provider saw, started, or completed the work |
+| `starting` / `running` session projection | accepted runtime lifecycle folding has been persisted | the native process is currently reachable |
+| Buffered or completed assistant message | a selected content result committed | every native token or tool event was durably preserved |
+| `turn.completed` folded to `ready` or `error` | a correlated completion event was accepted by ingestion | checkpoint capture, client delivery, or billing settlement |
+| Checkpoint row/ref | checkpoint reactor recorded a filesystem-derived milestone | a provider turn receipt or universal rollback semantics |
+| Client “live” / “synchronizing” state | subscription/cache synchronization condition | provider execution state or a durable liveness lease |
+
+<EvidenceClaim kind="inference" title="Hot liveness should be treated as an observation, not a durable lease" refs={["turn-lifecycle-runtime-correlation", "turn-lifecycle-client-liveness", "turn-lifecycle-client-turn-reducer", "turn-lifecycle-hot-reactor"]}>
+  Provider streams and client subscriptions are both live, scope-bound mechanisms.
+  The durable projections are the recoverable product record; neither hot stream
+  proves the other is alive after a disconnect or process restart.
+</EvidenceClaim>
+
+## Ambiguities worth keeping visible
+
+- The canonical union admits more event variants than every adapter emits. This
+  chapter does not claim that every provider reports compaction, usage, pause,
+  or a matching turn id.
+- A pending request makes a thread await a person, but an exact provider-native
+  pause/resume protocol remains adapter-owned.
+- The start reactor's hot subscription and short-lived dedupe cache do not by
+  themselves specify crash recovery for a missed initial start. That would need
+  a durable outbox/reconciler design; none is established by these paths.
+- A checkpoint is conditional on workspace and Git conditions. The sources do
+  not establish it as a prerequisite for calling a turn complete.
+
+<SourceList ids={[
+  "turn-lifecycle-command-contract",
+  "turn-lifecycle-runtime-contract",
+  "turn-lifecycle-turn-completion-payload",
+  "turn-lifecycle-start-decider",
+  "turn-lifecycle-web-mode-persist",
+  "permission-turn-start-stored-mode",
+  "turn-lifecycle-engine-commit",
+  "turn-lifecycle-hot-reactor",
+  "turn-lifecycle-start-dedupe-cache",
+  "turn-lifecycle-command-reactor",
+  "turn-lifecycle-runtime-correlation",
+  "turn-lifecycle-runtime-publication",
+  "turn-lifecycle-runtime-adapter-subscription",
+  "turn-lifecycle-runtime-fanout",
+  "turn-lifecycle-runtime-guards",
+  "turn-lifecycle-buffering",
+  "turn-lifecycle-completion-finalization",
+  "turn-lifecycle-interrupt",
+  "turn-lifecycle-interrupt-reactor",
+  "turn-lifecycle-checkpoint-completion",
+  "turn-lifecycle-domain-baseline",
+  "turn-lifecycle-checkpoint-baseline",
+  "turn-lifecycle-checkpoint-triggers",
+  "turn-lifecycle-runtime-receipts",
+  "turn-lifecycle-client-liveness",
+  "turn-lifecycle-client-turn-reducer",
+  "turn-lifecycle-settlement-guards",
+  "turn-lifecycle-waiting-ui-test",
+  "turn-lifecycle-runtime-tests",
+  "turn-lifecycle-checkpoint-tests",
+  "context-memory-compaction-ingestion"
+]} />

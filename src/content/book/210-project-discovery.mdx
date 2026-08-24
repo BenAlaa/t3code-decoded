@@ -1,0 +1,272 @@
+---
+slug: project-discovery
+order: 210
+number: "21"
+kind: chapter
+part: Part V · The work lifecycle
+partOrder: 5
+title: Project discovery and t3.json
+shortTitle: Project discovery
+summary: "A T3 project is an environment-local durable record for one normalized workspace root; checked-in t3.json and Git-remote identity enrich its behavior and presentation without replacing that record."
+status: source-checked
+gates: [sources, interaction]
+objectives:
+  - Separate a filesystem workspace root, a durable project record, a Git identity, and a cross-environment presentation group.
+  - Trace t3.json decoding, its constrained schema, and the precedence of explicit, project, checked-in, and global workspace choices.
+  - Follow project creation through normalization, command invariants, durable events, and projected read models.
+  - Inspect setup-script environment labels without mistaking them for a shell sandbox or project identity.
+keywords: [projects, workspace root, discovery, t3.json, repository identity, environments, configuration, setup scripts, projection]
+sourceAreas: [apps/server/src/workspace/WorkspacePaths.ts, apps/server/src/project, packages/contracts/src/t3ProjectFile.ts, packages/shared/src/threadEnvMode.ts, packages/client-runtime/src/state/projectGrouping.ts]
+visuals: [filesystem discovery decision explainer, project identity projection]
+updatedAt: 2026-08-24
+---
+
+import Callout from "../../components/Callout.astro";
+import EvidenceClaim from "../../components/EvidenceClaim.astro";
+import Figure from "../../components/Figure.astro";
+import Mermaid from "../../components/Mermaid.astro";
+import ProjectDiscoveryLab from "../../components/ProjectDiscoveryLab.astro";
+import SourceExcerpt from "../../components/SourceExcerpt.astro";
+import SourceList from "../../components/SourceList.astro";
+
+“Project” is deliberately not a synonym for “Git repository.” At this pinned
+revision, it starts as an environment-local durable record with a normalized
+directory as its `workspaceRoot`. Git can later provide an identity for that
+directory; clients can then choose to group equivalent identities across
+environments. Neither upgrade makes paths, directories, and project records the
+same thing.
+
+## Four layers answer four different questions
+
+| Layer | Question it answers | What it is not |
+|---|---|---|
+| Workspace root | Is this supplied path a directory T3 may use? | A proof that it is Git-backed or unique across machines |
+| Project record | Which durable project id, title, defaults, scripts, and lifecycle state belong here? | A recursive filesystem scan or a repository identity |
+| Repository identity | Which normalized fetch remote describes this Git repository? | A durable project event field that every directory must have |
+| Logical project group | Which physical project entries should a client present together? | A replacement for the selected environment/project target |
+
+The root service trims and resolves a supplied path (including a leading home
+shortcut), verifies it is a directory, and can create a missing directory only
+when the caller explicitly requests that. Relative files are separately resolved
+under a validated root; absolute paths and traversal outside it are rejected.
+
+<SourceExcerpt id="project-root-normalization" focus={[161, 164, 170, 171, 187, 193, 199]} note="A root is resolved and verified as a directory. Creation is opt-in; it is not implicit discovery." />
+
+The `project.create` normalization path uses that root service and passes
+`createWorkspaceRootIfMissing` through as the opt-in flag. The decider then
+rejects a second active project whose comparison-normalized root is already
+claimed. Thus “discover” in this chapter means validating and registering a root,
+not crawling the disk and guessing every possible project.
+
+<SourceExcerpt id="project-create-normalization" focus={[55, 65, 70, 82, 85, 89]} note="Project creation normalizes the root before it reaches the decider." />
+
+<SourceExcerpt id="project-root-uniqueness" focus={[75, 81, 82, 84, 91, 94]} note="The invariant compares active project roots after path normalization." />
+
+<EvidenceClaim kind="verified" title="A project root may be non-Git" refs={["project-root-normalization", "project-create-normalization", "project-root-uniqueness", "project-repository-identity"]}>
+  A valid directory can become a project even when Git identity resolution later
+  returns null. Conversely, a Git repository does not enter the durable project
+  read model until a project-create command is accepted and projected.
+</EvidenceClaim>
+
+### Registration has explicit entry points, plus one configured startup shortcut
+
+T3 does not recursively discover directories. The client add/browse path validates
+one chosen path and builds `project.create`; `t3 project add` normalizes one CLI
+argument and dispatches the same durable intent. Clone flows likewise resolve a
+specific destination before registration. One deliberate exception to a person
+clicking or typing a path is the optional server startup flag: when
+`autoBootstrapProjectFromCwd` is enabled, startup registers the configured cwd when
+needed and creates or selects an initial local thread. That is a single configured
+root—not a disk crawl.
+
+| Entry point | Candidate source | Durable effect | Discovery boundary |
+|---|---|---|---|
+| Client add / browse | one selected or typed path | builds `project.create` | validates only that target |
+| CLI `t3 project add` | one path argument | dispatches `project.create` | rejects an already-registered normalized root |
+| Clone flow | one resolved destination | registers the clone destination | no unrelated directory scan |
+| Optional cwd bootstrap | configured server cwd | may create project plus first local thread | gated startup shortcut for one cwd |
+
+## t3.json is checked-in input, not the project database
+
+The checked-in file is named `t3.json` at the workspace root. Its schema permits a
+schema URL, a workspace-relative icon path, a default thread environment mode, and
+up to 50 named scripts. A script has a display name and shell command; optional
+fields select an icon, mark a script to run after worktree creation, and describe
+desktop preview behavior. The schema says `defaultThreadEnvMode` is either `local`
+or `worktree`; it does not make a non-Git folder capable of creating a Git worktree.
+
+<SourceExcerpt id="project-t3-file-schema" focus={[7, 10, 27, 31, 39, 45, 62, 68, 77, 83, 90]} note="The contract fixes the file name and the checked-in configuration surface." />
+
+The loader joins that file name to the already-selected workspace root. A missing
+file is normal; unreadable, malformed, and schema-invalid input is logged and
+treated as absent. JSONC is accepted by the shared decoder, as the loader test
+demonstrates. That makes `t3.json` advisory configuration with a safe fallback—not
+an all-or-nothing prerequisite for opening a project.
+
+<SourceExcerpt id="project-t3-file-loader" focus={[42, 45, 66, 68, 73, 85, 88, 91, 101]} note="Load never fails outward: missing, read failure, and decode failure all produce no usable file." />
+
+<SourceExcerpt id="project-t3-file-loader-tests" focus={[31, 37, 44, 54, 59, 65, 71, 77, 83]} note="Tests show JSONC input succeeds while missing, malformed, and incomplete script entries produce none." />
+
+### Precedence is specific to a new thread's workspace choice
+
+The shared resolver gives a per-project stored setting first priority, then the
+checked-in `t3.json` value, then the global default. An explicit composer choice
+outranks that resolver before it is consulted. The web settings surface states the
+same project > `t3.json` > global order and lets `null` clear the project override.
+This precedence does not mean that every `t3.json` field overrides every stored
+project field: scripts are imported/stored separately, and the project record owns
+its own selected script list.
+
+<SourceExcerpt id="project-thread-env-precedence" focus={[3, 5, 7, 12, 17, 20, 26, 32]} note="This is the shared priority function, plus the rule that a provisional default must not be persisted before file loading settles." />
+
+<SourceExcerpt id="project-settings-inherited-default" focus={[475, 479, 481, 482]} note="When no project override is stored, the web derives the inherited value from t3.json and then the global setting." />
+
+<SourceExcerpt id="project-settings-project-override" focus={[866, 868, 879, 881, 883, 898, 900, 903]} note="The project settings UI lets a project set local/worktree or clear its override to inherit." />
+
+<Callout title="Configuration failure has a narrow blast radius" tone="warning">
+  An invalid `t3.json` is not silently accepted as partial configuration. Its
+  declared actions and icon are ignored in that checkout, while the underlying
+  project record and its filesystem root remain independently valid.
+</Callout>
+
+### Checked-in actions become durable scripts only after import
+
+Raw `t3.json` actions are suggestions. The web scripts control excludes a suggestion
+when an existing durable project script already has the same command or a
+case-insensitive matching name. A person chooses an import; the UI converts the file
+shape into a project script and updates the project's stored `scripts` list. Later
+setup selects from that durable list. The setup runner does not execute raw file
+entries merely because a checkout contains `t3.json`.
+
+<SourceExcerpt id="project-script-import-flow" focus={[80, 83, 87, 92, 110, 120, 134, 139]} note="File actions are filtered against stored scripts and appear under an explicit From t3.json import menu; selecting one calls the normal add-script path." />
+
+<Figure number="21.1" title="A checked-in action crosses an explicit import boundary" hint="the setup runner reads durable project scripts" caption="The loader exposes valid t3.json actions as file suggestions. The web filters command/name duplicates and waits for a person to import one. The normal project update path saves the converted script into the durable project scripts list. Worktree setup later selects the first stored script marked runOnWorktreeCreate and executes that stored command." textEquivalent="Valid t3.json actions flow into a list of import suggestions. Existing project scripts remove duplicate command or name suggestions. A user import converts one suggestion and updates the durable project scripts list. The setup selector and runner read that durable list, not the raw t3.json action array." sources={["project-t3-file-loader", "project-script-import-flow", "project-script-durable-save", "project-script-setup-selection", "project-setup-script-runner"]}>
+  <Mermaid id="project-script-import-boundary" label="t3.json script import and setup execution" chart={`flowchart LR
+    F[t3.json actions] --> L[best-effort file loader]
+    L --> I[deduplicated import suggestions]
+    I -->|person imports| U[project update command]
+    U --> D[(durable project.scripts)]
+    D --> S[first runOnWorktreeCreate script]
+    S --> T[setup terminal command]`} />
+</Figure>
+
+## Identity is resolved at read time from Git remotes
+
+Repository identity resolution first asks Git for the top-level root, then reads
+fetch remotes. It prefers `upstream`, then `origin`, then the lexicographically
+first fetch remote. The selected URL is normalized into a canonical key and can
+yield a display name, provider, owner, and repository name. A non-Git directory or
+a Git repository with no remote returns `null`; positive and negative results are
+cached for one minute by default.
+
+<SourceExcerpt id="project-repository-identity" focus={[48, 51, 58, 63, 68, 75, 90, 97, 104, 117, 123, 134, 143, 146, 152, 158, 164]} note="Identity is a best-effort derivation from Git's top-level root and fetch remotes. Positive and negative cache TTLs are applied after resolution; identity is not a field written by project.create." />
+
+The snapshot query resolves identities for distinct active workspace roots with a
+bounded concurrency of four, then attaches the result to each returned project
+shell. The durable project projector itself starts with the project id, title,
+root, defaults, scripts, timestamps, and deletion state. In other words, a client
+receives a projection enriched by a fresh repository lookup; the event stream does
+not promise that a remote URL is permanently frozen into project history.
+
+<SourceExcerpt id="project-identity-read-projection" focus={[313, 317, 321, 352, 356, 370, 371, 375, 382, 385]} note="Read-model shells are enriched with a resolver result after durable project rows are read." />
+
+<SourceExcerpt id="project-durable-projection" focus={[227, 240, 247, 251, 253, 261, 283, 291, 296]} note="The decider emits project.created/meta-updated events; the stored default environment mode is a project-meta field." />
+
+<SourceExcerpt id="project-projector" focus={[207, 212, 215, 217, 219, 236, 244, 251, 257]} note="Projection creates the durable project shape, initializes its environment override to null, and applies later metadata updates." />
+
+<Figure number="21.2" title="Project identity is a layered projection" hint="a remote name enriches a project; it does not replace its root" caption="A candidate path first passes workspace-root validation. An accepted project command emits durable project events, which project into a project row. Separately, the snapshot query resolves a Git remote identity for each active root and attaches it to the shell. Clients may group physical entries by that identity and show an environment label, but retain a concrete environment/project target." textEquivalent="The diagram has a path-validation lane leading to project.create and a durable project read model. A separate Git remote lookup from the workspace root produces an optional repository identity, which enriches a snapshot. A client grouping step combines eligible physical project entries for presentation and annotates members with environment labels. The concrete project record remains the operational target." sources={["project-root-normalization", "project-durable-projection", "project-projector", "project-repository-identity", "project-identity-read-projection", "project-logical-grouping", "project-environment-label"]}>
+  <Mermaid id="project-identity-projection" label="Project discovery and identity layers" chart={`flowchart LR
+    P[Candidate path] --> R{validated directory?}
+    R -->|yes| C[project.create]
+    R -->|no| X[structured root error]
+    C --> E[project.created event]
+    E --> D[(durable project projection)]
+    P --> G[Git top-level + fetch remote]
+    G --> I[optional canonical repository identity]
+    D --> S[project shell snapshot]
+    I --> S
+    S --> L[client logical grouping + environment labels]`} />
+</Figure>
+
+## Grouping is presentation, and labels identify a member's environment
+
+Client grouping has three modes. `separate` uses a physical key of environment id
+plus normalized workspace path. `repository` uses the canonical remote key when
+available. The repository-and-path mode appends a workspace path relative to the
+Git root when it can derive one. If identity is absent or relative-path derivation
+fails, grouping falls back to the physical key or the canonical repository key as
+the source says. The group retains member project references, so a grouped sidebar
+title is never authorization to send a command to a vague “shared project.”
+
+<SourceExcerpt id="project-logical-grouping" focus={[67, 71, 99, 103, 108, 112, 117, 122, 131, 136, 139]} note="A physical key is environment plus path; logical grouping is optional and identity-dependent." />
+
+The web sidebar decorates each retained member using an environment-label resolver,
+calculates local/remote/mixed presence against the primary environment, and keeps
+the member project refs. An environment label therefore tells the reader where a
+physical checkout lives; it is not part of the Git remote key and it does not alter
+the project root.
+
+<SourceExcerpt id="project-environment-label" focus={[53, 64, 69, 73, 83, 90, 94, 102, 107, 110]} note="Sidebar groups preserve member projects and add environment labels as presentation metadata." />
+
+## Setup commands carry both roots into the new worktree terminal
+
+The first script marked `runOnWorktreeCreate` is the setup script. When it runs,
+its terminal cwd is the new worktree, while its environment sets
+`T3CODE_PROJECT_ROOT` to the project's original root and
+`T3CODE_WORKTREE_PATH` to the new linked checkout. This is useful context for a
+setup command; it is not an assertion that arbitrary child processes are confined
+to that directory or that the two paths have the same Git state.
+
+<SourceExcerpt id="project-setup-script-selection" focus={[11, 17, 20, 23, 26, 35]} note="The helper selects the first opted-in script and constructs the two T3CODE path labels." />
+
+<SourceExcerpt id="project-setup-script-runner" focus={[123, 127, 134, 135, 136, 141, 159, 176]} note="The runner resolves a project, opens a terminal at the worktree path, supplies both environment labels, and writes the selected command." />
+
+## Work the filesystem decision by hand
+
+The lab does not touch your files. It makes the boundary visible: a valid root, a
+durable project record, usable checked-in configuration, and a Git identity can
+coexist—but none automatically proves the next one.
+
+<ProjectDiscoveryLab id="filesystem-decision" />
+
+<EvidenceClaim kind="inference" title="The UI's logical project is intentionally weaker than a global project registry" refs={["project-logical-grouping", "project-environment-label", "project-identity-read-projection"]}>
+  The source preserves physical member references after grouping and resolves
+  identity during snapshot reads. From those choices, it is reasonable to infer
+  that grouping is a client presentation convenience rather than a globally durable
+  cross-machine project object. That is an interpretation of the boundary, not a
+  separately declared protocol guarantee.
+</EvidenceClaim>
+
+<EvidenceClaim kind="future" title="A future project import could make discovery explicit" refs={["project-create-normalization", "project-t3-file-loader"]}>
+  A future importer might enumerate candidate directories and present their root,
+  Git, and t3.json evidence before dispatching project.create commands. The current
+  source inspected here validates a root supplied to project creation; it does not
+  establish such a recursive importer.
+</EvidenceClaim>
+
+<SourceList ids={[
+  "project-root-normalization",
+  "project-create-normalization",
+  "project-root-uniqueness",
+  "project-client-add-path",
+  "project-clone-registration",
+  "project-cli-add",
+  "project-startup-cwd-bootstrap",
+  "project-t3-file-schema",
+  "project-t3-file-loader",
+  "project-t3-file-loader-tests",
+  "project-thread-env-precedence",
+  "project-settings-inherited-default",
+  "project-settings-project-override",
+  "project-script-import-flow",
+  "project-script-durable-save",
+  "project-script-setup-selection",
+  "project-repository-identity",
+  "project-identity-read-projection",
+  "project-durable-projection",
+  "project-projector",
+  "project-logical-grouping",
+  "project-environment-label",
+  "project-setup-script-selection",
+  "project-setup-script-runner"
+]} />

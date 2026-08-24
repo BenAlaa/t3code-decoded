@@ -1,0 +1,235 @@
+---
+slug: checkpoints-revert
+order: 270
+number: "27"
+kind: chapter
+part: Part V · The work lifecycle
+partOrder: 5
+title: Hidden-ref checkpoints, diffs, and revert
+shortTitle: Checkpoints and revert
+summary: Each completed turn can leave a Git tree snapshot under a hidden ref. Review reads those snapshots; revert restores workspace content first, then attempts provider-history rollback before it can complete the durable history rewrite.
+status: source-checked
+gates: [sources, interaction]
+objectives:
+  - Follow a pre-turn baseline and post-turn checkpoint from a Git workspace into the durable thread projection.
+  - Separate checkpoint turn diffs from live working-tree and branch comparisons.
+  - Recognize that restore is destructive and that a failed provider rollback can leave a real partial state.
+  - Compare provider rollback implementations without inventing a universal undo guarantee.
+keywords: [checkpoint, git, hidden ref, diff, restore, revert, rollback, worktree, projection]
+sourceAreas: [apps/server/src/checkpointing, apps/server/src/orchestration/Layers/CheckpointReactor.ts, apps/server/src/vcs/GitVcsDriver.ts, apps/server/src/provider/Layers, apps/web/src/components/DiffPanel.tsx]
+visuals: [checkpoint timeline, checkpoint graph lab, revert saga]
+updatedAt: 2026-08-24
+---
+
+import Callout from "../../components/Callout.astro";
+import CheckpointGraphLab from "../../components/CheckpointGraphLab.astro";
+import EvidenceClaim from "../../components/EvidenceClaim.astro";
+import Figure from "../../components/Figure.astro";
+import Mermaid from "../../components/Mermaid.astro";
+import SourceList from "../../components/SourceList.astro";
+
+A T3 checkpoint is neither a Git branch nor a provider transcript backup. It is a
+Git tree snapshot stored under a hidden ref for one thread and numbered turn
+boundary. Its job is narrow: make a turn's filesystem delta reviewable and make a
+local content restore possible. The product then coordinates that filesystem action
+with a separate provider-conversation rollback and a durable thread-history update.
+
+<Callout title="Restore means replacement, not a gentle merge" tone="warning">
+  The Git path first restores selected snapshot content into the worktree and index,
+  runs <code>git clean -fd</code>, then resets the index path when <code>HEAD</code>
+  exists. The final index is therefore not a preserved staging snapshot of the
+  checkpoint. Untracked non-ignored files under the workspace can disappear. Review
+  a diff before requesting a revert; do not treat it as an undo stack for remote
+  commits, pushes, or external provider state.
+</Callout>
+
+## A checkpoint is a hidden tree snapshot
+
+The ref naming helper makes one location per thread and turn count:
+`refs/t3/checkpoints/&lt;base64url thread id&gt;/turn/&lt;n&gt;`. A baseline at turn `0`
+is attempted before the first real turn when absent. When the checkpoint reactor
+observes a matching completion, it attempts the next snapshot. If that hot
+subscription misses completion while runtime ingestion receives it, the resulting
+durable `turn.diff.updated` path can first create a `missing` placeholder and later
+trigger a replacement attempt. A successful capture diffs against the preceding
+checkpoint, parses the patch into changed-file rows, and only then dispatches the
+durable `thread.turn.diff.complete` command.
+
+Git capture deliberately uses a temporary index. It reads `HEAD` into that index
+when one exists, stages the workspace into the isolated index, writes a tree,
+creates a commit from that tree, and updates the hidden ref. The ordinary checked-out
+branch is not moved by this sequence. That makes the checkpoint an implementation
+snapshot of content, not a normal branch-history commit a user is expected to
+checkout or push.
+
+<EvidenceClaim kind="verified" title="Capture precedes the user-facing checkpoint summary" refs={["checkpoint-git-capture", "checkpoint-capture-dispatch-order"]}>
+  The capture reactor can log a missing predecessor baseline, but it still captures
+  the target ref. If deriving the patch summary fails after capture, it appends a
+  failure activity and records an empty file list rather than claiming the hidden
+  ref was never created.
+</EvidenceClaim>
+
+The durable checkpoint summary keeps the associated turn id, numbered boundary,
+hidden ref, a `ready` / `missing` / `error` status, changed-file additions and
+deletions, assistant-message linkage, and completion time. For the runtime-derived
+path, `failed` becomes `error`; `cancelled` or `interrupted` becomes `missing`; and
+`completed` or an unknown state becomes `ready`. Those are projection/capture-flow
+diagnostics—not proof that a later diff, restore, or provider rollback will work.
+`missing` can be a placeholder that the checkpoint reactor later attempts to replace
+with a real Git-backed snapshot. `error` is an error-status result, not proof that
+the workspace stayed untouched.
+
+## One review screen contains three different comparisons
+
+The web review chooser labels these as **Working tree**, **Branch changes**,
+**Latest turn**, and a selected prior turn. Only the turn modes call the checkpoint
+diff query. A selected turn compares its prior checkpoint to its own numbered
+checkpoint; a full-thread diff uses turn `0` as the baseline and a selected later
+checkpoint as the target. Both read hidden refs and default to ignoring whitespace.
+
+Working-tree and branch comparisons are not checkpoint snapshots. They query Git's
+current state at the selected workspace, can refresh on focus or a newer completed
+turn, and may therefore include edits made after the selected turn. They are useful
+side-by-side review modes, but they answer different questions.
+
+| Mode | Revisions compared | Time model | Can change while open? |
+|---|---|---|---|
+| Turn *n* | hidden checkpoint *n - 1* → hidden checkpoint *n* | completed-turn boundary | no; it is a stored pair until refs are pruned |
+| Full thread through *n* | hidden baseline 0 → hidden checkpoint *n* | accumulated completed turns | no; it is a stored pair until refs are pruned |
+| Working tree | `HEAD` → current tracked worktree, plus patches for untracked files | live filesystem | yes |
+| Branch changes | merge-base(selected base, `HEAD`) → `HEAD` via `git diff <base>...HEAD` | live repository refs | yes |
+
+<Figure number="27.1" title="One turn creates a reviewable content boundary" hint="capture is attempted through hot and durable trigger paths" caption="The reactor first attempts a baseline hidden ref. An observed matching completion can directly trigger post-turn capture; when that shared-stream path is missed, a durable missing-placeholder event can trigger a replacement attempt. Successful capture computes the patch and changed-file summary before dispatching checkpoint metadata to orchestration. Turn and full-thread review read hidden refs; working-tree and branch review use separate live Git paths." textEquivalent="A pre-turn workspace can become hidden checkpoint zero. The provider runs and changes the workspace. A matching completion can reach the checkpoint reactor directly through the hot runtime stream, or runtime ingestion can create a durable missing placeholder whose event triggers a later replacement attempt. Successful capture creates hidden checkpoint one. A diff from checkpoint zero to one is parsed into changed files and committed into the durable thread model. Turn review reads zero to one, while working-tree and branch review go directly to live Git state." sources={["checkpoint-git-capture", "checkpoint-git-diff-delete", "checkpoint-capture-dispatch-order", "turn-lifecycle-checkpoint-triggers", "checkpoint-live-review-diffs"]}>
+  <Mermaid id="checkpoint-review-boundary" label="Checkpoint capture and diff boundaries" chart={`flowchart LR
+    B[turn start] --> Z[hidden baseline ref · turn 0]
+    Z --> P[provider changes workspace]
+    P --> E[matching completion observation]
+    E -. hot runtime trigger .-> C[attempt hidden checkpoint · turn n]
+    E --> H[(missing placeholder from durable diff update)]
+    H -. replacement trigger .-> C
+    C --> D[successful capture: diff prior checkpoint → n]
+    D --> S[changed-file summary]
+    S --> O[(durable turn checkpoint)]
+    C --> T[turn / full-thread review]
+    W[live worktree] --> L[working-tree review]
+    R[live branch refs] --> G[branch review]`} />
+</Figure>
+
+## A revert is an ordered, cross-boundary saga
+
+The client command `thread.checkpoint.revert` only records a
+`thread.checkpoint-revert-requested` event after the decider confirms the thread
+exists. The checkpoint reactor does the effectful work. It requires a bound provider
+session with a Git workspace, checks that the requested turn count is not ahead of
+the latest checkpoint, and resolves a target ref. A nonzero target must be available
+in the checkpoint read model. Turn `0` uses the generated baseline ref and the Git
+restore may fall back to current `HEAD` when that hidden baseline is unavailable.
+Several of these preconditions fail before restore; failures inside the sequential
+effect path can occur after filesystem mutation has begun.
+
+If the target is available, the order is important:
+
+1. Git restores target content into worktree and index, removes untracked
+   non-ignored paths, then resets the index path when `HEAD` exists.
+2. The workspace file index refreshes.
+3. The reactor asks `ProviderService` to roll back exactly the number of later
+   checkpoint turns.
+4. It attempts best-effort deletion of hidden refs newer than the target.
+5. It dispatches `thread.revert.complete`; projections then retain only derived
+   messages, turns, plans, activities, and checkpoint data at or before that count.
+
+There is no compensating Git restore if step 3 fails. The code catches the reactor
+failure and appends `checkpoint.revert.failed`; because the completion command is
+not dispatched, the durable projection and ref pruning do not report a completed
+revert. That ordering creates a genuine **partial failure**: the files may already
+match the target while provider history, newer refs, and durable thread history have
+not converged. This is a code-path inference from the ordered calls, not a claim that
+T3 repairs every such state automatically.
+
+<EvidenceClaim kind="inference" title="Provider rollback is one important partial-failure seam" refs={["checkpoint-revert-effects", "checkpoint-git-restore", "revert-derived-pruning"]}>
+  Once restore has begun, later Git operations, workspace-entry refresh, provider
+  rollback, ref cleanup, or completion dispatch can fail. Only a later successful
+  completion causes derived projection pruning. The observed path records a failure
+  activity; it does not compensate every partially applied state by restoring newer
+  content.
+</EvidenceClaim>
+
+## “Rollback” means different work in each adapter
+
+The service asks every bound adapter for `rollbackThread(threadId, numTurns)`, but
+the implementation is not uniform. Codex delegates to its live app-server runtime.
+Claude and Cursor truncate their adapter-maintained turn arrays (Claude also updates
+its resume cursor). OpenCode reads native session messages, finds the earlier
+assistant-message boundary, then calls `session.revert`. Grok deliberately returns
+an unsupported provider-side rollback error at this pinned revision.
+
+That table is a capability map for this implementation, not a promise that the
+upstream provider has erased files, billed tokens, cached context, tool side effects,
+or an external action. In particular, an adapter-local array truncation is not a
+general remote-history deletion guarantee.
+
+| Adapter path | Rollback behavior observed here | Important limit |
+|---|---|---|
+| Codex | delegates counted rollback to the session runtime | requires a recoverable live/bound session and native support |
+| Claude | truncates local tracked turns and refreshes resume cursor | this adapter-local state is not a provider transcript eraser |
+| Cursor | truncates local tracked turns | adapter state only |
+| Grok | returns “not supported … yet” | a revert that removes one or more checkpoint turns becomes unsupported after Git restore |
+| OpenCode | calls native `session.revert` at an earlier assistant-message boundary | semantics depend on the OpenCode session/message history it can read |
+
+<Callout title="A completed revert changes thread history; a client cache is another layer" tone="info">
+  This chapter stops at server-side completion and derived projection pruning. How
+  web and mobile invalidate, race, refetch, and reconcile a reverted snapshot is a
+  client history-epoch concern deferred to Chapter 29.
+  Do not infer that a fresh server event alone settles every local cache race.
+</Callout>
+
+<CheckpointGraphLab id="hidden-ref-saga" />
+
+## Read the status and failures as diagnostics
+
+- A `missing` checkpoint can mean there is no usable hidden ref for that boundary
+  yet. The reactor has a specific placeholder-replacement route, so `missing` is
+  not a claim that Git capture is permanently impossible.
+- An `error` checkpoint status and a `checkpoint.capture.failed` activity describe
+  different stages: a ref may exist while its changed-file summary cannot be
+  derived, and a turn diff can fail because a required ref/workspace is unavailable.
+- A revert can fail before restore when the thread, bound session workspace, Git
+  repository, requested count, or nonzero read-model ref is unavailable. For turn
+  `0`, restore may fall back to current `HEAD` when the hidden baseline ref is
+  unavailable. Sequential effect failures can still occur after filesystem mutation.
+- A completed `thread.reverted` event prunes selected derived projection rows; it
+  does not rewrite Git's ordinary branch history, certify every stale-ref deletion,
+  or roll back actions outside the workspace/provider contract.
+
+<EvidenceClaim kind="verified" title="Checkpoint failures preserve a visible diagnostic path" refs={["checkpoint-capture-dispatch-order", "checkpoint-revert-preconditions", "checkpoint-revert-effects"]}>
+  Capture-summary failures append an activity while allowing checkpoint metadata to
+  land. Revert precondition and effect failures append a revert-failed activity;
+  only the successful path dispatches the durable revert completion command.
+</EvidenceClaim>
+
+<SourceList ids={[
+  "checkpoint-model-contract",
+  "checkpoint-command-event-contract",
+  "checkpoint-event-discriminants",
+  "checkpoint-ref-naming",
+  "checkpoint-git-capture",
+  "checkpoint-git-restore",
+  "checkpoint-git-diff-delete",
+  "checkpoint-status-derivation",
+  "checkpoint-capture-dispatch-order",
+  "turn-lifecycle-checkpoint-triggers",
+  "checkpoint-diff-query-modes",
+  "checkpoint-web-review-modes",
+  "checkpoint-live-review-diffs",
+  "checkpoint-revert-preconditions",
+  "checkpoint-revert-effects",
+  "revert-derived-pruning",
+  "provider-rollback-interface",
+  "provider-rollback-service",
+  "codex-rollback-adapter",
+  "codex-rollback-native-request",
+  "claude-local-rollback",
+  "cursor-rollback-local-history",
+  "grok-rollback-unsupported",
+  "opencode-rollback-native-revert",
+]} />

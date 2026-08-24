@@ -1,0 +1,290 @@
+---
+slug: context-compaction-memory
+order: 260
+number: "26"
+kind: chapter
+part: Part V · The work lifecycle
+partOrder: 5
+title: Context is provider-owned; history is T3-owned
+shortTitle: Context and memory
+summary: "T3 Code retains a product-visible thread history and an opaque provider continuation cursor, while each provider owns the prompt context it may resume or compact; the pinned system has no universal T3 long-term-memory subsystem."
+status: source-checked
+gates: [sources, interaction]
+objectives:
+  - Separate a provider's prompt context from T3's durable thread history, session binding, and live context telemetry.
+  - Explain what a persisted resume cursor can and cannot promise after a server or provider-session restart.
+  - Read compaction as a provider event normalized into T3 activity, rather than as a universal T3 memory operation.
+  - Keep client drafts, offline delivery, and historical usage accounting in their proper later or separate lanes.
+keywords: [context, compaction, memory, resume cursor, session recovery, thread history, telemetry, restart]
+sourceAreas: [packages/contracts/src/provider.ts, packages/contracts/src/providerRuntime.ts, apps/server/src/persistence/ProviderSessionRuntime.ts, apps/server/src/provider/Layers, apps/server/src/orchestration/Layers, packages/client-runtime/src/state]
+visuals: [context ownership map, restart ledger]
+updatedAt: 2026-08-24
+---
+
+import Callout from "../../components/Callout.astro";
+import ContextOwnershipLab from "../../components/ContextOwnershipLab.astro";
+import EvidenceClaim from "../../components/EvidenceClaim.astro";
+import Figure from "../../components/Figure.astro";
+import Mermaid from "../../components/Mermaid.astro";
+import SourceExcerpt from "../../components/SourceExcerpt.astro";
+import SourceList from "../../components/SourceList.astro";
+
+“Memory” is an attractive word for a system with threads, histories, resumable
+sessions, cached screens, drafts, and transcript accounting. It is too imprecise
+to describe the pinned T3 Code implementation.
+
+T3 owns a durable **product record** for a thread: messages, activities, plans,
+session projection, and related work state. It also constructs the visible current
+turn payload—message text, attachment paths, model and mode choices—before calling
+an adapter. The provider-native session owns the accumulated conversation context,
+hidden history, and any private compaction state used when that turn reaches a
+model. T3 stores a provider-specific, opaque **resume cursor** with the
+provider-session binding so it can ask that provider to continue later. That cursor
+is a continuation handle, not a portable copy of a prompt, summary, embedding
+index, or cross-provider memory format.
+
+<Callout title="The ownership rule" tone="warning">
+  A visible T3 conversation is not evidence that T3 can reconstruct the native
+  context sent to a model. A provider continuation cursor is not evidence that a
+  provider can recover after its own history/session is missing. Keep the durable
+  product history, hot native session, and provider-owned prompt context separate.
+</Callout>
+
+## 1. Five similarly named things have different owners
+
+| Thing | Primary owner | What T3 keeps | What it does not establish |
+|---|---|---|---|
+| Current turn input | T3 constructs the visible request; adapter maps it to native input | user text, attachments, selected model/mode, and resulting observations | the provider's accumulated hidden conversation state |
+| Accumulated native context | Provider harness and its native session | provider identity, runtime mode, optional cursor, and normalized observations | hidden history, compaction result, model state, or portability to another provider |
+| Thread history | T3 orchestration projection | durable messages, activities, plans, session and work overlays | that every provider token, hidden message, or native item was captured |
+| Resume cursor | Provider defines the shape; T3 persists it opaquely | JSON-valued cursor bound to one thread/provider instance | a universal checkpoint, a durable provider callback, or a guarantee that native history still exists |
+| Context-window telemetry | Provider emits it; T3 normalizes/latest-selects it | a `context-window.updated` activity when usable | a full history, exact prompt contents, cost settlement, or a cross-provider meter |
+| Client cache, draft, or outbox | A client surface | locally scoped presentation/delivery state | server-side memory or a provider continuation |
+
+<EvidenceClaim kind="verified" title="T3 shapes the current turn without owning the provider's accumulated context" refs={["context-current-turn-payload", "context-codex-turn-input", "provider-session-contract"]}>
+  T3 builds the explicit request delivered across the adapter boundary, including
+  attachment paths. The generic provider contract and persistence shape still do
+  not expose the provider's full hidden conversation or a portable reconstruction
+  of its accumulated model context.
+</EvidenceClaim>
+
+The provider-session contract explicitly makes `resumeCursor` an optional
+`Unknown` value. The persistent provider-runtime row stores it as JSON alongside
+provider/instance identity, session status, runtime mode, last-seen timestamp, and
+adapter payload. This is intentionally a narrow handoff boundary: a provider
+adapter receives its own cursor back at session start, rather than T3 decoding one
+generic “conversation memory” representation.
+
+<SourceExcerpt id="context-provider-binding-shape" focus={[35, 42, 49, 59, 67, 75, 84, 94, 103]} note="The persisted runtime binding keeps provider/instance identity, session metadata, adapter payload, and JSON continuation state. It does not define a portable prompt representation." />
+
+<EvidenceClaim kind="verified" title="Continuation is typed as opaque provider data" refs={["provider-session-contract", "context-provider-binding-shape", "provider-session-binding", "provider-service-session-recovery"]}>
+  T3 persists the continuation value by thread and provider binding, then passes it
+  to the selected adapter while recovering or starting a session. The contracts do
+  not define a shared prompt, summary, embedding, retrieval, or long-term-memory
+  payload.
+</EvidenceClaim>
+
+## 2. A restart uses a handle, not a replayed prompt
+
+The recovery path first looks for an active compatible session. If none is
+available, it requires a persisted provider binding and a non-null continuation
+cursor. It restores the stored working directory, selected model information when
+available, runtime mode, and the cursor, then asks the same provider adapter to
+start. The adapter is the place that interprets that cursor.
+
+This distinction is concrete in the adapter implementations:
+
+- Codex turns a valid cursor into the native `threadId` supplied when opening its
+  app-server thread, then returns the provider thread id as its next cursor.
+- Claude validates a provider-shaped resume state before choosing the native
+  resume session id.
+- OpenCode treats its persisted `ses_…` id as a session lookup. It reuses the
+  native session only when its directory matches; a directory move can fork the
+  native session to preserve that provider's conversation history, while a known
+  missing session begins fresh.
+
+These are adapter-specific policies—not an inter-provider migration protocol. A
+Codex thread id is not meaningful to Claude; an OpenCode session id is not an
+executable representation of a Codex prompt.
+
+<Figure number="26.1" title="A restart crosses ownership boundaries without copying a prompt" hint="the cursor is a handoff, not a transcript" caption="T3 commits thread history and stores a provider/instance-bound resume cursor. After live session loss, it sends that cursor back to the chosen adapter. The adapter asks its provider to reopen native history/context if it can. Provider observations may then become new T3 activities and messages. No arrow makes T3 history into a reconstructed provider prompt, or makes a cursor a portable long-term-memory record." textEquivalent="A provider owns accumulated native context. T3 constructs a visible turn request and receives normalized runtime observations. T3 stores product thread history and a provider session binding containing an opaque cursor. On restart T3 gives that cursor to the same provider adapter. The adapter attempts provider-specific native-session recovery. A successful recovery can emit new observations into T3 history. A failed or missing provider session does not cause T3 to synthesize the provider's hidden context from the displayed thread history." sources={["provider-session-contract", "context-provider-binding-shape", "provider-service-session-recovery", "context-codex-session-resume", "context-codex-native-resume", "claude-adapter-resume", "context-claude-resume-choice", "opencode-resume-adoption"]}>
+  <Mermaid id="context-ownership-restart" label="Ownership and restart boundary" chart={`flowchart LR
+    subgraph P[Provider harness]
+      C[Native prompt context\nand provider history]
+      A[Provider-specific adapter]
+      A --> C
+    end
+    subgraph T[T3 Code durable product state]
+      H[(Thread messages, activities,\nplans and session projection)]
+      B[(Provider binding:\ninstance + opaque resume cursor)]
+    end
+    C -. normalized runtime observations .-> H
+    A -. returns / updates cursor .-> B
+    B -. same-provider cursor only .-> A
+    H -. visible product history .-> U[Person / client]`} />
+</Figure>
+
+<Callout title="Failure is meaningful, not a reason to invent context" tone="info">
+  Recovery fails validation when no binding or cursor exists. A provider may also
+  reject or be unable to find its native session. The inspected OpenCode path
+  deliberately starts a new native session on a confirmed not-found; it does not
+  reconstruct a replacement prompt from T3's message projection. Other adapters
+  have their own resume semantics.
+</Callout>
+
+## 3. Compaction is performed upstream and recorded downstream
+
+The generic runtime vocabulary can report `thread.state.changed` and a canonical
+`context_compaction` item type. The provider adapters turn their own native signals
+into those observations. Codex maps its native `thread/compacted` notification to
+the canonical `compacted` state. Claude maps a `compact_boundary` system message
+to both an updated usage snapshot (when it can normalize one) and a `compacted`
+thread-state event.
+
+Runtime ingestion accepts a canonical `thread.state.changed` whose state is
+`compacted` and appends a durable `context-compaction` activity. It does **not**
+take T3's message rows, create a provider summary, replace the provider's native
+context, or reset a turn merely because a compaction activity was observed.
+
+<EvidenceClaim kind="verified" title="T3 records a compaction observation" refs={["context-memory-codex-compaction", "context-memory-claude-compaction", "context-memory-compaction-ingestion"]}>
+  The inspected mapping is provider event → canonical runtime event → durable
+  context-compaction activity. It records that a provider reported compaction; it
+  does not establish a generic T3-owned compaction algorithm or a replayable
+  summary artifact.
+</EvidenceClaim>
+
+This matters for comparisons between provider capabilities. The canonical event
+union can represent a compaction signal, but an adapter that does not emit one will
+not fabricate it. A context compaction activity is useful provenance in the work
+log; it is not itself a complete history of what the provider retained, discarded,
+or summarized.
+
+## 4. A context meter is current telemetry, not memory
+
+`thread.token-usage.updated` carries a provider-normalized snapshot with required
+`usedTokens` and optional maximum/context categories. Runtime ingestion admits a
+usable snapshot as one `context-window.updated` activity. The client reducer
+supersedes earlier resolvable snapshots with the same `turnId` value. The web
+selector then walks backward across the activities returned for the thread and
+uses the newest valid context-window update it can find. That returned thread
+detail is itself bounded to the 500 most recent activities.
+
+Thus the meter answers a narrow operational question: **what is the latest usable
+provider-reported context observation available for this thread?** It does not sum
+all past context sizes. It does not expose the prompt text. It does not turn a
+provider's total-processed counter into historical usage, cost, or memory capacity.
+
+At the pinned revision, the live emission paths inspected in Chapter 20 are Codex
+and Claude. Cursor, Grok, and OpenCode should not be shown as providing a T3
+context meter merely because their model metadata or native runtimes may have a
+context-window concept.
+
+<SourceExcerpt id="context-window-reducer-retention" focus={[562, 568, 574, 580, 586]} note="The client reducer replaces earlier resolvable context-window activities sharing the same turn id; consumers then read backward for the newest usable value." />
+
+<EvidenceClaim kind="verified" title="The context meter retains a latest usable observation" refs={["usage-live-contract", "usage-live-admission", "usage-live-activity", "usage-web-context-meter", "context-window-reducer-retention", "context-thread-activity-limit", "context-thread-activity-query"]}>
+  A valid update can remain product activity and later render after reconnect while
+  it is included in the bounded thread snapshot. The meter is therefore latest-state
+  telemetry—not a complete event archive, a provider prompt snapshot, or a durable
+  sequence of every native token event.
+</EvidenceClaim>
+
+For the separate historical question—tokens/cost-shaped records from provider
+transcript files—read [Chapter 20, “Usage accounting without a false ledger”](../usage-accounting/).
+That scan is neither the source of the live context meter nor a T3 memory layer.
+
+## 5. “Long-term memory” is absent as a universal product subsystem
+
+**Inference from the pinned generic contracts and recovery paths:** this revision
+does not establish a universal T3 long-term-memory subsystem. Those inspected
+paths model projects, threads, messages, activities, plans, checkpoints, provider
+sessions, current-turn payloads, and opaque continuation state. They do not define
+a cross-provider memory entity or a generic contract for injecting retrieved facts
+into a future provider turn.
+
+That is not a claim that a provider lacks its own native memory/history feature.
+It is a boundary claim about what **T3 Code itself standardizes** at the source
+lock. A provider-specific session resume, its own transcript files, a generated
+plan, a Git checkpoint, and a client draft are not interchangeable evidence of a
+universal product-memory feature.
+
+<EvidenceClaim kind="inference" title="No universal memory layer is established by the inspected generic paths" refs={["orchestration-entities", "provider-session-contract", "context-provider-binding-shape", "provider-service-session-recovery", "context-current-turn-payload"]}>
+  Within these generic models, provider-binding records, turn construction, and
+  recovery paths, no cross-provider memory entity or prompt-injection contract is
+  established. This bounded source inference says nothing about a provider's
+  private implementation or an upstream roadmap. A future T3 memory feature would
+  need explicit ownership, privacy, retrieval, retention, injection, and failure
+  semantics.
+</EvidenceClaim>
+
+## 6. Client-local state belongs to a different recovery story
+
+The shared client runtime can cache an environment's thread snapshot and seed its
+event-subscription `afterSequence` from the cached shell sequence. That helps a
+screen catch up; it does not act as provider context or server authority. Mobile
+additionally owns environment-scoped local drafts and a persisted command outbox.
+Those are client resilience/delivery mechanisms and receive their detailed
+treatment in Chapter 33 rather than being rebranded as memory here.
+
+The distinction is particularly important after a disconnected mobile action:
+delivery retry can re-attempt a client command, while provider session recovery
+still depends on the server's binding and the provider's ability to use its cursor.
+Neither mechanism means a client has captured a complete native model context.
+
+<Callout title="Deferred: client persistence and delivery" tone="info">
+  Chapter 33 will cover client caches, optimistic state, drafts, offline queues,
+  and reconnect reconciliation by surface. This chapter only places them outside
+  the provider-context boundary so a reader does not mistake local UI state for
+  T3-owned long-term memory.
+</Callout>
+
+## Work the ownership and restart ledger
+
+Choose a teaching event, then inspect which record changes, who is authoritative,
+and what a later server restart can actually attempt. The lab has no autonomous
+motion; keyboard tab navigation and a complete static/print ledger are included.
+
+<ContextOwnershipLab id="context-restart-ledger" />
+
+## Boundary checks to carry into another meta-harness
+
+1. Persist a provider-continuation handle only with its provider/instance identity;
+   never treat it as a portable prompt serialization.
+2. Keep a durable product conversation useful on its own terms, while stating that
+   it is not proof of hidden native context or tool state.
+3. Represent compaction as provider-originated provenance unless the product owns
+   the summarization algorithm and its exact replay/retention semantics.
+4. Name context telemetry, task usage, and transcript accounting as distinct data
+   products. Chapter 20's historical ledger must not silently become a memory
+   system.
+5. If a universal memory feature is proposed, design its user control, source
+   provenance, deletion/retention, isolation, provider injection, and restart
+   failure behavior explicitly rather than piggybacking on a resume cursor.
+
+<SourceList ids={[
+  "context-current-turn-payload",
+  "context-codex-turn-input",
+  "provider-session-contract",
+  "context-provider-binding-shape",
+  "provider-session-binding",
+  "provider-service-session-recovery",
+  "context-codex-session-resume",
+  "context-codex-native-resume",
+  "claude-adapter-resume",
+  "context-claude-resume-choice",
+  "opencode-resume-adoption",
+  "context-memory-codex-compaction",
+  "context-memory-claude-compaction",
+  "context-memory-compaction-ingestion",
+  "usage-live-contract",
+  "usage-live-admission",
+  "usage-live-activity",
+  "context-window-reducer-retention",
+  "usage-web-context-meter",
+  "context-thread-activity-limit",
+  "context-thread-activity-query",
+  "orchestration-entities",
+  "context-client-snapshot-cache",
+  "context-client-event-cursor",
+  "context-mobile-drafts",
+  "context-mobile-outbox-storage",
+]} />

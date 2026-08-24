@@ -1,0 +1,207 @@
+---
+slug: permissions-and-input
+order: 240
+number: "24"
+kind: chapter
+part: Part V · The work lifecycle
+partOrder: 5
+title: Permission modes, approvals, and structured input
+shortTitle: Permissions and input
+summary: T3 Code persists a four-value runtime-mode choice on a thread, but each provider maps that choice into its own controls; live approval and structured-input requests travel through distinct canonical flows.
+status: source-checked
+gates: [sources, interaction]
+objectives:
+  - Name the four canonical runtime modes without treating them as an equivalent provider security policy.
+  - Distinguish approval requests from structured user-input requests, including their response payloads and pending state.
+  - Trace an interactive response through durable intent, the provider reactor, and native completion.
+keywords: [runtime mode, permission, approval, structured input, reactor, pending state, provider adapter, security]
+sourceAreas: [packages/contracts/src/orchestration.ts, packages/contracts/src/provider.ts, apps/server/src/provider, apps/server/src/orchestration/Layers, apps/web/src/session-logic.ts, apps/mobile/src/state/use-selected-thread-requests.ts]
+visuals: [permission mapping matrix, interactive request router]
+updatedAt: 2026-08-24
+---
+
+import Callout from "../../components/Callout.astro";
+import EvidenceClaim from "../../components/EvidenceClaim.astro";
+import Figure from "../../components/Figure.astro";
+import Mermaid from "../../components/Mermaid.astro";
+import PermissionFlowLab from "../../components/PermissionFlowLab.astro";
+import SourceExcerpt from "../../components/SourceExcerpt.astro";
+import SourceList from "../../components/SourceList.astro";
+
+T3 Code has four persisted runtime-mode values: `approval-required`,
+`auto-accept-edits`, `auto`, and `full-access`. They belong to the thread and
+travel with provider session/turn start. They are compact product controls, not
+proof that five native runtimes have the same sandbox, reviewer, allow-list, or
+escalation semantics.
+
+## Four durable labels, provider-specific effects
+
+The canonical union contains exactly these four values; its default is
+`full-access`. A runtime-mode change becomes a `thread.runtime-mode-set` event.
+When a turn starts, the decider writes the target thread's already-stored runtime
+and interaction modes into the start event. Read the labels as durable thread
+policy, not an independent per-turn override hidden in the start command.
+
+<SourceExcerpt id="permission-runtime-mode-contract" focus={[120, 121, 122, 123, 124, 127, 135, 136, 137, 138, 139]} note="The orchestration contract fixes four product-facing runtime modes and four approval decisions. The provider mapping remains a separate concern." />
+
+| T3 mode | Codex app-server mapping | Claude SDK mapping | Cursor ACP path | Grok ACP path | OpenCode SDK mapping |
+|---|---|---|---|---|---|
+| `approval-required` | `untrusted` approval, `read-only` sandbox, user reviewer | no explicit entry in the adapter’s mode map; base mode is left unset | prefers a native approval-mode alias when offered; permission callbacks still wait | no ACP session-mode mapping; a raised permission callback waits for an explicit response | broad operations ask; `question` is allowed |
+| `auto-accept-edits` | `on-request`, `workspace-write`, user reviewer | `acceptEdits` | prefers an implement-mode alias when offered; permission callbacks still wait | no ACP session-mode mapping; a raised permission callback waits for an explicit response | broad operations ask; `question` is allowed |
+| `auto` | `on-request`, `workspace-write`, `auto_review` reviewer | `auto` | prefers an implement-mode alias when offered; permission callbacks still wait | no ACP session-mode mapping; a raised permission callback waits for an explicit response | broad operations ask; `question` is allowed |
+| `full-access` | `never`, `danger-full-access`, user reviewer | `bypassPermissions` plus `allowDangerouslySkipPermissions: true` | prefers an implement-mode alias and auto-selects an offered allow option; otherwise waits on the callback | auto-selects an offered allow-always or allow-once option; otherwise waits on the callback | allows all permission rules |
+
+The table records executed mappings at this pinned revision. It does **not** turn
+the blank Claude map entry, Cursor mode aliases, Grok callback policy, or OpenCode's
+shared non-full-access ruleset into claims of equivalent safety. Codex, for example,
+also selects a native sandbox and reviewer for every mode. Claude intercepts
+`AskUserQuestion` before the full-access shortcut, so it still uses structured input;
+`ExitPlanMode` is intercepted separately.
+
+<SourceExcerpt id="permission-codex-mode-map" focus={[268, 274, 280, 286, 292, 306, 322, 332, 339]} note="Codex receives an explicit approval policy, sandbox mode, and reviewer mode; the turn sandbox is derived again for each request." />
+
+<EvidenceClaim kind="verified" title="Runtime mode is normalized intent, not uniform enforcement" refs={["permission-runtime-mode-contract", "permission-runtime-mode-decider", "permission-turn-start-stored-mode", "permission-codex-mode-map", "permission-claude-mode-map", "permission-claude-special-input", "permission-cursor-mode-routing", "permission-grok-full-access", "permission-grok-request-routing", "permission-opencode-mode-map"]}>
+  The same persisted T3 value reaches materially different native mechanisms.
+  Security-sensitive UI and documentation must therefore name the selected provider
+  and its concrete mapping rather than promise a cross-provider sandbox strength.
+</EvidenceClaim>
+
+<Callout title="A narrow capability declaration is not a permission matrix" tone="warning">
+  `ProviderAdapter.capabilities` currently declares only whether an existing
+  session can switch models. It does not advertise approvals, structured input,
+  sandbox strength, task behavior, or a feature-complete permission matrix.
+</Callout>
+
+## Two interactive request shapes
+
+An approval asks whether a provider may perform an action. Its canonical response
+contains a `requestId` and one decision: `accept`, `acceptForSession`, `decline`,
+or `cancel`. Runtime ingestion classifies known native request types into command,
+file-read, and file-change when it can; unknown native request types remain an
+approval without a fabricated subtype.
+
+Structured input is different. It carries questions with ids, headers, options, and
+optional multi-select behavior. Its response is an answer record keyed by question
+id. An answer is not an approval decision, and an approval choice is not an answer
+map.
+
+<SourceExcerpt id="permission-request-contract" focus={[430, 436, 441, 446, 451, 458, 464]} note="Canonical approvals carry a decision; structured input carries typed questions and an answer record. They are deliberately different payloads." />
+
+- Codex maps `item/tool/requestUserInput` into `user-input.requested` and native
+  approval methods into `request.opened`.
+- Claude handles `AskUserQuestion` through the input flow; other tool decisions
+  use the approval flow unless its runtime mode is full access.
+- Cursor and Grok wait on ACP deferred values for permission callbacks and their
+  question extensions.
+- OpenCode maps `permission.asked` and `question.asked` separately, then calls
+  `permission.reply` or `question.reply`.
+
+All five adapters implement both response operations in the current source. That
+does not promise every provider originates both request kinds in every configuration.
+The adapter capability surfaces are the positive evidence here; they are not a
+guarantee that a native runtime will open a given request type during every session.
+
+## Pending is partly durable and partly live
+
+Activities record `approval.requested`/`approval.resolved` and
+`user-input.requested`/`user-input.resolved`. Web and mobile derive open requests
+from ordered activity history, allowing another client surface to discover what
+needs attention.
+
+Approvals additionally receive a projected pending-approval row, keyed by request
+id, with pending/resolved status, decision, and timestamps. Structured input does
+not reuse that table; its pending state derives from activities. The native
+adapter’s Deferred, map entry, or SDK callback remains live memory. A durable
+request record cannot recreate that wait after a process or server restart.
+
+<Callout title="A saved request is not a saved authority grant" tone="info">
+  Durable state says what was requested and what response intent T3 recorded. The
+  provider remains authoritative about whether its live request is known, current,
+  and acceptable. A stale native request becomes a response-failed activity.
+</Callout>
+
+<EvidenceClaim kind="verified" title="Restart can preserve the question but lose the answer channel" refs={["permission-runtime-activities", "permission-approval-projection", "permission-pending-storage", "permission-pinned-activities", "permission-response-reactor"]}>
+  The audited adapters keep pending request state in process-local maps/Refs and
+  Deferreds. Durable request history and projected approval rows can outlive that
+  state—and unresolved request activity is pinned outside the ordinary recent
+  activity window—but T3 does not reconstruct the original native wait after restart.
+  A stale response becomes a failure activity instead of a claim that the provider
+  consumed the answer.
+</EvidenceClaim>
+
+## One response crosses four responsibilities
+
+A web or mobile client dispatches either `thread.approval.respond` or
+`thread.user-input.respond`. The decider records response-requested intent. The
+provider command reactor resolves the thread, checks for a non-stopped session,
+calls `ProviderService`, and that service routes to the bound adapter. The adapter
+replies to its native runtime; later canonical resolution events return through
+runtime ingestion and become durable activities.
+
+Acceptance of the client command is not a synchronous certificate that a provider
+completed the action, and the hot provider bridge is not a replayable outbox.
+
+<Figure number="24.1" title="A request has a durable shell around a live callback" hint="resolution state can survive longer than the provider callback that created it" caption="A provider adapter emits a canonical approval or structured-input request. Runtime ingestion flushes the current assistant segment and records request activity; approvals also receive a dedicated projection. A client later records durable response intent. The provider command reactor must still find the live bound session and callback before the adapter can reply. A later native resolution returns through runtime ingestion. Persistence therefore preserves the product conversation, not the callback closure itself." textEquivalent="Provider runtime request flows to ingestion, durable activity and optional pending-approval projection, then a client response command that records durable response intent. A provider command reactor routes that intent to the live bound adapter callback, which may emit a later resolution activity. A restart boundary separates durable request records from the in-memory provider callback." sources={["permission-request-contract", "permission-runtime-activities", "permission-assistant-pause-flush", "permission-response-intent-decider", "permission-response-reactor", "permission-approval-projection"]}>
+  <Mermaid id="permission-request-path" label="Approval and structured-input request path" chart={`flowchart LR
+    N[adapter / native runtime] -. canonical request .-> I[runtime ingestion]
+    I --> A[(request activity)]
+    I --> Q[(approval projection when applicable)]
+    C[client response command] --> R[(durable response intent)]
+    R --> X[provider command reactor]
+    X -. invoke live callback .-> N
+    N -. canonical resolution .-> I`} />
+</Figure>
+
+<PermissionFlowLab id="permission-request-router" />
+
+## Surface resolution and security boundaries
+
+Web session logic and mobile’s selected-thread hook both derive pending approvals
+and pending user input from thread activities, then dispatch distinct commands.
+Mobile scopes drafts by environment-plus-request id. The shared model is a request
+addressed to a thread; each client chooses its controls.
+
+| Boundary | Owns | Does not prove |
+|---|---|---|
+| Thread/orchestration | selected mode, response intent, activities, projected approval state | a live native request still exists or an action succeeded |
+| Client | request presentation and answer/decision collection | sandbox enforcement or provider identity |
+| Provider reactor/service | exact bound-session route and response failures | provider parity or crash-proof delivery |
+| Adapter/native runtime | reviewer, sandbox, callback, and reply semantics | that a T3 label means the same thing elsewhere |
+| Person operating the client | the authorization decision | that a broad mode replaces reviewing a specific request |
+
+Permission capability metadata could make these differences easier to negotiate in
+a UI, but none exists at this pinned revision. That is a **future design direction**,
+not current behavior.
+
+<SourceList ids={[
+  "permission-runtime-mode-contract",
+  "permission-runtime-mode-command",
+  "permission-runtime-mode-event",
+  "permission-runtime-mode-decider",
+  "permission-turn-start-stored-mode",
+  "provider-adapter-interactions",
+  "permission-codex-mode-map",
+  "permission-claude-mode-map",
+  "permission-claude-special-input",
+  "permission-cursor-mode-routing",
+  "permission-grok-full-access",
+  "permission-grok-request-routing",
+  "permission-opencode-mode-map",
+  "permission-opencode-request-routing",
+  "permission-opencode-response-routing",
+  "permission-request-contract",
+  "permission-runtime-activities",
+  "permission-assistant-pause-flush",
+  "permission-response-reactor",
+  "permission-response-intent-decider",
+  "permission-approval-projection",
+  "permission-pending-storage",
+  "permission-pinned-activities",
+  "codex-adapter-capabilities",
+  "claude-adapter-capabilities",
+  "cursor-adapter-capabilities",
+  "grok-adapter-capabilities",
+  "opencode-adapter-capabilities",
+  "permission-web-resolution",
+  "permission-mobile-resolution"
+]} />
