@@ -1,10 +1,10 @@
 ---
 slug: acp-cursor-grok
-order: 180
-number: "18"
+order: 330
+number: "33"
 kind: chapter
-part: Part IV · Five harnesses, one product model
-partOrder: 4
+part: Part V · Six providers, one product model
+partOrder: 5
 title: ACP transport, Cursor, and Grok
 shortTitle: ACP, Cursor, and Grok
 summary: A shared JSON-RPC runtime gives Cursor and Grok one transport skeleton, while their startup, mode/model, extension, interruption, and rollback semantics deliberately diverge.
@@ -18,7 +18,7 @@ objectives:
 keywords: [ACP, JSON-RPC, Cursor, Grok, session resume, extension, approval, steering, interrupt, rollback]
 sourceAreas: [packages/effect-acp/src, apps/server/src/provider/acp, apps/server/src/provider/Layers/CursorAdapter.ts, apps/server/src/provider/Layers/GrokAdapter.ts]
 visuals: [ACP session startup sequence, semantic fork matrix, steering race explorer]
-updatedAt: 2026-08-24
+updatedAt: "2026-09-11"
 ---
 
 import Callout from "../../components/Callout.astro";
@@ -54,7 +54,7 @@ normalized ACP observations.
 
 <SourceExcerpt id="acp-client-typed-surface" focus={[40, 45, 65, 88, 102, 119, 126, 134]} note="The ACP client exposes initialize/authenticate, session creation/load/fork/resume, model/config writes, and prompt/cancel. Callback wiring is catalogued with the runtime sources below." />
 
-<Figure number="18.1" title="One ACP runtime, many provider-specific meanings" hint="the solid path is transport; the dashed path is the later durable ingestion boundary" caption="The shared runtime spawns one child, initializes and authenticates it, then creates or loads an ACP session. It parses session updates into a local queue. Cursor or Grok maps those observations and provider extensions into T3 ProviderRuntimeEvent values. Runtime ingestion later decides and commits product-side activity, request, plan, and turn state; the ACP child and its queues remain hot state." textEquivalent="An ACP child process communicates via stdio JSON-RPC with the effect-acp client. AcpSessionRuntime initializes it, authenticates it, and either loads a cursor-named session or makes a new one. Parsed updates, permission callbacks, and extension callbacks enter a local adapter queue. The Cursor or Grok adapter turns selected payloads into product runtime events. A separate runtime-ingestion path can turn selected observations into durable orchestration commands and projections. The child process, Deferred callback waits, active prompt fiber, and event queue are not SQLite state." sources={["acp-client-typed-surface", "acp-runtime-startup", "acp-runtime-event-queue", "provider-runtime-ingestion"]}>
+<Figure number="33.1" title="One ACP runtime, many provider-specific meanings" hint="the solid path is transport; the dashed path is the later durable ingestion boundary" caption="The shared runtime spawns one child, initializes and authenticates it, then creates or loads an ACP session. It parses session updates into a local queue. Cursor or Grok maps those observations and provider extensions into T3 ProviderRuntimeEvent values. Runtime ingestion later decides and commits product-side activity, request, plan, and turn state; the ACP child and its queues remain hot state." textEquivalent="An ACP child process communicates via stdio JSON-RPC with the effect-acp client. AcpSessionRuntime initializes it, authenticates it, and either loads a cursor-named session or makes a new one. Parsed updates, permission callbacks, and extension callbacks enter a local adapter queue. The Cursor or Grok adapter turns selected payloads into product runtime events. A separate runtime-ingestion path can turn selected observations into durable orchestration commands and projections. The child process, Deferred callback waits, active prompt fiber, and event queue are not SQLite state." sources={["acp-client-typed-surface", "acp-runtime-startup", "acp-runtime-event-queue", "provider-runtime-ingestion"]}>
   <Mermaid id="acp-shared-runtime" label="Shared ACP transport and product boundary" chart={`flowchart LR
     C[Cursor or Grok CLI child] <-->|stdio JSON-RPC| A[effect-acp client]
     A --> R[AcpSessionRuntime]
@@ -152,7 +152,7 @@ The rollback row is intentionally asymmetric. Cursor’s implementation removes 
 from its local `ctx.turns` array; source inspection does not find a Cursor ACP native
 revert call in that method. That changes the adapter’s read snapshot, not necessarily
 the provider’s remote history. Grok refuses the operation explicitly. Orchestration
-revert still has its own durable events and projection cleanup (Chapter 13); neither
+revert still has its own durable events and projection cleanup (Chapter 28); neither
 adapter row should be read as a transaction across that durable model and native
 provider state.
 

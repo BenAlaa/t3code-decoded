@@ -1,3 +1,4 @@
+
 [
   {
     "id": "architecture-boundary",
@@ -26,24 +27,24 @@
   {
     "id": "provider-adapter-core",
     "path": "apps/server/src/provider/Services/ProviderAdapter.ts",
-    "start": 47,
-    "end": 71,
+    "start": 67,
+    "end": 94,
     "language": "typescript",
     "label": "Provider adapter lifecycle contract"
   },
   {
     "id": "provider-adapter-interactions",
     "path": "apps/server/src/provider/Services/ProviderAdapter.ts",
-    "start": 73,
-    "end": 94,
+    "start": 97,
+    "end": 117,
     "language": "typescript",
     "label": "Provider approval and input contract"
   },
   {
     "id": "provider-adapter-stream",
     "path": "apps/server/src/provider/Services/ProviderAdapter.ts",
-    "start": 126,
-    "end": 134,
+    "start": 149,
+    "end": 157,
     "language": "typescript",
     "label": "Canonical provider event stream"
   },
@@ -395,7 +396,7 @@
     "id": "usage-web-context-meter",
     "path": "apps/web/src/lib/contextWindow.ts",
     "start": 50,
-    "end": 96,
+    "end": 90,
     "language": "typescript",
     "label": "Latest valid context-window snapshot derivation"
   },
@@ -1258,8 +1259,8 @@
   {
     "id": "resource-telemetry-demand-history",
     "path": "docs/internals/resource-telemetry.md",
-    "start": 129,
-    "end": 170,
+    "start": 9,
+    "end": 50,
     "language": "markdown",
     "label": "Bounded native history and diagnostics-driven telemetry streaming"
   },
@@ -1290,8 +1291,8 @@
   {
     "id": "connect-environment-link-handshake",
     "path": "apps/web/src/cloud/linkEnvironment.ts",
-    "start": 402,
-    "end": 493,
+    "start": 256,
+    "end": 347,
     "language": "typescript",
     "label": "Client-side relay challenge, environment proof, link, and runtime setup"
   },

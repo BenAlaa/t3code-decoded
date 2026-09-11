@@ -1,10 +1,10 @@
 ---
 slug: release-updates-observability
-order: 380
-number: "38"
+order: 530
+number: "53"
 kind: chapter
-part: "Part VII · Reach and ship"
-partOrder: 7
+part: "Part VIII · Reach and ship"
+partOrder: 8
 title: "Release, update, and observability: three safety boundaries"
 shortTitle: Release operations
 summary: "T3 Code's release graph publishes an exact CLI runtime before clients can require it. Desktop, service, and mobile each cross an update boundary differently, while analytics and diagnostics distinguish opt-out product telemetry from local traces, optional OTLP export, authenticated browser ingestion, and demand-driven native resource history."
@@ -18,7 +18,7 @@ objectives:
 keywords: [release, nightly, npm, GitHub Releases, exact version, electron-updater, service launcher, SQLite snapshot, Expo Updates, fingerprint, PostHog, OTLP, resource telemetry, privacy]
 sourceAreas: [.github/workflows/release.yml, docs/operations/release.md, docs/internals/server-updates.md, apps/desktop/src/updates, apps/server/src/cloud, apps/server/src/telemetry, apps/server/src/observability, apps/server/src/resourceTelemetry, apps/mobile/src/features/updates]
 visuals: [release dependency graph, updater boundary comparison, release operations lab]
-updatedAt: 2026-08-24
+updatedAt: "2026-09-11"
 ---
 
 import Callout from "../../components/Callout.astro";
@@ -65,7 +65,7 @@ operations guide therefore requires `publish_cli` before `release`, and `release
 before the hosted web deployment. This prevents a newly visible client from issuing
 an update request for a package version that cannot yet be fetched.
 
-<Figure number="38.1" title="Release availability is ordered around the exact server runtime" hint="Follow the solid arrows. A client may be discoverable only after the exact runtime it can request is published." caption="Stable and nightly first resolve a version/channel. The CLI package for that exact version publishes to npm before the GitHub release can expose desktop artifacts and updater metadata. The hosted client follows the GitHub release. Connected server self-update requests are version-pinned, so they resolve the same package—not an npm dist-tag at update time." textEquivalent="A channel resolver feeds exact CLI publication. CLI publication gates the GitHub release. The GitHub release gates hosted-web deployment and supplies desktop updater metadata. A desktop or hosted client can request a connected boot-service server to install that exact npm version. A nightly channel is separate metadata and a prerelease, not a different server update algorithm." sources={["release-channel-resolution", "release-exact-version-invariant", "release-operations-guide", "release-server-self-update"]}>
+<Figure number="53.1" title="Release availability is ordered around the exact server runtime" hint="Follow the solid arrows. A client may be discoverable only after the exact runtime it can request is published." caption="Stable and nightly first resolve a version/channel. The CLI package for that exact version publishes to npm before the GitHub release can expose desktop artifacts and updater metadata. The hosted client follows the GitHub release. Connected server self-update requests are version-pinned, so they resolve the same package—not an npm dist-tag at update time." textEquivalent="A channel resolver feeds exact CLI publication. CLI publication gates the GitHub release. The GitHub release gates hosted-web deployment and supplies desktop updater metadata. A desktop or hosted client can request a connected boot-service server to install that exact npm version. A nightly channel is separate metadata and a prerelease, not a different server update algorithm." sources={["release-channel-resolution", "release-exact-version-invariant", "release-operations-guide", "release-server-self-update"]}>
   <Mermaid id="release-exact-version-dag" label="Release dependency graph and exact-version server update invariant" chart={`flowchart LR
     R[Resolve version + channel]
     N[Publish t3@exact version\nto npm]
@@ -77,7 +77,7 @@ an update request for a package version that cannot yet be fetched.
     G --> C
     W --> C
     C -->|request exact V| S
-    N -->|"t3@V must already exist"| S
+    N -->|t3@V must already exist| S
     R -. nightly selects prerelease\nnightly updater metadata .-> G`} />
 </Figure>
 
@@ -113,6 +113,12 @@ Install is a process-lifecycle boundary, not merely a file replacement. Before
 and Windows instances—with a grace budget, destroys windows, then yields control to
 the updater. That avoids relying on an application shutdown cascade after the OS
 has begun quitting it.
+
+Updating a desktop-managed remote backend uses a separate prepare/commit token.
+Preparation returns while the connection is alive; the client commits only after it
+has received that token, then verifies the prepared version after reconnecting. If
+installation fails, desktop restarts the stopped backends and retains the failure
+for that same token.
 
 <SourceExcerpt id="desktop-update-install-boundary" focus={[465, 472, 482, 491, 499, 505, 510]} note="The desktop installer first marks the application as quitting, stops all pool instances, destroys windows, and then calls the Electron updater." />
 
@@ -153,6 +159,13 @@ old blocks a target that needs this safety path. After a commit, ordinary servic
 manager restart policy applies; there is no promise of a second automatic rollback
 for every later runtime failure.
 
+An accepted update remains pending from the client's perspective. After reconnect,
+the client correlates the launcher's update ID with the ready environment, then
+checks both outcome and target version; reconnect alone cannot distinguish commit
+from rollback. Servers without update-ID support retain version-only correlation.
+Foreground CLI processes do not self-update. Chapter 28 owns the restore-marker and
+filesystem-sync details of the launcher's recovery journal.
+
 ### 3. Mobile: OTA eligibility is native compatibility plus a safe teardown moment
 
 Mobile's Expo Updates configuration uses a fingerprint runtime version. Inference:
@@ -176,7 +189,7 @@ update application is a separate immediate path.
   decision boundary when one is downloaded.
 </EvidenceClaim>
 
-<Figure number="38.2" title="The updater owner changes with the artifact being replaced" hint="Use the three columns as different state machines, not steps of one universal updater." caption="Desktop keeps the user in charge of download and installation, then stops pooled children before application replacement. A boot-service server has a stable launcher trial an exact immutable runtime around a SQLite snapshot before commit. Mobile accepts only fingerprint-compatible OTA bundles and waits for persistence plus a safe lifecycle window before reloading JavaScript." textEquivalent="Desktop: check, user download, user install, stop backend pool, quit/install. Server: exact runtime stage, preflight, launcher pending state, SQLite snapshot, target trial, prepared signal, commit or rollback. Mobile: fingerprint-compatible OTA check/download, flush drafts/outbox, confirm safe true background, reload or defer." sources={["desktop-update-check-download", "desktop-update-install-boundary", "server-update-exact-preflight", "server-update-launcher-handoff", "release-server-update-architecture", "mobile-ota-fingerprint-policy", "release-mobile-update-runtime"]}>
+<Figure number="53.2" title="The updater owner changes with the artifact being replaced" hint="Use the three columns as different state machines, not steps of one universal updater." caption="Desktop keeps the user in charge of download and installation, then stops pooled children before application replacement. A boot-service server has a stable launcher trial an exact immutable runtime around a SQLite snapshot before commit. Mobile accepts only fingerprint-compatible OTA bundles and waits for persistence plus a safe lifecycle window before reloading JavaScript." textEquivalent="Desktop: check, user download, user install, stop backend pool, quit/install. Server: exact runtime stage, preflight, launcher pending state, SQLite snapshot, target trial, prepared signal, commit or rollback. Mobile: fingerprint-compatible OTA check/download, flush drafts/outbox, confirm safe true background, reload or defer." sources={["desktop-update-check-download", "desktop-update-install-boundary", "server-update-exact-preflight", "server-update-launcher-handoff", "release-server-update-architecture", "mobile-ota-fingerprint-policy", "release-mobile-update-runtime"]}>
   <Mermaid id="three-update-boundaries" label="Desktop, server, and mobile update boundaries" chart={`flowchart TB
     subgraph D[Desktop application]
       DC[Scheduled check] --> DA[Update available]
@@ -207,6 +220,12 @@ are sent in batches only when delivery is enabled; the payload explicitly disabl
 PostHog person profiles. The service supplies platform, architecture, client type,
 and T3 Code version alongside the event properties.
 
+Client attribution comes from the WebSocket that produced the event. `clientType`
+describes how the server is hosted; `surface` describes the connected web, desktop,
+or mobile client. Missing metadata from an earlier client remains unknown. A
+server-global “current client” would misattribute simultaneous surfaces, especially
+when a desktop-hosted environment serves a phone or remote browser.
+
 <SourceExcerpt id="analytics-posthog-controls" focus={[31, 34, 37, 40, 42, 44]} note="Telemetry configuration supplies default PostHog settings, an enabled switch, and bounded in-memory buffering settings." />
 
 <SourceExcerpt id="analytics-posthog-boundary" focus={[69, 75, 83, 88, 95, 101, 108]} note="Batch delivery exits when telemetry is disabled or no identifier is available, and marks the PostHog person profile as disabled." />
@@ -217,6 +236,13 @@ directory. The code hashes the chosen value with its source namespace before
 returning it. That reduces direct identifier exposure to the analytics service; it
 does **not** mean all event properties are automatically anonymous, so the payload
 schema remains an operational privacy boundary.
+
+Active-use reporting should use `client.turn.requested`; `client.connected` counts
+reconnections and is therefore sensitive to network behavior. Provider send and
+completion totals need not match, and cost comparisons require complete usage with
+no observed subagents or mixed-model routing plus matching model, effort,
+interaction mode, and terminal status. Partial counts remain useful observations,
+but they cannot establish a complete turn total.
 
 <SourceExcerpt id="analytics-identity-ladder" focus={[248, 252, 258, 263, 270, 278, 286, 295, 299]} note="Identifier resolution documents and implements the Codex → Claude → persisted anonymous-id fallback, hashing the first available source." />
 
@@ -239,13 +265,21 @@ deliberately independent delivery lanes.
 <SourceExcerpt id="observability-browser-ingest" focus={[146, 150, 154, 159, 166, 171, 176, 188]} note="The browser trace proxy authenticates with the operate scope, attempts local decoding and recording without making that attempt fatal, and independently forwards the original JSON only when OTLP is configured." />
 
 Finally, native resource telemetry is diagnostics-oriented rather than an event
-archive. Its native sidecar keeps a one-hour **in-memory**, bounded ring. Periodic
-streaming is off until a diagnostics subscription is retained; explicit refresh
-still works. The model samples counters and process trees, so processes that begin
-and end between samples may not be seen. It is explicitly not syscall, eBPF, ETW,
-or endpoint-security tracing.
+archive. A standalone Rust child owns a bounded in-memory history; collector failure
+does not stop the server, and there is no recurring shell-probe fallback. Age,
+snapshot count, process rows, and retained bytes are independent limits, so a large
+process tree shortens the available history. Periodic streaming is off until a
+diagnostics subscription is retained; explicit refresh still works.
 
-<SourceExcerpt id="resource-telemetry-demand-history" focus={[129, 133, 137, 140, 144, 148, 152, 156, 164, 170]} note="The resource telemetry design specifies bounded in-memory native history, subscriber-driven streaming, sampleNow behavior, and counter-sampling limits." />
+The model samples counters and process trees, so processes that begin and end
+between samples may not be seen. PID identity includes process start time, and
+snapshot sequence numbers reset with the monitor generation. Historical replay
+must not be overwritten with current Electron metrics. Windows packages do not
+currently provide the Linux monitor needed inside a WSL backend, although the
+inherited Electron power feed remains available. These are sampled diagnostics,
+not syscall, eBPF, ETW, or endpoint-security tracing.
+
+<SourceExcerpt id="resource-telemetry-demand-history" focus={[9, 11, 12, 16, 18, 22, 24, 31, 35, 44, 47, 50]} note="The resource telemetry design specifies bounded in-memory native history, subscriber-driven streaming, independent power signals, and counter-sampling limits." />
 
 <EvidenceClaim kind="inference" title="Operational signals have intentionally unequal persistence and egress" refs={["telemetry-analytics-service", "telemetry-server-observability", "telemetry-browser-ingest-route", "telemetry-resource-architecture"]}>
   This is an inference from the independently configured paths: product analytics

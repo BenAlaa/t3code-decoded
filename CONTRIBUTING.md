@@ -161,7 +161,7 @@ For commands, side effects, persistence, transport, updates, and cleanup, answer
 Quote only the minimum source required to explain the design. Do not copy upstream
 documentation or substantial source files into the book. Preserve attribution and
 immutable links. Never include credentials, local paths containing personal data,
-private downstream implementation details, or unpublished repository content.
+private Easy Code implementation details, or unpublished repository content.
 
 ## Diagrams and interactive labs
 

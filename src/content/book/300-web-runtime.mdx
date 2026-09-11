@@ -1,10 +1,10 @@
 ---
 slug: web-runtime
-order: 300
-number: "30"
+order: 450
+number: "45"
 kind: chapter
-part: "Part VI · Client architectures: shared semantics, platform edges"
-partOrder: 6
+part: "Part VII · Client architectures: shared semantics, platform edges"
+partOrder: 7
 title: One React renderer, three runtime edges
 shortTitle: Web runtime
 summary: "The web client keeps one route tree and environment-oriented state model across hosted, locally served, and Electron renderer deployments. Platform differences enter at history, authentication, native-host, and transport boundaries—not in a forked product model."
@@ -18,7 +18,7 @@ objectives:
 keywords: [web, Electron, history, router, environment, atoms, virtualization, tracing, terminal, performance]
 sourceAreas: [apps/web/src/main.tsx, apps/web/src/AppRoot.tsx, apps/web/src/router.ts, apps/web/src/connection, apps/web/src/components/chat, apps/web/src/components/ThreadTerminalDrawer.tsx]
 visuals: [web runtime architecture and hot path]
-updatedAt: 2026-08-24
+updatedAt: "2026-09-11"
 ---
 
 import Callout from "../../components/Callout.astro";
@@ -118,7 +118,7 @@ reconnecting, and a client can hold several environment presentations at once.
 The route tells the UI *which* scoped thread to request; the registry and
 environment atoms answer *through which prepared connection* it can be reached.
 
-<Figure number="30.1" title="One renderer, explicit platform and hot-path seams" hint="solid arrows carry ordinary data; dashed arrows are optional runtime edges" caption="The entry creates one router from a history chosen at the runtime edge. AppRoot supplies a shared atom registry to routed UI and persistent hosts. A chat route selects an environment-scoped thread connection; snapshot plus stream state feeds the virtualized timeline and memoized sidebar rows. Terminal bytes remain server-owned and arrive through the terminal session. Client tracing exports to the selected primary environment's observability endpoint. Electron-only browser hosting is outside the router. This is an architecture diagram, not a latency, throughput, or memory benchmark." textEquivalent="Hosted and locally served browsers use browser history; an Electron renderer uses hash history and Electron authentication/window integrations. All create the same router and AppRoot. AppRoot supplies an atom registry around RouterProvider, preview automation, the Electron browser host, and a quit overlay. Chat routes select environment-scoped thread state. Environment catalog and session atoms prepare connections and obtain snapshot plus live updates. Those updates feed a virtualized message timeline and memoized sidebar rows. The browser terminal attaches to a server-owned terminal session. Client tracing exports OTLP to the selected primary environment. Electron browser webviews sit outside route transitions. No arrow claims that a browser owns a PTY, that tracing proves a span was accepted, or that the diagram measures performance." sources={["web-main-runtime-entry", "web-app-root-providers", "web-router-composition", "web-environment-atom-catalog", "web-environment-session-atoms", "thread-state-runtime", "web-timeline-list-virtualization", "web-timeline-row-structural-sharing", "web-sidebar-row-locality", "workbench-terminal-web", "web-client-tracing-export"]}>
+<Figure number="45.1" title="One renderer, explicit platform and hot-path seams" hint="solid arrows carry ordinary data; dashed arrows are optional runtime edges" caption="The entry creates one router from a history chosen at the runtime edge. AppRoot supplies a shared atom registry to routed UI and persistent hosts. A chat route selects an environment-scoped thread connection; snapshot plus stream state feeds the virtualized timeline and memoized sidebar rows. Terminal bytes remain server-owned and arrive through the terminal session. Client tracing exports to the selected primary environment's observability endpoint. Electron-only browser hosting is outside the router. This is an architecture diagram, not a latency, throughput, or memory benchmark." textEquivalent="Hosted and locally served browsers use browser history; an Electron renderer uses hash history and Electron authentication/window integrations. All create the same router and AppRoot. AppRoot supplies an atom registry around RouterProvider, preview automation, the Electron browser host, and a quit overlay. Chat routes select environment-scoped thread state. Environment catalog and session atoms prepare connections and obtain snapshot plus live updates. Those updates feed a virtualized message timeline and memoized sidebar rows. The browser terminal attaches to a server-owned terminal session. Client tracing exports OTLP to the selected primary environment. Electron browser webviews sit outside route transitions. No arrow claims that a browser owns a PTY, that tracing proves a span was accepted, or that the diagram measures performance." sources={["web-main-runtime-entry", "web-app-root-providers", "web-router-composition", "web-environment-atom-catalog", "web-environment-session-atoms", "thread-state-runtime", "web-timeline-list-virtualization", "web-timeline-row-structural-sharing", "web-sidebar-row-locality", "workbench-terminal-web", "web-client-tracing-export"]}>
   <Mermaid id="web-runtime-hot-path" label="Web runtime architecture and hot path" chart={`flowchart LR
     H[Hosted or local browser] --> BH[browser history]
     E[Electron file shell] --> HH[hash history]
@@ -183,7 +183,7 @@ addressed by environment, thread, terminal id, cwd, optional worktree, and runti
 environment. User input becomes a typed write command; resize becomes a typed
 resize command; the renderer hydrates the terminal surface from the attached
 session's buffered text and status. The client owns the screen component and local
-focus/selection behavior. The environment server owns the PTY, as Chapter 28
+focus/selection behavior. The environment server owns the PTY, as Chapter 43
 establishes.
 
 <Callout title="Performance claims need a measurement contract" tone="info">

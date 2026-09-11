@@ -1,10 +1,10 @@
 ---
 slug: shared-client-runtime
-order: 290
-number: "29"
+order: 440
+number: "44"
 kind: chapter
-part: "Part VI · Client architectures: shared semantics, platform edges"
-partOrder: 6
+part: "Part VII · Client architectures: shared semantics, platform edges"
+partOrder: 7
 title: "Shared runtime: connections, state, and convergence"
 shortTitle: Shared client runtime
 summary: "packages/client-runtime makes web and mobile agree about environment selection, one-attempt RPC sessions, reconnect supervision, and snapshot-plus-cursor convergence. Its most consequential work is rejecting stale history rather than merely rendering new data."
@@ -18,7 +18,7 @@ objectives:
 keywords: [client-runtime, environment, websocket, RPC, Effect Atom, snapshot, cursor, reconnect, retry, pagination, revert, cache]
 sourceAreas: [packages/client-runtime/src/connection, packages/client-runtime/src/rpc, packages/client-runtime/src/state, packages/contracts/src/orchestration.ts, apps/server/src/ws.ts]
 visuals: [shared-runtime convergence map, client convergence lab]
-updatedAt: 2026-08-24
+updatedAt: "2026-09-11"
 ---
 
 import Callout from "../../components/Callout.astro";
@@ -104,7 +104,7 @@ The seemingly strict “no retry” setting is a division of responsibility. The
 supervisor owns intent (`connect`/`disconnect`), network status, session generation,
 last failure, and the visible phases `available`, `offline`, `connecting`,
 `backoff`, `connected`, and `blocked`. It reports preparation, opening, and
-synchronization separately. Transient failures retry on the pinned 3/4/8/16-second
+synchronization separately. Transient failures retry on a 3/4/8/16-second
 ladder; blocked errors wait for an external signal rather than spinning. A stable
 connection for at least 30 seconds resets retry state. A manual retry resets it;
 a foreground probe can replace a stale mobile lease and make the immediate first
@@ -165,7 +165,7 @@ emits the buffered tail. A completion marker, when the server advertises support
 means the buffered work before that marker has been delivered; it is not a claim
 that future domain events have stopped.
 
-<Figure number="29.1" title="A keyed client state machine converges on a supervised session" hint="read the arrows as ownership and ordering, not a universal request trace" caption="A target is resolved to a prepared connection; the registry acquires its supervisor; the driver creates a one-attempt RPC session. Shell and thread machines hydrate cache, obtain an authoritative snapshot when necessary, resume with a sequence cursor, and apply only newer stream items. Thread pagination adds a history epoch and watermark gate so stale pages cannot reintroduce reverted content." textEquivalent="Four target kinds resolve into one prepared connection. An environment registry owns one supervisor per environment. The supervisor creates successive one-attempt RPC sessions. Keyed shell and thread state machines read cache, fetch an authoritative snapshot when needed, resume an event stream after a cursor, ignore duplicates, and persist settled data. Thread pagination waits for a page watermark and rejects pages from an older history epoch." sources={["connection-target-model", "client-environment-registry", "client-registry-supervisor-lease", "client-rpc-session", "client-state-runtime-families", "client-shell-reconnect", "client-thread-race-guards", "thread-resume-race"]}>
+<Figure number="44.1" title="A keyed client state machine converges on a supervised session" hint="read the arrows as ownership and ordering, not a universal request trace" caption="A target is resolved to a prepared connection; the registry acquires its supervisor; the driver creates a one-attempt RPC session. Shell and thread machines hydrate cache, obtain an authoritative snapshot when necessary, resume with a sequence cursor, and apply only newer stream items. Thread pagination adds a history epoch and watermark gate so stale pages cannot reintroduce reverted content." textEquivalent="Four target kinds resolve into one prepared connection. An environment registry owns one supervisor per environment. The supervisor creates successive one-attempt RPC sessions. Keyed shell and thread state machines read cache, fetch an authoritative snapshot when needed, resume an event stream after a cursor, ignore duplicates, and persist settled data. Thread pagination waits for a page watermark and rejects pages from an older history epoch." sources={["connection-target-model", "client-environment-registry", "client-registry-supervisor-lease", "client-rpc-session", "client-state-runtime-families", "client-shell-reconnect", "client-thread-race-guards", "thread-resume-race"]}>
   <Mermaid id="client-runtime-convergence" label="Shared client runtime convergence flow" chart={`flowchart LR
     T[Primary / Bearer / Relay / SSH target] --> R[Resolver]
     R --> P[Prepared connection]
@@ -264,6 +264,24 @@ Only then is it reasonable for the UI to label the state live. That discipline
 lets web and mobile differ at the platform edge while sharing the same answer to
 the expensive correctness questions: what may be cached, what may be resumed, and
 what must be thrown away.
+
+## Shared settings and environment selection
+
+Multi-environment clients reconcile settings that should follow the user separately
+from settings that name machine-local paths, credentials, hosts, or binaries. Shared
+patches carry version information and expose mismatches rather than overwriting an
+environment that cannot interpret them. Project defaults can therefore converge while
+worktree roots and provider executables remain local.
+
+When several connected environments can start the same project, the runtime may use
+weighted load balancing for a new thread. That decision selects an authority before
+work begins; it does not merge repositories or provider sessions after the fact.
+
+Attachments, media references, terminal output, device state, linked pull requests,
+pending requests, and usage limits also live in shared runtime modules so web and
+mobile apply the same identity and merge rules. See
+[sharedSettings.ts](https://github.com/pingdotgg/t3code/blob/859304b7808ab9a4be87b1bddcd07c6485bf9c4f/packages/client-runtime/src/state/sharedSettings.ts) and
+[load-balancing.ts](https://github.com/pingdotgg/t3code/blob/859304b7808ab9a4be87b1bddcd07c6485bf9c4f/packages/client-runtime/src/load-balancing.ts).
 
 <SourceList ids={[
   "client-runtime-package",

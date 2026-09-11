@@ -6,14 +6,14 @@ part: Start here
 partOrder: 0
 title: T3 Code Decoded
 shortTitle: Cover
-summary: A source-grounded, end-to-end field guide to T3 Code's control plane, provider adapters, clients, remote access, and distribution system.
+summary: A complete product guide and source-grounded technical field guide to T3 Code across web, desktop, mobile, six providers, remote environments, reviews, previews, and device testing.
 status: source-checked
 gates: [sources]
 objectives: []
-keywords: [T3 Code, architecture, agent harness, control plane]
-sourceAreas: [apps/server, apps/web, apps/desktop, apps/mobile, packages/contracts]
+keywords: [T3 Code, product guide, user documentation, architecture, agent harness, control plane]
+sourceAreas: [docs/user, apps/server, apps/web, apps/desktop, apps/mobile, packages/contracts]
 visuals: [book cover]
-updatedAt: 2026-08-24
+updatedAt: "2026-09-11"
 ---
 
 import BookCover from "../../components/BookCover.astro";
@@ -22,10 +22,21 @@ import Callout from "../../components/Callout.astro";
 <BookCover />
 
 <Callout title="Edition contract" tone="success">
-  This edition is locked to [`pingdotgg/t3code@fa219001d`](https://github.com/pingdotgg/t3code/tree/fa219001dc2f14cfd9c7774c2c03c153359144be). “Shipped,” “supported,” and “implemented” always mean that revision unless a dated release or roadmap note says otherwise.
+  The book is synchronized with [`pingdotgg/t3code@859304b78`](https://github.com/pingdotgg/t3code/tree/859304b7808ab9a4be87b1bddcd07c6485bf9c4f), captured on **11 September 2026**.
 </Callout>
 
-## What this book is trying to make obvious
+## Two paths through T3 Code
+
+The product guide explains what T3 Code offers and how to use it: installation,
+onboarding, projects, threads, worktrees, providers, permissions, files, terminals,
+previews, SnapShots, source control, remote environments, mobile clients, usage,
+updates, and simulator or emulator testing.
+
+The technical guide opens the implementation behind those workflows: server and
+client ownership, durable orchestration, provider adapters, persistence, recovery,
+connection routes, native integrations, packaging, and release operations.
+
+## What the technical path makes obvious
 
 T3 Code is easy to mistake for an agent. It is more useful—and more technically
 interesting—to see it as a **control surface and execution boundary around several
@@ -35,4 +46,5 @@ operations, and gives clients shared semantics with deliberate platform-specific
 capabilities. Some delivery and side-effect machinery remains intentionally
 ephemeral; the book marks those seams instead of calling all server state durable.
 
-That division of ownership is the spine of the book. Every later module connects back to it.
+That division of ownership is the spine of the technical path. The product path gives
+each boundary a concrete user purpose before the implementation chapters name it.

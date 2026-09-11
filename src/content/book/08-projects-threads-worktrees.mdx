@@ -1,0 +1,172 @@
+---
+slug: projects-threads-worktrees
+order: 40
+number: "4"
+kind: chapter
+part: Part I · Product guide
+partOrder: 1
+title: Organize projects, threads, and worktrees
+shortTitle: Projects and threads
+summary: Structure agent work so each task has a clear project, durable conversation, workspace, branch, review link, and lifecycle.
+status: source-checked
+gates: [sources, links, interaction, editorial]
+objectives:
+  - Choose between the current checkout and a new worktree.
+  - Run parallel tasks without mixing branches or conversations.
+  - Use thread states and links to keep active work understandable.
+keywords: [projects, threads, worktrees, branches, parallel work, settlement]
+sourceAreas: [docs/user/thread-sidebar.md, docs/user/project-settings.md, docs/user/source-control.md, docs/user/welcome-wizard.md]
+visuals: [work organization lifecycle]
+updatedAt: "2026-09-11"
+---
+
+import Callout from "../../components/Callout.astro";
+import Mermaid from "../../components/Mermaid.astro";
+
+A project answers “which repository or folder?” A thread answers “which task and
+conversation?” A workspace answers “which working directory and branch?” Keep
+those three choices aligned and T3 Code can support many simultaneous agents
+without turning their output into an undifferentiated queue.
+
+## Pick the workspace before sending
+
+| Choice | Use it when | Main risk |
+|---|---|---|
+| Current checkout | The task is exclusive, read-only, or intentionally continues its current branch | Parallel agents can edit the same files and Git index. |
+| New worktree | The task should have its own branch and working directory | More local checkouts consume disk and need normal branch cleanup later. |
+| Existing worktree | A second thread should inspect or continue work already isolated there | Two writing agents can still conflict if they operate concurrently. |
+
+For most independent implementation tasks, **New worktree** is the safest default.
+It isolates both the branch and filesystem changes. A new thread alone isolates the
+conversation; it does not necessarily isolate files.
+
+<Mermaid id="work-organization-lifecycle" label="Project, workspace, and thread lifecycle" chart={`flowchart TD
+  P[Choose project] --> W{Workspace choice}
+  W -->|current checkout| C[Use existing directory and branch]
+  W -->|new worktree| N[Create separate directory and branch]
+  W -->|existing worktree| E[Select that checkout]
+  C --> T[Start durable thread]
+  N --> T
+  E --> T
+  T --> A[Agent turns, approvals, questions, checkpoints]
+  A --> I[Inspect diff, tools, terminal, and delegated agents]
+  I --> F{More work?}
+  F -->|follow-up| A
+  F -->|review| R[Commit, push, or link pull requests]
+  R --> M{Work complete?}
+  M -->|no| A
+  M -->|yes| S[Settle thread]
+  S -->|resume later| U[Un-settle and continue]
+  U --> A`} />
+
+## Start a thread with explicit intent
+
+On web and desktop, a new thread keeps the current project and carries the current
+model and permission selections. Project defaults can override the remembered
+model, while configured workspace defaults determine branch and checkout behavior.
+Changing the project keeps the current environment when that project exists there;
+otherwise T3 Code selects an environment that has it.
+
+Use **New thread in this worktree** from the branch toolbar when a new conversation
+should share an existing isolated checkout. This is useful for a review pass after
+the implementation agent finishes. Avoid concurrent edits unless you explicitly
+want both threads writing the same files.
+
+To dispatch several tasks, press `Cmd+Enter` on macOS or `Ctrl+Enter` on Windows
+and Linux. T3 Code starts the task and immediately gives you another draft. With
+**New worktree**, every background submission gets its own worktree.
+
+<Callout title="Conversation isolation is not file isolation" tone="warning">
+  Two threads in the same checkout can overwrite each other's files, change the
+  same index, or move the branch underneath one another. Use worktrees for
+  simultaneous coding tasks; use extra threads in one checkout mainly for staged
+  handoffs or read-only analysis.
+</Callout>
+
+## Configure projects at the right scope
+
+Open **Settings → Projects** to set defaults for model, workspace behavior,
+automatic pull, agent browser access, and project actions.
+
+- **All projects** defines values inherited by projects without overrides.
+- Selecting one project creates or removes explicit overrides.
+- **All machines** writes defaults to connected machines; offline machines keep
+  their previous values.
+- `t3.json` workspace preferences beat machine defaults when the project has no
+  explicit workspace override.
+- Shared project actions remain inherited until you edit a project's list; reset
+  it to inherit again. Editing the list creates an independent copy and preserves
+  existing actions.
+
+Project grouping is a client-level presentation choice across machines. Names,
+icons, removal, and imported actions still apply to selected checkouts. When
+several checkouts exist, use the checkout picker and inspect mixed-value markers
+before changing settings.
+
+Choose an icon, emoji, or project image to make similar checkouts recognizable
+across connected clients. **Automatic** returns to T3 Code's detection. Agent
+browser-access changes take effect when a new agent session starts, so restart the
+session before testing a changed policy.
+
+Enable **Automatically pull** only for a clean default-branch checkout with an
+upstream. T3 Code fast-forwards; it skips a dirty checkout, untracked files, local
+commits, another branch, or missing upstream. The skip protects local work—it is a
+signal to reconcile the checkout yourself.
+
+## Treat the sidebar as a work queue
+
+Thread states express attention, not repository state:
+
+| State | Meaning | Use |
+|---|---|---|
+| Pinned | High-priority active work | Keep a task above the active list. |
+| Active | Current work | Normal place for running and recently handled threads. |
+| Snoozed | Intentionally hidden until a wake time | Park a dependency or scheduled follow-up. |
+| Settled | Finished or no longer needing attention | Clear the active queue without deleting history. |
+
+Drag threads within and between sections on web/desktop; use **Arrange threads** on
+mobile. Ordering persists across connected clients. New threads appear above
+manually arranged active work. Activity does not continuously reorder the list.
+
+By default, environments can settle inactive threads after three days and settle
+threads after linked pull requests merge. Live work, pending approval, unanswered
+questions, and background work prevent automatic settlement. Tune these rules in
+**Settings → General**. Un-settling restores a thread and temporarily protects it
+until new activity resumes normal rules.
+
+Pinning does not prevent settlement, and settling clears the pin. Manually settling
+an idle thread dismisses unanswered asynchronous questions without sending an
+answer. An open pull request does not block inactivity settlement; a closed pull
+request settles only idle work and does not settle a thread whose work resumed
+after that review closed. If reordering is unavailable for one environment, update
+that environment's server.
+
+## Keep review context with the task
+
+T3 Code detects a pull request for an unsettled thread's saved branch. You can also
+link several pull requests—including reviews from another repository on the same
+host—from the command palette, the Linked pull requests panel, or a PR context
+menu. Creating a PR through thread Git actions links it automatically.
+
+This makes the thread the operational record for the change: prompt, agent work,
+branch, diffs, review discussion, and completion state. For stacked GitHub work,
+the Pull Requests surface shows layers and can merge or rebase a stack when the
+environment supports it. Rebase-stack rewrites remote branch history and can
+restart checks, so inspect its confirmed scope first.
+
+## Find and inspect work
+
+- Open the command palette with `Cmd/Ctrl+K` to search threads across connected
+  environments. Message search begins after two characters and includes user
+  prompts and final agent responses.
+- Copy a thread reference when another task needs it. T3 Code prefers its pull
+  request URL when one is available.
+- Expand tool calls to see full commands and results.
+- Open **Agents** on web or desktop to follow delegated subagent activity.
+- Drag files onto a thread row to open it and attach the files to its composer.
+
+### Source trail
+
+Sources: [working with threads](https://github.com/pingdotgg/t3code/blob/859304b7808ab9a4be87b1bddcd07c6485bf9c4f/docs/user/thread-sidebar.md),
+[project settings](https://github.com/pingdotgg/t3code/blob/859304b7808ab9a4be87b1bddcd07c6485bf9c4f/docs/user/project-settings.md), and
+[source control](https://github.com/pingdotgg/t3code/blob/859304b7808ab9a4be87b1bddcd07c6485bf9c4f/docs/user/source-control.md).

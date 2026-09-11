@@ -1,0 +1,152 @@
+---
+slug: device-host-architecture
+order: 435
+number: "43A"
+kind: chapter
+part: Part VI · The work lifecycle
+partOrder: 6
+title: Device hosts, targets, sessions, and agent control
+shortTitle: Device architecture
+summary: The runtime architecture behind local and SSH simulator hosts, host-scoped targets, concurrent thread sessions, proxied video, user controls, and optional agent tools.
+status: source-checked
+gates: [sources, links, interaction, editorial]
+objectives:
+  - Distinguish a device host, target, hub process, and thread session.
+  - Trace discovery, video, control, and agent-tool traffic through the server.
+  - Reason about concurrency, disconnects, and security boundaries.
+keywords: [device host, simulator, emulator, SSH, video proxy, MCP, agent-device]
+sourceAreas: [packages/contracts/src/device.ts, apps/server/src/device, apps/server/src/mcp/toolkits/device]
+visuals: [host-scoped device topology, recovery state machine]
+updatedAt: "2026-09-11"
+---
+
+import Callout from "../../components/Callout.astro";
+import Mermaid from "../../components/Mermaid.astro";
+
+The device system is a peer to provider orchestration, not a special kind of chat
+message. It discovers simulator targets, owns helper processes, proxies video and
+controls, associates open sessions with threads, and optionally exposes the same
+targets to an agent through a managed tool surface.
+
+## The identity ladder
+
+<Mermaid id="device-identity-ladder" label="Device hosts, targets, sessions, and control paths" chart={`flowchart TB
+  E[T3 environment\nserver authority]
+  E --> LH[Local device host]
+  E --> SH[SSH device host]
+  LH --> H1[Device hub process]
+  SH --> H2[Remote hub process]
+  H1 --> I[iOS target]
+  H1 --> A[Android target]
+  H2 --> RI[Remote iOS target]
+  H2 --> RA[Remote Android target]
+  I --> S1[Thread device session]
+  A --> S2[Thread device session]
+  RI --> S3[Thread device session]
+  U[Web or desktop panel] -->|open · input · tools| E
+  G[Agent MCP / agent-device] -->|authorized commands| E
+  E -->|proxied video and state| U`} />
+
+A **device host** names the machine and connection method that can run platform
+tools. A **target** is one simulator or emulator discovered on that host. A
+**session** is T3’s thread-associated observation/control relationship with that
+target. Target IDs are meaningful only with their host; concurrent sessions must
+therefore route with both identities rather than assuming one global simulator.
+
+## Discovery and host ownership
+
+`LocalDeviceHost` launches helpers on the environment machine. `SshDeviceHost`
+resolves SSH configuration, checks the remote toolchain, installs pinned helper
+packages, owns remote processes, and reports stop or transport failures without
+silently losing ownership. The host abstraction lets DeviceService discover targets
+and manage sessions without moving SSH complexity into clients.
+
+The current `device.ts` contract still contains an outdated comment suggesting SSH
+hosts are future work. Executable `SshDeviceHost` code, settings schemas, tests, and
+the shipped user guide establish current behavior. The executable service and user
+contract are authoritative for the host model described here.
+
+The streaming hub and the agent driver have separate consent and lifetime. T3
+installs pinned `expo-device-hub` only after device viewing is enabled, while
+`agent-device` remains absent and stopped until agent access is granted. The hub is
+a supervised child because its iOS path loads private native frameworks; a helper
+crash must remain outside the environment server process. SSH hosts forward both
+helper endpoints to server loopback.
+
+## One server mediates three traffic classes
+
+1. **Inventory and lifecycle** requests list hosts and targets, start a stopped
+   target, open or close a session, and select its thread association.
+2. **Observation and control** streams carry frames, screen size, focus, taps,
+   swipes, keys, platform buttons, logs, and tool state.
+3. **Agent operations** arrive through the device MCP toolkit or managed
+   `agent-device` command and pass the server’s agent-access policy before reaching
+   a host.
+
+Only the visible client tab requests live video, which reduces background work while
+the simulator itself keeps running. Remote video travels through the environment
+server. Browsers require HTTPS or localhost for WebCodecs; plain HTTP falls back to
+an iOS MJPEG stream and cannot display Android video.
+
+The two platforms do not share a wire format. iOS sends AVCC envelopes over HTTP
+and accepts input on a binary WebSocket. Android multiplexes SEMU-framed H.264 and
+JSON gestures on one WebSocket. The viewer probes decoder support because the iOS
+encoder's H.264 High 5.1 output is not accepted by every hardware decoder.
+
+## Concurrency and recovery
+
+<Mermaid id="device-session-recovery" label="Device session recovery decisions" chart={`stateDiagram-v2
+  [*] --> HostConfigured
+  HostConfigured --> Available: test and discover succeed
+  HostConfigured --> Unavailable: SSH or toolchain fails
+  Available --> SessionOpen: user or agent opens target
+  SessionOpen --> Streaming: visible client subscribes
+  Streaming --> SessionOpen: tab hidden
+  SessionOpen --> Recovering: host connection drops
+  Recovering --> SessionOpen: same host and target return
+  Recovering --> Unavailable: identity or helper cannot recover
+  SessionOpen --> Available: close observation session
+  Available --> [*]: remove host configuration`} />
+
+Several targets and thread sessions can coexist. A host disconnect does not transfer
+ownership to another machine with a similar simulator name. Recovery must re-establish
+the configured host, helper, and target identity. Removing a host closes its T3
+sessions and attempts to stop reachable helpers, but it does not power off the
+underlying simulators.
+
+## Security and product boundaries
+
+The helper hub is never a public environment endpoint. Its upstream implementations
+contain unauthenticated execution or action routes, so they bind to loopback behind
+`DeviceHubProxy`. The proxy authenticates each request, allowlists only required
+stream, configuration, screenshot, and read routes, strips short-lived WebSocket
+tickets before forwarding, and prevents compression from buffering an endless
+MJPEG body. Device settings bypass that hub: typed `device.action` RPC handlers
+execute specific platform commands through the selected `DeviceHost`.
+
+Device settings are environment-scoped because SSH keys, aliases, platform tools,
+and simulator processes live on particular machines. Agent access is an explicit
+integration setting and affects newly started provider sessions; opening the user
+panel does not automatically grant agent tools. The simulator’s app network is also
+outside T3’s control: a remote simulator cannot reach a development server bound only
+to the environment’s loopback address.
+
+Provider process environments are fixed when their sessions spawn. Enabling agent
+device access starts the helper for eligible sessions, but an already running agent
+must restart before the managed CLI and its environment become available. Detailed
+driving instructions arrive from `device_open`, keeping them aligned with the pinned
+CLI without loading them into every conversation.
+
+<Callout title="Three failures that look alike in the panel" tone="warning">
+  “No device” can mean the host is unreachable, the platform toolchain cannot list
+  targets, or the selected target exists but its video transport is unavailable.
+  Diagnose in that order: host, inventory, then session/stream. Recreating a thread
+  cannot repair an SSH key or an Android SDK installation.
+</Callout>
+
+### Current source trail
+
+- [Device contract](https://github.com/pingdotgg/t3code/blob/859304b7808ab9a4be87b1bddcd07c6485bf9c4f/packages/contracts/src/device.ts)
+- [Device service](https://github.com/pingdotgg/t3code/blob/859304b7808ab9a4be87b1bddcd07c6485bf9c4f/apps/server/src/device/DeviceService.ts)
+- [SSH host implementation](https://github.com/pingdotgg/t3code/blob/859304b7808ab9a4be87b1bddcd07c6485bf9c4f/apps/server/src/device/SshDeviceHost.ts)
+- [Agent device toolkit](https://github.com/pingdotgg/t3code/tree/859304b7808ab9a4be87b1bddcd07c6485bf9c4f/apps/server/src/mcp/toolkits/device)

@@ -1,13 +1,13 @@
 ---
 slug: mobile-client-continuity
-order: 330
-number: "33"
+order: 480
+number: "48"
 kind: chapter
-part: "Part VI · Client architectures: shared semantics, platform edges"
-partOrder: 6
-title: "Mobile: persistence, outbox, sharing, and native systems"
+part: "Part VII · Client architectures: shared semantics, platform edges"
+partOrder: 7
+title: "Mobile: adaptive workspaces, persistence, and native systems"
 shortTitle: Mobile continuity
-summary: "The Expo client reuses T3 Code's connection and projection semantics but owns a deliberately mobile durability layer: cached snapshots in SQLite, credentials in secure storage, drafts and commands in atomic files, a transactional share inbox, native rendering bridges, and an OTA restart gate that yields to unsaved work."
+summary: "The Expo client reuses T3 Code's connection and projection semantics while adding adaptive navigation, native review and terminal surfaces, voice input, cached snapshots in SQLite, secure credentials, durable drafts and commands, transactional sharing, notifications, and a guarded OTA restart path."
 status: source-checked
 gates: [sources, interaction]
 objectives:
@@ -18,7 +18,7 @@ objectives:
 keywords: [mobile, Expo, React Native, connection runtime, SQLite, SecureStore, drafts, outbox, sharing, native terminal, native diff, Live Activity, OTA]
 sourceAreas: [apps/mobile/app.config.ts, apps/mobile/src/App.tsx, apps/mobile/src/Stack.tsx, apps/mobile/src/connection, apps/mobile/src/persistence, apps/mobile/src/state, apps/mobile/src/features/sharing, apps/mobile/src/features/updates, apps/mobile/modules]
 visuals: [mobile ownership graph, offline and OTA continuity simulator, native capability matrix]
-updatedAt: 2026-08-24
+updatedAt: "2026-09-11"
 ---
 
 import Callout from "../../components/Callout.astro";
@@ -60,7 +60,7 @@ and share-extension lifecycle URLs: the latter is deliberately ignored because t
 
 <SourceExcerpt id="mobile-app-root-composition" focus={[63, 64, 65, 80, 81, 82, 95, 96, 97, 103]} note="The root composes one Atom registry and native application hosts. Incoming shares wrap navigation because their durable inbox participates in route presentation." />
 
-The connection runtime is not a mobile rewrite of Chapter 29. It merges the shared
+The connection runtime is not a mobile rewrite of Chapter 44. It merges the shared
 `Connection.layer` and shared shell/thread snapshot loaders with mobile platform
 services:
 
@@ -78,10 +78,10 @@ services:
 The platform supplies no SSH gateway. Its `SshEnvironmentGateway` operations fail
 with an explicit “desktop only” blocked error. Mobile can connect through supported
 direct/bearer or relay targets, but it does not provision a remote CLI over SSH and
-does not spawn a local provider. Chapter 34 returns to the access transports;
-Chapter 35 follows relay authentication and tunneling.
+does not spawn a local provider. Chapter 49 returns to the access transports;
+Chapter 50 follows relay authentication and tunneling.
 
-<Figure number="33.1" title="The phone persists client continuity around a remote authority" hint="solid arrows cross a device-owned boundary; the red node remains remote" caption="The React Native shell and shared client runtime project one selected environment. SQLite caches server snapshots and preferences; secure storage retains the connection catalog and credentials; atomic document files retain drafts, queued commands, and incoming shares. Native terminal/diff/widget surfaces consume client projections or server streams. Only the remote environment accepts commands and owns workspaces, providers, terminals, Git, and durable thread truth." textEquivalent="On the phone, the React Native shell uses the shared client runtime. The runtime connects to a remote environment. Device-local SQLite stores caches and preferences, secure storage stores connection material, and atomic document files store drafts, outbox messages, and incoming shares. Native terminal, diff, keyboard, and Live Activity surfaces attach to the phone UI. The remote environment remains authoritative for projects, threads, providers, terminal processes, files, and Git." sources={["mobile-app-root-composition", "mobile-stack-continuity-workers", "mobile-connection-runtime-layer", "mobile-platform-connection-services", "mobile-persistence-schema", "mobile-secure-connection-catalog", "context-mobile-drafts", "context-mobile-outbox-storage", "mobile-share-inbox", "workbench-terminal-mobile"]}>
+<Figure number="48.1" title="The phone persists client continuity around a remote authority" hint="solid arrows cross a device-owned boundary; the red node remains remote" caption="The React Native shell and shared client runtime project one selected environment. SQLite caches server snapshots and preferences; secure storage retains the connection catalog and credentials; atomic document files retain drafts, queued commands, and incoming shares. Native terminal/diff/widget surfaces consume client projections or server streams. Only the remote environment accepts commands and owns workspaces, providers, terminals, Git, and durable thread truth." textEquivalent="On the phone, the React Native shell uses the shared client runtime. The runtime connects to a remote environment. Device-local SQLite stores caches and preferences, secure storage stores connection material, and atomic document files store drafts, outbox messages, and incoming shares. Native terminal, diff, keyboard, and Live Activity surfaces attach to the phone UI. The remote environment remains authoritative for projects, threads, providers, terminal processes, files, and Git." sources={["mobile-app-root-composition", "mobile-stack-continuity-workers", "mobile-connection-runtime-layer", "mobile-platform-connection-services", "mobile-persistence-schema", "mobile-secure-connection-catalog", "context-mobile-drafts", "context-mobile-outbox-storage", "mobile-share-inbox", "workbench-terminal-mobile"]}>
   <Mermaid id="mobile-client-ownership" label="Mobile client ownership and data paths" chart={`flowchart LR
     subgraph Phone[Expo / React Native client]
       UI[Native navigation + feed]
@@ -244,6 +244,7 @@ implementation strategies, not a benchmark claim.
 | Selectable Markdown/composer | derive structured spans/chips and callbacks | native text/editor views handle selection and keyboard behavior | thread message remains server state; draft remains client state |
 | Hardware keyboard | most-recently-mounted scoped handler dispatch | iOS native module exposes command events; platform shortcuts wake routes | command target still resolves through current screen/runtime |
 | Agent Activity | derive a compact activity projection and registration intent | iOS widget/Live Activity renders lock-screen/Dynamic Island families | relay/environment activity remains the remote source |
+| Android notifications | register the signed-in device and project activity into alerts/cards | native FCM handler owns channels, expiry, dismissal, and Live Update promotion | relay selects and sends activity transitions; the environment remains work authority |
 
 The native terminal wrapper checks whether its Expo view config exists, caches a
 successful resolution, permanently remembers a failed resolution for the process,
@@ -258,13 +259,21 @@ and word-diff ranges into a native-friendly flattened model; a WeakMap reuses th
 expensive mapping until comment identity changes. Native rendering avoids moving
 Git authority to the device.
 
-Agent-awareness settings are explicitly presented as **iOS only** at this revision.
-Release iOS builds configure an Agent Activity widget/Live Activity and push
-capability; personal-team builds remove capabilities they cannot sign. Android has
-an Expo notification resource configuration, so the precise claim is about the
-inspected product capability gate and Live Activity path—not that no Android
-notification API could exist in the binary. Chapter 36 traces notification and
-multi-environment reconciliation in full.
+Voice input is a revision-checked draft operation, not a turn submission. The shared
+controller binds one transcriber and locale for the recording, captures the draft's
+owner, text, and revision, and inserts only if those facts still match. Cancellation
+invalidates the result immediately while retaining resources until Apple's
+non-interruptible native transcription settles, so a late callback cannot overwrite
+an edited or replaced draft.
+
+Android receives Firebase Cloud Messaging data messages sent by the relay through
+FCM HTTP v1; Expo Push is not in that delivery path. The native handler owns system
+permission and channels, persistent dismissal state, card expiry, and Android 16
+Live Update promotion when the OS permits it. Ordinary alerts are quiet while the
+app is foregrounded, while ongoing activity may continue to update. Push delivery
+depends on T3 Connect activity publishing and does not require the phone to keep an
+environment WebSocket alive. Chapter 51 owns the wider attention-versus-state
+reconciliation boundary.
 
 ## 7. OTA updates coordinate binary compatibility and volatile work
 
@@ -294,11 +303,30 @@ whose flush fails is retained for deferred retry.
   The compatibility fingerprint protects the native/JavaScript boundary. The
   flush and lifecycle guards protect drafts, queued commands, and active OS
   handoffs. Neither mechanism upgrades a client cache into server authority; after
-  reload, Chapter 29's snapshot/cursor convergence still reconciles with each
+  reload, Chapter 44's snapshot/cursor convergence still reconciles with each
   environment.
 </EvidenceClaim>
 
-## 8. The design lesson is selective durability
+## 8. Adaptive navigation and native work surfaces
+
+The phone layout prioritizes one route at a time; the tablet layout can keep a thread
+beside files, review, terminal, or other detail surfaces. Those panes are navigation
+state, not duplicated thread authority. Native diff highlighting, file-tree search,
+image/video/PDF/web previews, and the Ghostty-backed terminal let mobile inspect the
+same work with platform-specific rendering.
+
+New-task drafts can coexist per project and remain local until submitted. Attachments
+have durable local copies and join the outbox only after their upload prerequisites
+are satisfied. iOS voice input performs on-device transcription before the text enters
+the composer under the revision guard above. Android ongoing notifications and iOS Live Activities expose work state,
+while opening the app still reconciles the authoritative environment snapshot.
+
+Appearance follows platform capabilities: Android can use Material You and wallpaper
+colors, while both platforms share semantic theme choices and readable terminal
+palettes. These native features are organized under the current
+[mobile feature tree](https://github.com/pingdotgg/t3code/tree/859304b7808ab9a4be87b1bddcd07c6485bf9c4f/apps/mobile/src/features).
+
+## 9. The design lesson is selective durability
 
 T3 Code does not place every mobile value in one “offline database.” It gives each
 kind of state the smallest recovery contract it needs:

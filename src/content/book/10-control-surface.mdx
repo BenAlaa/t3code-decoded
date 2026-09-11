@@ -1,10 +1,10 @@
 ---
 slug: control-surface
-order: 10
-number: "1"
+order: 160
+number: "16"
 kind: chapter
-part: Part I · Boundaries and vocabulary
-partOrder: 1
+part: Part II · Boundaries and vocabulary
+partOrder: 2
 title: Control surface, not agent brain
 shortTitle: The ownership boundary
 summary: For each environment, T3 Code authoritatively coordinates repository and provider execution without replacing a provider's model loop, native context, or authentication.
@@ -17,7 +17,7 @@ objectives:
 keywords: [control surface, harness, ownership, server, provider adapter]
 sourceAreas: [docs/internals/overview.md, apps/server/src/server.ts, apps/server/src/provider/Services/ProviderAdapter.ts]
 visuals: [ownership matrix, server capability assembly]
-updatedAt: 2026-08-24
+updatedAt: "2026-09-11"
 ---
 
 import Callout from "../../components/Callout.astro";
@@ -61,9 +61,9 @@ binding and recovery state.
 
 ## A normalized, deliberately bounded seam
 
-<SourceExcerpt id="provider-adapter-core" focus={[47, 51, 52, 57, 64, 71]} note="The common lifecycle is start, send, and interrupt. The adapter returns Effect values so failures and dependencies remain typed, while provider-specific protocols stay outside orchestration." />
+<SourceExcerpt id="provider-adapter-core" focus={[67, 71, 72, 77, 84, 89, 94]} note="The common lifecycle declares provider identity and capabilities, then starts sessions, sends turns, optionally compacts, and interrupts. Provider-specific protocols stay outside orchestration." />
 
-<SourceExcerpt id="provider-adapter-stream" focus={[131, 132, 134]} note="Every implementation emits the same ProviderRuntimeEvent stream. This is the upward-facing seam that keeps the projector and clients provider-agnostic." />
+<SourceExcerpt id="provider-adapter-stream" focus={[149, 152, 155, 157]} note="Every implementation emits the same ProviderRuntimeEvent stream. This is the upward-facing seam that keeps the projector and clients provider-agnostic." />
 
 The contract is not a promise of feature equality. Its lifecycle, interaction,
 history, rollback, feedback, and event-stream surface is deliberately bounded, but

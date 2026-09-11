@@ -1,10 +1,10 @@
 ---
 slug: desktop-electron
-order: 320
-number: "32"
+order: 470
+number: "47"
 kind: chapter
-part: "Part VI · Client architectures: shared semantics, platform edges"
-partOrder: 6
+part: "Part VII · Client architectures: shared semantics, platform edges"
+partOrder: 7
 title: "Electron desktop: one renderer, explicit native authority"
 shortTitle: Electron desktop
 summary: "The desktop reuses the web renderer but not browser authority: Electron main assembles effects, supervises local backend children, exposes a narrow preload bridge, and separately brokers WSL, SSH, previews, menus, updates, telemetry, and shutdown."
@@ -18,7 +18,7 @@ objectives:
 keywords: [electron, desktop, preload, backend pool, WSL, SSH, telemetry, preview, shutdown]
 sourceAreas: [apps/desktop/src/main.ts, apps/desktop/src/app, apps/desktop/src/backend, apps/desktop/src/wsl, apps/desktop/src/ssh, apps/desktop/src/preload.ts, apps/desktop/src/preview]
 visuals: [desktop process topology, interactive boot readiness shutdown lab]
-updatedAt: 2026-08-24
+updatedAt: "2026-09-11"
 ---
 
 import Callout from "../../components/Callout.astro";
@@ -94,7 +94,7 @@ so a slow `wsl.exe` cold start does not block the primary readiness path.
 
 <SourceExcerpt id="desktop-bootstrap-order" focus={[142, 144, 157, 175, 178, 181, 184, 200, 203, 208, 211, 217]} note="Desktop resolves exposure and protocol origins, registers IPC, starts the selected primary pool instance, then reconciles an optional WSL secondary without blocking primary readiness." />
 
-<Figure number="32.1" title="Desktop boot, steady state, and shutdown topology" hint="solid arrows are process or transport paths; primary branches are mutually exclusive" caption="Electron main configures exposure and the desktop protocol, registers IPC, and starts one primary pool instance. The ordinary primary is host-local; Windows WSL-only mode instead resolves the primary as WSL, while dual mode may register a separate WSL secondary. Host-local delivery uses fd3/fd4/fd5; WSL delivery uses stdin because wsl.exe drops extra descriptors. HTTP readiness gates each child. SSH remains a separately owned remote gateway." textEquivalent="Electron main owns the backend pool, window, menu, update, preview, telemetry, server-exposure, and SSH services. Preload is the renderer-to-main bridge. Primary configuration chooses either a host-local child on macOS, Linux, or Windows, or a WSL primary in Windows WSL-only mode. A host-local child receives bootstrap on fd3, host telemetry on fd4, and returns diagnostic-demand control on fd5. A WSL primary or optional dual-mode WSL secondary receives bootstrap on stdin because wsl.exe drops extra descriptors. Each local child has an HTTP readiness path. SSH flows from renderer through preload and Electron main to a remote T3 environment and is never a local pool child. Graceful shutdown stops every pool instance; SSH disconnection is separate." sources={["desktop-bootstrap-order", "desktop-primary-platform-selection", "desktop-backend-pool-lifecycle", "desktop-backend-process-wiring", "desktop-native-boundary", "desktop-wsl-reconciliation", "desktop-ssh-gateway"]}>
+<Figure number="47.1" title="Desktop boot, steady state, and shutdown topology" hint="solid arrows are process or transport paths; primary branches are mutually exclusive" caption="Electron main configures exposure and the desktop protocol, registers IPC, and starts one primary pool instance. The ordinary primary is host-local; Windows WSL-only mode instead resolves the primary as WSL, while dual mode may register a separate WSL secondary. Host-local delivery uses fd3/fd4/fd5; WSL delivery uses stdin because wsl.exe drops extra descriptors. HTTP readiness gates each child. SSH remains a separately owned remote gateway." textEquivalent="Electron main owns the backend pool, window, menu, update, preview, telemetry, server-exposure, and SSH services. Preload is the renderer-to-main bridge. Primary configuration chooses either a host-local child on macOS, Linux, or Windows, or a WSL primary in Windows WSL-only mode. A host-local child receives bootstrap on fd3, host telemetry on fd4, and returns diagnostic-demand control on fd5. A WSL primary or optional dual-mode WSL secondary receives bootstrap on stdin because wsl.exe drops extra descriptors. Each local child has an HTTP readiness path. SSH flows from renderer through preload and Electron main to a remote T3 environment and is never a local pool child. Graceful shutdown stops every pool instance; SSH disconnection is separate." sources={["desktop-bootstrap-order", "desktop-primary-platform-selection", "desktop-backend-pool-lifecycle", "desktop-backend-process-wiring", "desktop-native-boundary", "desktop-wsl-reconciliation", "desktop-ssh-gateway"]}>
   <Mermaid id="desktop-process-topology" label="Electron desktop process topology and lifecycle" chart={`flowchart TB
     R[Web renderer] -->|curated preload IPC| M[Electron main]
     M -->|protocol + window + menu + updates| R

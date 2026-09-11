@@ -1,0 +1,180 @@
+---
+slug: environments-surfaces
+order: 30
+number: "3"
+kind: chapter
+part: Part I · Product guide
+partOrder: 1
+title: Environments, clients, and connection paths
+shortTitle: Environments and surfaces
+summary: Decide where work executes, which client to use, and how to connect securely through local, direct, Tailscale, T3 Connect, or SSH paths.
+status: source-checked
+gates: [sources, links, interaction, editorial]
+objectives:
+  - Distinguish the environment host from the client displaying it.
+  - Choose a connection route for local and remote work.
+  - Operate multiple machines without losing track of execution location.
+keywords: [environment, web, desktop, mobile, T3 Connect, Tailscale, SSH, pairing]
+sourceAreas: [AGENTS.md, docs/user/remote-access.md, docs/user/background-service.md, docs/user/mobile-notifications.md, docs/user/devices.md]
+visuals: [multi-surface environment topology]
+updatedAt: "2026-09-11"
+---
+
+import Callout from "../../components/Callout.astro";
+import Mermaid from "../../components/Mermaid.astro";
+
+An environment is the machine-side boundary of T3 Code: one running server, its
+filesystem, provider credentials, project records, threads, terminals, Git tools,
+and device integrations. A client is a view and control surface for one or more
+environments.
+
+This is why the same thread can appear on a laptop and phone without moving its
+workspace. Both clients address the environment that already owns it.
+
+<Mermaid id="multi-surface-environment-topology" label="Clients, connection paths, and environment-owned work" chart={`flowchart LR
+  subgraph Clients
+    D[Desktop client]
+    W[Web client]
+    M[Mobile client]
+  end
+  subgraph Routes
+    L[Local or LAN pairing]
+    T[Tailscale HTTPS]
+    C[T3 Connect]
+    S[Desktop-managed SSH]
+  end
+  D --> L
+  D --> T
+  D --> C
+  D --> S
+  W --> L
+  W --> T
+  W --> C
+  M --> L
+  M --> T
+  M --> C
+  L --> E[Environment server]
+  T --> E
+  C --> E
+  S --> E
+  E --> F[(workspace files and Git)]
+  E --> P[provider runtimes and credentials]
+  E --> H[terminals, browsers, and device hosts]
+  E --> R[(threads and settings)]`} />
+
+## Choose the client for the moment
+
+| Surface | Strongest use | Product limits to remember |
+|---|---|---|
+| Desktop | Primary workstation, local hosting, SSH environments, SnapShots, native preview/browser integration | Native features and host setup are machine-specific. |
+| Local web | Quick command-line launch and full browser-based workspace | The terminal process or background service must keep the server alive. |
+| Hosted web at `app.t3.codes` | Reach HTTPS-exposed environments without installing a client | It connects directly to your endpoint; it cannot make an unreachable server reachable. |
+| Mobile | Notifications, approvals, questions, follow-ups, diffs, and remote supervision | Provider setup and some authoring features remain on web/desktop. |
+
+Mobile stores drafts and queued messages locally, so a temporary disconnect does
+not force you to rewrite a prompt. Upload and delivery resume when the environment
+reconnects. This is valuable on unreliable networks, but a queued instruction has
+not affected the workspace until it actually sends.
+
+## Choose a connection route
+
+### Same machine or private LAN
+
+The local desktop and `npx t3@latest` paths are simplest for one machine. For a
+second device on a reachable private network, start the server on a reachable
+address and create a one-time pairing link:
+
+```bash
+npx t3 serve --host <private-ip>
+npx t3 pair
+```
+
+Scan the QR code or paste the URL into **Add environment**. A `127.0.0.1` URL only
+works on the host itself. Each new device needs a fresh pairing link, but an
+already paired device reconnects without the original token.
+
+### Tailscale HTTPS
+
+If both devices share a tailnet, enable **Tailscale HTTPS** in desktop Connections
+or run `npx t3 serve --tailscale-serve`. For an existing server,
+`npx t3 pair --tailscale` creates a persistent Tailscale Serve mapping and a
+pairing URL. This path is especially useful for the hosted web client because it
+provides HTTPS.
+
+### T3 Connect
+
+T3 Connect links environments and clients signed into the same T3 account without
+router forwarding. Enable it in desktop Connections or run:
+
+```bash
+npx t3@latest connect
+```
+
+Signing in saves the connection identity; it does not keep the server running.
+Use the desktop host, `npx t3 serve`, or a background service as well. T3 Connect
+is required for background mobile push notifications; a direct or Tailscale link
+alone does not deliver those pushes.
+
+### Desktop-managed SSH
+
+Use **Settings → Connections → Add environment → SSH** when a remote machine
+already holds the repository and provider login. Desktop starts or reuses a T3
+server over SSH and manages the port forward. Node and providers must work in a
+non-interactive shell. A version manager configured only in an interactive shell
+is a common source of “binary not found” errors.
+
+<Callout title="Pairing links are credentials" tone="warning">
+  Treat pairing URLs and returned authorization codes like passwords. Do not put
+  them in screenshots, logs, issues, or documentation. Revoke unused links and
+  client sessions from the host's Connections settings.
+</Callout>
+
+## Work across several environments
+
+The same repository may exist on a laptop, workstation, and VM. T3 Code can group
+those checkouts for presentation, but each one remains an independent workspace.
+Provider logins, environment variables, settings, uncommitted files, running
+processes, and available models can differ.
+
+New-thread **Auto balance** can select among grouped environments using current CPU
+and memory signals. Give each machine a preference: **Prefer**, **Normal**, **Less
+often**, or **Manual only**. The chosen environment becomes stable for that draft;
+selecting a specific branch or worktree also fixes the choice. Existing threads
+never migrate.
+
+Use manual selection when data locality matters—for example, a secret exists only
+on one host, an emulator runs on a Mac, or a large build cache lives on a
+workstation. Load balancing is a convenience for equivalent checkouts, not a file
+or credential synchronization mechanism.
+
+## Remote devices and notifications
+
+The Device panel streams iOS Simulators and Android Emulators from the environment
+or a configured SSH device host. Secure pages (HTTPS or localhost) support live
+video. Plain HTTP remote access degrades iOS to still images and cannot show
+Android video. The simulator's `localhost` is not automatically the environment's
+development server; arrange Metro or other dev-server reachability separately.
+
+With T3 Connect and **Device Notifications** enabled, mobile alerts when work
+finishes, fails, asks a question, or needs approval. iOS Live Activities and
+Android ongoing activity can show progress. Normal alerts stay quiet while the app
+is foregrounded. Viewing the thread on another device does not silence the phone.
+
+## Operate a host responsibly
+
+- Keep an always-on host awake and its service running.
+- Install Git, providers, SDKs, and device tools on the environment or configured
+  device host.
+- Update the server named in a version-mismatch notice.
+- Use **Settings → Connections** or `t3 connect status` to inspect configuration;
+  use service status and logs to diagnose reachability.
+- Revoke a client session when a device is lost or should no longer connect.
+- Deregister unused T3 Connect environments; unlinking exposure and uninstalling a
+  background service are separate actions.
+
+### Source trail
+
+Sources: [remote access](https://github.com/pingdotgg/t3code/blob/859304b7808ab9a4be87b1bddcd07c6485bf9c4f/docs/user/remote-access.md),
+[background service](https://github.com/pingdotgg/t3code/blob/859304b7808ab9a4be87b1bddcd07c6485bf9c4f/docs/user/background-service.md),
+[mobile notifications](https://github.com/pingdotgg/t3code/blob/859304b7808ab9a4be87b1bddcd07c6485bf9c4f/docs/user/mobile-notifications.md), and
+[devices](https://github.com/pingdotgg/t3code/blob/859304b7808ab9a4be87b1bddcd07c6485bf9c4f/docs/user/devices.md).

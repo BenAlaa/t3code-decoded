@@ -1,0 +1,140 @@
+---
+slug: devices
+order: 110
+number: "11"
+kind: chapter
+part: "Part I · Product guide"
+partOrder: 1
+title: "Device lab: simulators, emulators, and agent-driven testing"
+shortTitle: Device lab
+summary: "Watch and control iOS Simulators and Android Emulators beside a thread, configure test conditions, and let agents use the same devices for verification."
+status: source-checked
+gates: [sources, links, interaction, editorial]
+objectives:
+  - Prepare a local or SSH device host and open multiple simulator sessions.
+  - Use the Tools drawer to test appearance, accessibility, permissions, location, and network conditions.
+  - Control agent access and diagnose remote streaming or development-server reachability.
+keywords: [devices, iOS Simulator, Android Emulator, device hub, agent-device, accessibility, SSH device host]
+sourceAreas: [docs/user/devices.md, apps/server/src/device, apps/web/src/components/device]
+visuals: [device ownership topology, verification matrix]
+updatedAt: "2026-09-11"
+---
+
+import Callout from "../../components/Callout.astro";
+import Mermaid from "../../components/Mermaid.astro";
+
+The Device panel places a live iOS Simulator or Android Emulator beside a project
+thread. You and the agent can observe the same device, but through different
+controls: you interact with the video surface and Tools drawer; an authorized agent
+uses `device_*` tools through the managed `agent-device` command line.
+
+<Mermaid id="product-device-lab-topology" label="Who owns and controls a T3 Code device" chart={`flowchart LR
+  U[Web or desktop user] -->|touch, type, toolbar| P[Device panel]
+  A[Coding agent] -->|device tools when enabled| H[Device hub]
+  P -->|stream and control| H
+  H --> D[iOS Simulator or Android Emulator]
+  D -->|runs on| M[Environment machine or SSH device host]
+  D -->|app traffic| S[Metro or development server]
+  R[Remote client] -->|HTTPS or localhost preferred| P`} />
+
+## Prepare the host
+
+Open the right panel in a project thread and choose **Device**. First use walks
+through starting the device hub, checking platform support, and deciding whether
+agents may control devices. Merely opening the panel downloads or starts nothing.
+
+iOS requires macOS and Xcode. Android requires SDK Platform-Tools, Android Emulator,
+the latest Command-line Tools, and a virtual device created in Android Studio's
+Device Manager. T3 detects standard SDK paths; set `ANDROID_HOME` for a custom
+location. After installing a missing dependency, restart the environment server and
+refresh the device list.
+
+The simulator belongs to the environment host, not necessarily the computer showing
+the client. This makes a powerful setup possible: T3 Code can run on one server and
+use a Mac or Android workstation added as an SSH device host.
+
+## Open and operate devices
+
+Choose a running device, or select **Start** beside a stopped one. Every device gets
+its own right-panel tab. Use **+ → Device** for another, and rename a tab from its
+context menu. Only the visible tab streams video; hidden tabs and their devices keep
+running.
+
+Click or drag to touch, type while the screen is focused, and use the toolbar for
+Android Home, Back, and Recents, iOS rotation, and power. Closing a tab stops
+watching but leaves the simulator running; use power when you mean to stop it.
+Closed tabs remain closed after reload and can be reopened from **+ → Device**.
+
+Turning off **Settings → Integrations → Devices** stops T3 helper processes. It does
+not power off simulators or emulators.
+
+## Turn the Tools drawer into a test matrix
+
+Open **Tools** for the active device. The drawer reads values back after each change,
+so a displayed state is the device's reported state rather than an optimistic toggle.
+It shows only controls the selected platform and device support. A missing iOS-only
+or Android-only control is therefore a capability boundary, not a separate setting
+you need to enable.
+
+| Test dimension | Useful check |
+| --- | --- |
+| Light/dark mode and text size | Contrast, truncation, dynamic type, and responsive layout. |
+| Accessibility | Element frames and platform accessibility settings expose missing labels or poor hit targets. |
+| Location | Verify empty, nearby, distant, or permission-denied location behavior. |
+| App permissions | Exercise first-run, granted, denied, and revoked states. |
+| iOS-specific tools | Liquid Glass, color filters, VoiceOver, and a test push notification. |
+| Android-specific tools | Orientation and network toggling for rotation and offline recovery. |
+
+Change one variable at a time, reproduce the behavior, and tell the agent the exact
+state. A useful acceptance pass covers the default state, one adverse state, and a
+recovery back to normal. You and the agent are changing the same simulator: a theme,
+permission, location, orientation, or network change is immediately part of the
+other participant's test conditions. State the condition in the thread before
+asking the agent to verify it.
+
+## Give agents access deliberately
+
+Enable **Agent device access** in **Settings → Integrations → Devices** to install
+and expose the device CLI to newly started agent sessions. Restart an existing agent
+session after enabling it so the session receives the needed environment. The first
+iOS tap may build a small test runner and take a few minutes once per server.
+
+When an agent opens a device, its panel opens for web and desktop clients on that
+thread; mobile shows device activity in the timeline. Disable agent access to hide
+device tools from agents started afterward. Your own panel remains available.
+
+<Callout title="Agent access is separate from user access" tone="warning">
+  Opening the Device panel does not authorize the coding agent. Enable agent access
+  only when automated taps, screenshots, or inspection are useful, and disable it
+  when the task should stay away from simulators.
+</Callout>
+
+## Remote streams and SSH device hosts
+
+Device streams travel through the environment server and work over LAN, Tailscale,
+and T3 Connect. Live video requires HTTPS or localhost. Over plain remote HTTP, iOS
+falls back to slower still images and Android cannot display video.
+
+To add another machine, choose an environment under **Settings → Integrations →
+Devices → Device hosts**, then enter an SSH alias or `user@host`, optional identity
+file, and port. The environment server resolves the SSH config and keys; password
+prompts are unsupported. **Test connection** checks SSH, Node, npm, and platform
+tools without installing. First listing installs pinned device tools. Node 22+ and
+npm must work in a non-interactive SSH shell.
+
+Removing a host closes its sessions and stops reachable T3 helpers, but simulators
+keep running. Connections can recover after interruption.
+
+T3 handles discovery, streaming, and control. You still own app builds,
+installation, and access to Metro or another development server. A simulator on a
+different machine cannot reach the environment's `localhost`; bind the dev server
+to a reachable address or establish the required forwarding. The authoritative
+task guide is the [Devices documentation](https://github.com/pingdotgg/t3code/blob/859304b7808ab9a4be87b1bddcd07c6485bf9c4f/docs/user/devices.md).
+
+## A repeatable verification session
+
+Ask the agent to boot the target device and install or open the app. Watch its
+reproduction, then test the same path yourself. Switch appearance, text size, and a
+relevant permission or network condition. Have the agent capture evidence and run
+the smallest automated check. Finish by restoring the device state, inspecting the
+code diff, and writing the verified device/OS conditions into the thread or PR.

@@ -1,10 +1,10 @@
 ---
 slug: auth-pairing
-order: 80
-number: "8"
+order: 230
+number: "23"
 kind: chapter
-part: Part II · Boot and connect
-partOrder: 2
+part: Part III · Boot and connect
+partOrder: 3
 title: Pairing, credentials, TTLs, and scopes
 shortTitle: Pairing and auth
 summary: Short-lived bootstrap grants establish trust, durable signed sessions carry scopes, DPoP binds selected tokens to a key, and WebSocket tickets adapt a current session to an upgrade URL.
@@ -17,7 +17,7 @@ objectives:
 keywords: [pairing, authentication, scopes, session, DPoP, WebSocket ticket]
 sourceAreas: [packages/contracts/src/auth.ts, apps/server/src/auth, apps/web/src/environments/primary/auth.ts, apps/web/src/hostedPairing.ts, packages/client-runtime/src/connection/onboarding.ts, packages/client-runtime/src/authorization]
 visuals: [credential ladder, lifetime ledger, authentication decision lab]
-updatedAt: 2026-08-24
+updatedAt: "2026-09-11"
 ---
 
 import Callout from "../../components/Callout.astro";
@@ -55,7 +55,7 @@ bind host is remotely reachable.
 
 All four environment-server posture rows advertise browser-cookie, Bearer, and DPoP session methods. The contract
 also defines `unsafe-no-auth`, but the policy implementation does not produce it at
-the pinned revision. A descriptor is capability and posture metadata; it is not an
+the implementation. A descriptor is capability and posture metadata; it is not an
 authorization bypass.
 
 <EvidenceClaim kind="verified" title="The hosted static app is a client surface, not another server posture" refs={["hosted-static-auth-boundary", "hosted-pairing-url", "hosted-pairing-registration", "hosted-bearer-onboarding", "hosted-clerk-provider", "managed-relay-auth-provider", "managed-relay-dpop-authorization"]}>
@@ -63,11 +63,11 @@ authorization bypass.
   its fragment. The hosted client strips that fragment and registers the remote
   environment with a Bearer session. Clerk authentication to T3 Connect is a separate
   issuer; a managed-relay authorization later obtains its own DPoP-bound environment
-  session. Chapter 35 follows that cloud and relay path without conflating it with the
+  session. Chapter 50 follows that cloud and relay path without conflating it with the
   four environment-server rows above.
 </EvidenceClaim>
 
-<Figure number="8.1" title="Credential ladder and enforcement points" hint="arrows exchange, derive, or verify credentials" caption="Browser, plain-token, and DPoP token exchanges establish sessions differently. The DPoP exchange validates an initial proof before binding the issued token; later requests carry a separate token-bound proof. A WebSocket can use a ticket or direct request authentication, and RPC scopes are still enforced per method." textEquivalent="Mode and bind host produce an environment authentication descriptor. A desktop bootstrap seed or one-time pairing grant enters a browser-session exchange, plain Bearer token exchange, or DPoP token exchange. The DPoP token endpoint verifies a proof without an access-token hash, then issues a token bound to the proof key. Later DPoP requests verify a proof bound to the access token, method, and URL. HTTP authenticates the session, then an endpoint checks a scope where required. An authenticated session may mint a five-minute WebSocket ticket containing a session id. The WebSocket upgrade verifies the ticket and reloads the current session row; when no ticket is supplied it can instead authenticate the upgrade request directly. The RPC authorization map checks every method's required scope." sources={["auth-contracts", "auth-policy-derivation", "auth-session-exchange", "auth-http-exchange", "auth-request-precedence", "auth-pairing-ticket-upgrade", "websocket-ticket-session", "dpop-validation", "rpc-authorization-scopes"]}>
+<Figure number="23.1" title="Credential ladder and enforcement points" hint="arrows exchange, derive, or verify credentials" caption="Browser, plain-token, and DPoP token exchanges establish sessions differently. The DPoP exchange validates an initial proof before binding the issued token; later requests carry a separate token-bound proof. A WebSocket can use a ticket or direct request authentication, and RPC scopes are still enforced per method." textEquivalent="Mode and bind host produce an environment authentication descriptor. A desktop bootstrap seed or one-time pairing grant enters a browser-session exchange, plain Bearer token exchange, or DPoP token exchange. The DPoP token endpoint verifies a proof without an access-token hash, then issues a token bound to the proof key. Later DPoP requests verify a proof bound to the access token, method, and URL. HTTP authenticates the session, then an endpoint checks a scope where required. An authenticated session may mint a five-minute WebSocket ticket containing a session id. The WebSocket upgrade verifies the ticket and reloads the current session row; when no ticket is supplied it can instead authenticate the upgrade request directly. The RPC authorization map checks every method's required scope." sources={["auth-contracts", "auth-policy-derivation", "auth-session-exchange", "auth-http-exchange", "auth-request-precedence", "auth-pairing-ticket-upgrade", "websocket-ticket-session", "dpop-validation", "rpc-authorization-scopes"]}>
   <Mermaid id="auth-credential-ladder" label="T3 authentication credential ladder" chart={`flowchart LR
     P[mode + bind host] --> D[auth descriptor]
     B[desktop bootstrap seed] --> X{exchange shape}
@@ -213,13 +213,6 @@ and `relay:read`. The administrative set adds `access:read`, `access:write`, and
 
 <SourceExcerpt id="websocket-ticket-verification" focus={[785, 793, 797, 802, 807, 817, 821, 828, 834, 839, 844, 850]} note="The ticket's signed claims identify a session. Verification checks ticket time, then reloads the session row and returns its current method, subject, scopes, expiry, and revocation status." />
 
-<EvidenceClaim kind="documented" title="The auth guide overstates the ticket payload" refs={["auth-doc-ticket-overclaim", "websocket-ticket-session"]}>
-  The internal guide says a WebSocket ticket carries scopes. Executable code wins at
-  this revision: the ticket carries `sid` and timestamps, and verification reloads
-  scopes from the SQLite session row. The resulting socket is scoped; the ticket
-  itself is not a scope-bearing snapshot.
-</EvidenceClaim>
-
 <EvidenceClaim kind="inference" title="Durable DPoP replay markers appear to accumulate" refs={["dpop-replay-record", "dpop-validation"]}>
   The pinned implementation creates exclusive `dpop-proof-*` marker files. A
   repository-wide source search found no cleanup path for those markers. That is an
@@ -231,7 +224,7 @@ The browser cookie is set `HttpOnly`, `SameSite=Lax`, and path `/`; the code doe
 set an explicit `Secure` attribute. That is one environment-server session shape,
 not the credential used by every remote client. Direct hosted pairing stores a
 Bearer environment session, while the managed-relay path later establishes a
-distinct DPoP-bound environment session. Chapter 35 follows those remote boundaries.
+distinct DPoP-bound environment session. Chapter 50 follows those remote boundaries.
 
 <SourceList ids={[
   "auth-contracts",
@@ -262,6 +255,5 @@ distinct DPoP-bound environment session. Chapter 35 follows those remote boundar
   "hosted-clerk-provider",
   "managed-relay-auth-provider",
   "managed-relay-dpop-authorization",
-  "auth-session-row-shape",
-  "auth-doc-ticket-overclaim"
+  "auth-session-row-shape"
 ]} />

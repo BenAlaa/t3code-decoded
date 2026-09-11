@@ -1,11 +1,11 @@
 ---
 slug: opencode-normalization
-order: 190
-number: "19"
+order: 340
+number: "34"
 kind: chapter
-part: Part IV · Five harnesses, one product model
-partOrder: 4
-title: OpenCode ownership, recovery, and five-provider normalization
+part: Part V · Six providers, one product model
+partOrder: 5
+title: OpenCode ownership, recovery, and six-provider normalization
 shortTitle: OpenCode and normalization
 summary: OpenCode is an HTTP SDK integration with scoped local-server ownership or external-server attachment; its session adoption and cwd-fork policy show why a common product model must preserve provider-specific recovery semantics.
 status: source-checked
@@ -14,11 +14,11 @@ objectives:
   - Trace OpenCode’s local/external server ownership and session-scoped event pump.
   - Follow resume adoption, not-found handling, cwd equivalence, and history-preserving fork.
   - Separate native OpenCode methods from canonical runtime events and durable orchestration state.
-  - Read the five-provider matrix as an evidence ledger, not a feature-negotiation protocol.
+  - Read the six-provider matrix as an evidence ledger, not a feature-negotiation protocol.
 keywords: [OpenCode, SDK, external server, session adoption, fork, cwd, permissions, promptAsync, rollback, normalization, tasks, skills, usage]
 sourceAreas: [apps/server/src/provider/Layers, apps/server/src/provider/opencodeRuntime.ts, apps/server/src/provider/Services/ProviderAdapter.ts, apps/server/src/usage]
 visuals: [OpenCode session ownership lifecycle, resume decision tree, provider normalization matrix]
-updatedAt: 2026-08-24
+updatedAt: "2026-09-11"
 ---
 
 import Callout from "../../components/Callout.astro";
@@ -48,7 +48,7 @@ the SDK event subscription, and exit-watch fibers.
 
 <SourceExcerpt id="opencode-runtime-ownership" focus={[140, 147, 155, 159, 166, 172, 177]} note="The ownership model distinguishes a scope-owned local child from an externally configured server. Concrete process acquisition and release are catalogued separately below." />
 
-<Figure number="19.1" title="OpenCode has two ownership branches before one adapter boundary" hint="only the local server belongs to the session scope" caption="A configured server URL creates an external connection; T3 uses it but does not own its process. Without a URL, T3 starts a local OpenCode server inside the session scope and parses the URL from its stdout startup announcement. Both branches create an SDK client, select/adopt/fork an OpenCode session, and start a subscription pump. The adapter emits canonical hot runtime events. Closing the scope aborts the subscription and kills the local child, but not an external server." textEquivalent="When an external OpenCode server URL is configured, connectToOpenCodeServer returns a handle marked external with no scope-owned process. Otherwise it starts a local server process whose lifetime belongs to the session scope, waits for the process to announce its URL on stdout, and does not issue a separate HTTP readiness probe in this startup path. In both cases the adapter creates an SDK client, obtains an OpenCode session, starts event.subscribe, and maps selected OpenCode events to ProviderRuntimeEvent. Stopping the adapter closes the session scope: it aborts event subscription and ends a local child process. It cannot terminate an externally managed server. Runtime events still require later ingestion before product projections become durable." sources={["opencode-runtime-ownership", "opencode-local-server-startup", "opencode-session-scope", "opencode-event-pump", "provider-runtime-ingestion"]}>
+<Figure number="34.1" title="OpenCode has two ownership branches before one adapter boundary" hint="only the local server belongs to the session scope" caption="A configured server URL creates an external connection; T3 uses it but does not own its process. Without a URL, T3 starts a local OpenCode server inside the session scope and parses the URL from its stdout startup announcement. Both branches create an SDK client, select/adopt/fork an OpenCode session, and start a subscription pump. The adapter emits canonical hot runtime events. Closing the scope aborts the subscription and kills the local child, but not an external server." textEquivalent="When an external OpenCode server URL is configured, connectToOpenCodeServer returns a handle marked external with no scope-owned process. Otherwise it starts a local server process whose lifetime belongs to the session scope, waits for the process to announce its URL on stdout, and does not issue a separate HTTP readiness probe in this startup path. In both cases the adapter creates an SDK client, obtains an OpenCode session, starts event.subscribe, and maps selected OpenCode events to ProviderRuntimeEvent. Stopping the adapter closes the session scope: it aborts event subscription and ends a local child process. It cannot terminate an externally managed server. Runtime events still require later ingestion before product projections become durable." sources={["opencode-runtime-ownership", "opencode-local-server-startup", "opencode-session-scope", "opencode-event-pump", "provider-runtime-ingestion"]}>
   <Mermaid id="opencode-ownership" label="OpenCode ownership and normalization" chart={`flowchart TB
     U{configured server URL?}
     U -->|yes| E[external server handle\nnot scope-owned]
@@ -146,38 +146,38 @@ durable thread-revert path and any workspace/Git checkpoint restoration.
   reconciliation boundary rather than claiming a single atomic undo.
 </Callout>
 
-## Five providers, one comparison language
+## Six providers, one comparison language
 
-The book’s five harnesses are Codex, Claude, Cursor, Grok, and OpenCode. The matrix is
+The six providers are Codex, Claude, Cursor, Grok, Antigravity, and OpenCode. The matrix is
 an evidence ledger with four cell types: **native mapping**, **adapter behavior or
 emulation**, **explicitly unsupported**, and **not evidenced in the inspected source**.
 It is not the `ProviderAdapter` SPI and not a runtime capability negotiation table.
-The SPI’s declared capability object at this pinned revision contains only
-`sessionModelSwitch`; these five adapters report it as in-session.
+The SPI’s declared capability object contains only
+`sessionModelSwitch`; the adapters report their concrete support through the shared boundary.
 
-<div class="table-scroll" tabindex="0" role="region" aria-label="Five provider normalization matrix">
+<div class="table-scroll" tabindex="0" role="region" aria-label="Six provider normalization matrix">
 <table class="comparison">
-  <caption class="sr-only">Source-grounded normalization categories across five providers</caption>
-  <thead><tr><th scope="col">Operation</th><th scope="col">Codex</th><th scope="col">Claude</th><th scope="col">Cursor</th><th scope="col">Grok</th><th scope="col">OpenCode</th></tr></thead>
+  <caption class="sr-only">Source-grounded normalization categories across six providers</caption>
+  <thead><tr><th scope="col">Operation</th><th scope="col">Codex</th><th scope="col">Claude</th><th scope="col">Cursor</th><th scope="col">Grok</th><th scope="col">Antigravity</th><th scope="col">OpenCode</th></tr></thead>
   <tbody>
-    <tr><th scope="row">transport</th><td>native app-server JSON-RPC mapping</td><td>native Agent SDK stream mapping</td><td>native ACP stdio mapping</td><td>native ACP stdio + XAI extension mapping</td><td>native SDK/HTTP event mapping</td></tr>
-    <tr><th scope="row">resume</th><td>adapter passes a Codex resume cursor to app-server runtime</td><td>adapter uses SDK resume metadata</td><td>adapter passes native session id to ACP load/new flow</td><td>adapter passes native session id to ACP load/new flow</td><td>a recognized cursor re-adopts <code>sessionId</code>; confirmed miss starts fresh; absent/malformed/wrong-version cursor means no resume; cwd change forks</td></tr>
-    <tr><th scope="row">mid-turn send</th><td>calls native <code>turn/start</code>; app-server may queue a new native turn id while interrupt still targets the current one</td><td>queues into the live SDK loop and reuses the active product turn id</td><td>reuses active product turn while prompts are in flight</td><td>reuses active turn with target-aware settlement</td><td>calls <code>promptAsync</code> and reuses active product turn</td></tr>
-    <tr><th scope="row">approval/input</th><td>native JSON-RPC requests mapped to canonical request/input events</td><td>SDK-side deferred interactions mapped to canonical request/input events</td><td>ACP permission + Cursor question extension mapping</td><td>ACP permission + XAI question extension mapping</td><td>native permission/question events mapped; replies call SDK endpoints</td></tr>
-    <tr><th scope="row">plans, tasks, subagents</th><td>native plans plus multi-agent signals become plan and <code>task.*</code> events</td><td>TodoWrite, coordinator, and member observations become plan and <code>task.*</code> events</td><td>Cursor plan/todo extensions become plan events; no <code>task.*</code> emission branch found</td><td>ACP plan observations become plan events; no <code>task.*</code> emission branch found</td><td>plan mode selects a native agent and task-like tools become item activity; no plan or <code>task.*</code> emission branch found</td></tr>
-    <tr><th scope="row">commands and skills discovery</th><td>snapshot requests native skills and adds a feedback slash command</td><td>snapshot combines initialization commands with discovered filesystem skills</td><td>snapshot exposes models/probe state; no skills or slash commands found</td><td>snapshot exposes models/probe state; no skills or slash commands found</td><td>provider inventory exposes skills; no slash commands found</td></tr>
-    <tr><th scope="row">live context telemetry</th><td>emits canonical token-usage snapshots</td><td>emits canonical token-usage snapshots when normalization succeeds</td><td>no canonical token-usage emission branch found</td><td>no canonical token-usage emission branch found</td><td>no canonical token-usage emission branch found</td></tr>
-    <tr><th scope="row">historical Usage source</th><td>Codex JSONL session transcripts are scanned</td><td>Claude JSONL project transcripts are scanned</td><td>not scanned</td><td>not scanned</td><td>not scanned</td></tr>
-    <tr><th scope="row"><code>rollbackThread</code> behavior</th><td>native app-server rollback mapping</td><td>adapter-local turn snapshot truncation plus resume-cursor refresh</td><td>adapter-only local snapshot truncation</td><td><strong>explicitly unsupported</strong></td><td>native <code>session.revert</code> mapping</td></tr>
-    <tr><th scope="row">in-session model switch</th><td>declared SPI capability: in-session</td><td>declared SPI capability: in-session</td><td>declared SPI capability: in-session</td><td>declared SPI capability: in-session</td><td>declared SPI capability: in-session</td></tr>
-    <tr><th scope="row">failure projection</th><td>typed process/protocol/request failures plus runtime warning/error events</td><td>typed SDK/request failures plus terminal result classification</td><td>typed ACP failures plus provider-specific callback and cancel handling</td><td>typed ACP failures plus late-event suppression around interruption</td><td>typed SDK/HTTP failures; when probing a recognized cursor, only confirmed not-found permits fresh-session replacement</td></tr>
+    <tr><th scope="row">transport</th><td>native app-server JSON-RPC mapping</td><td>native Agent SDK stream mapping</td><td>native ACP stdio mapping</td><td>native ACP stdio + XAI extension mapping</td><td>ACP with Antigravity extensions and managed runtime</td><td>native SDK/HTTP event mapping</td></tr>
+    <tr><th scope="row">resume</th><td>adapter passes a Codex resume cursor to app-server runtime</td><td>adapter uses SDK resume metadata</td><td>adapter passes native session id to ACP load/new flow</td><td>adapter passes native session id to ACP load/new flow</td><td>adapter resumes through its ACP session files and continuation identity</td><td>a recognized cursor re-adopts <code>sessionId</code>; confirmed miss starts fresh; absent/malformed/wrong-version cursor means no resume; cwd change forks</td></tr>
+    <tr><th scope="row">mid-turn send</th><td>calls native <code>turn/start</code>; app-server may queue a new native turn id while interrupt still targets the current one</td><td>queues into the live SDK loop and reuses the active product turn id</td><td>reuses active product turn while prompts are in flight</td><td>reuses active turn with target-aware settlement</td><td>uses ACP prompt flow with provider-specific active-session state</td><td>calls <code>promptAsync</code> and reuses active product turn</td></tr>
+    <tr><th scope="row">approval/input</th><td>native JSON-RPC requests mapped to canonical request/input events</td><td>SDK-side deferred interactions mapped to canonical request/input events</td><td>ACP permission + Cursor question extension mapping</td><td>ACP permission + XAI question extension mapping</td><td>ACP permissions and Antigravity input extensions are normalized</td><td>native permission/question events mapped; replies call SDK endpoints</td></tr>
+    <tr><th scope="row">plans, tasks, subagents</th><td>native plans plus multi-agent signals become plan and <code>task.*</code> events</td><td>TodoWrite, coordinator, and member observations become plan and <code>task.*</code> events</td><td>Cursor plan/todo extensions become plan events; no <code>task.*</code> emission branch found</td><td>ACP plan observations become plan events; no <code>task.*</code> emission branch found</td><td>native <code>/plan</code>; subagent activity is grouped into batches</td><td>plan mode selects a native agent and task-like tools become item activity; no plan or <code>task.*</code> emission branch found</td></tr>
+    <tr><th scope="row">commands and skills discovery</th><td>snapshot requests native skills and adds a feedback slash command</td><td>snapshot combines initialization commands with discovered filesystem skills</td><td>snapshot exposes models/probe state</td><td>snapshot includes provider skills and commands where discovered</td><td>discovers user skills from the Gemini home</td><td>provider inventory exposes skills; no slash commands found</td></tr>
+    <tr><th scope="row">live context telemetry</th><td>emits canonical token-usage snapshots</td><td>emits canonical token-usage snapshots when normalization succeeds</td><td>provider-specific support</td><td>provider-specific support</td><td>reports account limit windows through provider status</td><td>provider-specific support</td></tr>
+    <tr><th scope="row">historical Usage source</th><td>Codex JSONL session transcripts are scanned</td><td>Claude JSONL project transcripts are scanned</td><td>not scanned</td><td>not scanned</td><td>subscription limits are account-reported rather than transcript-priced history</td><td>not scanned</td></tr>
+    <tr><th scope="row"><code>rollbackThread</code> behavior</th><td>native app-server rollback mapping</td><td>adapter-local turn snapshot truncation plus resume-cursor refresh</td><td>adapter-only local snapshot truncation</td><td><strong>explicitly unsupported</strong></td><td><strong>explicitly unavailable</strong></td><td>native <code>session.revert</code> mapping</td></tr>
+    <tr><th scope="row">in-session model switch</th><td>declared SPI capability</td><td>declared SPI capability</td><td>declared SPI capability</td><td>declared SPI capability</td><td>account catalog and ACP capability decide</td><td>declared SPI capability</td></tr>
+    <tr><th scope="row">failure projection</th><td>typed process/protocol/request failures plus runtime warning/error events</td><td>typed SDK/request failures plus terminal result classification</td><td>typed ACP failures plus provider-specific callback and cancel handling</td><td>typed ACP failures plus late-event suppression around interruption</td><td>managed runtime, authentication, account, and ACP failures stay distinct</td><td>typed SDK/HTTP failures; when probing a recognized cursor, only confirmed not-found permits fresh-session replacement</td></tr>
   </tbody>
 </table>
 </div>
 
-An absence cell means no implementation branch was found at this pinned revision;
-it does not claim the upstream product can never expose that feature. Chapters 16,
-17, and 20 provide the longer Codex, Claude, and usage trails. The matrix keeps
+An absence cell means no implementation branch was found;
+it does not claim the upstream product can never expose that feature. Chapters 31,
+32, 33A, and 35 provide the longer Codex, Claude, Antigravity, and usage trails. The matrix keeps
 provider discovery (skills/commands), live adapter normalization (plans/tasks and
 context telemetry), and the independent transcript scanner in separate rows so one
 surface cannot masquerade as another.

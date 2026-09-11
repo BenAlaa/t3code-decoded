@@ -1,0 +1,250 @@
+---
+slug: providers-models-permissions
+order: 60
+number: "6"
+kind: chapter
+part: Part I · Product guide
+partOrder: 1
+title: Choose providers, models, accounts, and permissions
+shortTitle: Providers and permissions
+summary: Configure agent runtimes per environment, select models and account instances, and choose a permission mode that matches the task and provider.
+status: source-checked
+gates: [sources, links, interaction, editorial]
+objectives:
+  - Choose a provider and model based on capability and environment setup.
+  - Configure separate accounts or endpoints without mixing provider state.
+  - Set a permission mode with a clear understanding of provider differences.
+keywords: [providers, models, accounts, Codex, Claude, Cursor, Grok, OpenCode, Antigravity, permissions]
+sourceAreas: [docs/user/install.md, docs/user/permission-modes.md, docs/user/providers-codex.md, docs/user/providers-claude.md, docs/user/providers-opencode.md, docs/user/providers-antigravity.md, docs/user/usage.md]
+visuals: [turn configuration decision tree]
+updatedAt: "2026-09-11"
+---
+
+import Callout from "../../components/Callout.astro";
+import Mermaid from "../../components/Mermaid.astro";
+
+Every thread combines four decisions: the provider runtime, a configured provider
+instance, a model and its options, and a permission mode. They are related but not
+interchangeable. “Codex Work” and “Codex Personal” can be separate instances of
+one provider; each can expose several models; the thread can run any of them under
+Supervised, Auto-accept edits, Auto, or Full access.
+
+<Mermaid id="turn-configuration-decision-tree" label="Configure an agent turn from environment to authority" chart={`flowchart TD
+  E[Selected environment] --> H{Which provider is installed and suited to task?}
+  H --> I[Choose configured instance and account]
+  I --> M[Choose catalog or custom model]
+  M --> O[Set supported options: reasoning, tier, variants]
+  O --> R{How much review does this task need?}
+  R -->|inspect every action| S[Supervised]
+  R -->|edits can flow| AE[Auto-accept edits]
+  R -->|provider can review routine actions| A[Auto]
+  R -->|trusted task and environment| F[Full access]
+  S --> T[Send turn]
+  AE --> T
+  A --> T
+  F --> T
+  T --> Q{Native provider request or question?}
+  Q -->|yes| U[Respond in conversation]
+  Q -->|no| X[Agent continues]`} />
+
+## Start with environment reality
+
+Provider installation and authentication live on the environment machine. Enable
+instances in **Settings → Providers** for that environment. If the executable is
+not on the server's `PATH`, set its binary path. Environment variables on an
+instance are appropriate for API keys, base URLs, and router configuration; launch
+arguments are for CLI arguments.
+
+| Provider | Important product behavior |
+|---|---|
+| Codex | Supports shared-home account switching, asynchronous questions, app-access approvals, and `/feedback`. |
+| Claude | Supports separate config-directory instances, configurable auto-compaction, skills, and router endpoints. |
+| Cursor | Uses Cursor CLI and participates in automatic permission review. |
+| Grok Build | Supports remembered matching approvals for a session. |
+| OpenCode | Can run a local managed server or connect to an external one; Auto falls back to supervised behavior. |
+| Antigravity | Uses an account-specific ACP runtime and T3-managed sign-in; lacks T3 Plan mode and thread rewind. |
+
+Choose for the task and the account you actually want charged. A familiar model
+name does not imply equivalent tools or continuation semantics across providers.
+
+## Configure more than one account
+
+Provider instances let one environment expose separate accounts, endpoints, or
+presets. Give instances names that communicate their boundary, such as **Claude
+Work**, **Claude Router**, or **Codex Personal**.
+
+### Codex shared and separate homes
+
+Codex can switch accounts in an existing thread when instances share the same
+`CODEX_HOME`. A shadow home supplies another account's login and model catalog
+while shared sessions and configuration remain available. Keep the primary home
+at `~/.codex`, sign the second account into a fresh directory, and configure both
+instances with the same main home plus the second instance's shadow path.
+
+Use completely separate `CODEX_HOME` paths when sessions and configuration must
+also be isolated. Those instances cannot continue one another's threads. Do not
+populate a shadow home by copying the whole primary Codex directory; start fresh
+and log in. The shadow account needs its own `auth.json`; configure Codex to store
+credentials in a file if the login otherwise lives in an OS credential store.
+
+If an account is absent from the thread picker, compare the instances' main and
+shadow paths, refresh provider status, and verify the account each reports. Two
+instances unexpectedly showing the same account usually means the shadow directory
+was copied instead of created fresh.
+
+Codex app tools can request access for one operation, the current session, or
+permanently; read the named app and scope before approving. A usage-limit message
+can name its window and reset time. Retry after reset, or follow the workspace-plan
+instruction to add credits or raise its spend limit. `/feedback` deliberately
+uploads the conversation and Codex logs to OpenAI and returns an ID for support.
+
+### Claude config directories
+
+Claude isolates accounts and presets with `CLAUDE_CONFIG_DIR`. Sign in using the
+same directory that the provider instance will set. Changing `HOME` is not an
+equivalent substitute because credentials can remain in system keychains or other
+locations. Existing threads can switch only among compatible Claude instances
+that use the same config directory.
+
+Claude instances can route through OpenRouter or another compatible endpoint using
+environment variables. Give router presets separate config directories and follow
+the router's current compatibility guidance. For OpenRouter, set
+`ANTHROPIC_BASE_URL`, put the key in `ANTHROPIC_AUTH_TOKEN`, and set
+`ANTHROPIC_API_KEY` to an explicitly empty value. Run `/logout` first if that config
+directory has a cached Anthropic login. Any local router must be reachable from the
+environment machine.
+
+Claude loads skills from the config directory and the project's `.claude/skills`,
+with the config copy winning on duplicate names. A skill marked
+`disable-model-invocation` can still be selected manually, but invoke these one per
+message. When a subscription limit is reached, Claude can hold the turn until the
+window reopens; stop it if you prefer to continue later.
+
+### OpenCode and Antigravity instances
+
+OpenCode can launch locally when **Server URL** is blank or connect to an existing
+server. A configured password applies to the local server and T3 Code's connection;
+without one, the local server can use `OPENCODE_SERVER_PASSWORD`. For an external
+server, configure its URL and password explicitly—T3 Code does not forward that
+local environment value. T3 Code requires OpenCode 1.14.19 or newer at this source
+revision. After a dropped connection, send another prompt to reconnect the same
+session.
+
+Antigravity instances each have their own Google sign-in; managed runtime files
+are shared by the environment. Remote Google callbacks return to `127.0.0.1` on
+the environment. Copy the complete returned URL into the setup form instead of
+changing its hostname. The URL contains a temporary code and should be kept
+private.
+
+Provider setup is available on web and desktop, not mobile. Besides a personal
+Google account, an instance can use Gemini Enterprise, a Gemini API key, or Agent
+Platform / Vertex AI credentials. The selected method and its fields control the
+agent; ambient Gemini credential variables do not override them. The Antigravity
+API-key field is stored as plain text in environment settings. Changing methods
+stops that instance's sessions, so sign out before replacing an account.
+
+Managed installation supports Apple Silicon macOS, Linux x64/ARM64, and Windows
+x64/ARM64 and can need several gigabytes. A manual install requires the ACP binary
+and `localharness_external` helper at the same version in one directory. Intel Macs
+can use a supported remote environment.
+
+## Choose a model and defaults
+
+The composer model picker selects the provider instance, model, and supported
+options for the thread. T3 Code remembers the selection for new threads. A project
+model default takes precedence; resetting the project setting returns to the
+remembered choice.
+
+Web and desktop can add unlisted custom models under **Settings → Providers →
+Models**. Only options implemented by that provider adapter have an effect.
+Antigravity uses its account-provided catalog and does not accept custom models.
+Leaving reasoning level or service tier unset delegates the choice to provider
+configuration.
+
+Refresh provider status after changing credentials, native configuration, or the
+available model catalog. Existing threads retain their selected model even if it
+disappears; if the provider rejects it, pick an available model and retry.
+
+For OpenCode, web and desktop use **Refresh provider status** and mobile uses
+**Refresh models**. Reconnecting also refreshes the catalog; periodic health checks
+do not. Allow the local helper to sit idle for 30 seconds before refreshing native
+configuration again, or restart or reload an external server when it owns the
+cache.
+
+## Choose permission mode per thread
+
+| Mode | T3 Code intent | Good starting use |
+|---|---|---|
+| **Supervised** | Ask before commands and file changes, though some providers allow read-only actions | Unfamiliar repository, sensitive environment, or first run with a provider. |
+| **Auto-accept edits** | Let edits proceed; other actions may still ask | Focused code changes where command execution deserves review. |
+| **Auto** | Ask the provider's automatic reviewer to approve routine actions | Routine work with Codex, Claude, or Cursor. |
+| **Full access** | Permit commands and edits without T3 approval prompts | Trusted, bounded work in an isolated workspace. |
+
+New threads default to **Full access** unless you change the mode before sending.
+A thread created from another thread inherits its mode. Approval cards appear in
+the conversation; approve or reject them there. Permission modes do not stop an
+agent from asking ordinary task questions.
+
+<Callout title="The mode is an intent translated by each provider" tone="warning">
+  Providers enforce these choices differently. Auto behaves like Supervised for
+  OpenCode and Antigravity because they lack the same automatic reviewer.
+  Antigravity can still issue native approvals in Full access. Always judge the
+  actual request shown in the conversation.
+</Callout>
+
+OpenCode requires approval for `.env` and `.env.local` reads in restricted modes,
+while `.env.example` is allowed. Its **Allow for workspace** decision can affect
+matching requests in other sessions on the same workspace, especially when using a
+shared external server. Grok's **Always allow this session** remembers a matching
+command or tool input, not blanket authority for every future action.
+
+Denying one OpenCode action does not stop the whole turn. Antigravity fixed-choice
+questions still require one offered answer even in Full access.
+
+## Know the provider-specific limits
+
+- Codex asynchronous questions can remain pending through reconnects; dismissing a
+  question closes it without sending an answer.
+- Claude can auto-compact between 100,000 and 1,000,000 tokens, or compact on
+  demand with `/compact`. This changes timing, not the model context window.
+- OpenCode configuration may remain cached while its local helper stays alive;
+  repeated refreshes can keep that helper alive.
+- Antigravity uses its native `/plan`; T3 Code Plan mode is unavailable. It cannot
+  rewind provider conversation state, so edit-and-resubmit and thread revert are
+  unavailable even though T3 Code retains history and diffs.
+- Antigravity's direct attachment limits can be lower than T3 Code's general upload
+  limits: 1 MiB per text file, 10 MiB per image, 20 MiB per audio clip, and 50 MiB
+  total per message. It accepts supported images, PDFs, text, and audio; a successful
+  T3 upload does not guarantee provider acceptance.
+- Antigravity discovers project skills in `.gemini/skills`, `.agents/skills`, then
+  legacy `.agent/skills` precedence, and global skills under its Gemini config
+  directories. Its subagents appear as batches: individual children cannot be
+  opened or controlled, and an idle batch does not prove every child succeeded.
+
+Disabling an Antigravity instance stops sessions but keeps its login. Signing out
+also removes that instance's saved login; removing the managed runtime keeps logins
+and thread or workspace data. Before runtime removal, disable instances, cancel an
+active installation, and clear paths that point into the managed runtime.
+
+Usage estimates, pooled reset windows, and custom pricing are explained once in
+[Personalize, measure usage, update, and protect privacy](../personalize-usage-updates/).
+
+### A practical selection checklist
+
+Before a consequential turn, verify:
+
+1. the environment contains the intended checkout and credentials;
+2. the provider instance names the right account or endpoint;
+3. the selected model exists and supports the needed capability;
+4. the permission mode matches both workspace isolation and task risk;
+5. provider-specific limitations do not invalidate the workflow;
+6. any usage or reset window is adequate for the task.
+
+### Source trail
+
+Sources: [permission modes](https://github.com/pingdotgg/t3code/blob/859304b7808ab9a4be87b1bddcd07c6485bf9c4f/docs/user/permission-modes.md),
+[Codex](https://github.com/pingdotgg/t3code/blob/859304b7808ab9a4be87b1bddcd07c6485bf9c4f/docs/user/providers-codex.md),
+[Claude](https://github.com/pingdotgg/t3code/blob/859304b7808ab9a4be87b1bddcd07c6485bf9c4f/docs/user/providers-claude.md),
+[OpenCode](https://github.com/pingdotgg/t3code/blob/859304b7808ab9a4be87b1bddcd07c6485bf9c4f/docs/user/providers-opencode.md),
+[Antigravity](https://github.com/pingdotgg/t3code/blob/859304b7808ab9a4be87b1bddcd07c6485bf9c4f/docs/user/providers-antigravity.md), and
+[usage](https://github.com/pingdotgg/t3code/blob/859304b7808ab9a4be87b1bddcd07c6485bf9c4f/docs/user/usage.md).

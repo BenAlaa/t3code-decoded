@@ -1,10 +1,10 @@
 ---
 slug: rpc-snapshots-resume
-order: 70
-number: "7"
+order: 220
+number: "22"
 kind: chapter
-part: Part II · Boot and connect
-partOrder: 2
+part: Part III · Boot and connect
+partOrder: 3
 title: HTTP, WebSocket RPC, snapshots, and resume
 shortTitle: RPC and resume
 summary: Typed contracts span HTTP and Effect RPC, while snapshot, bounded catch-up, buffered live delivery, and client watermarks repair connection races.
@@ -17,7 +17,7 @@ objectives:
 keywords: [Effect RPC, WebSocket, HTTP, snapshot, cursor, replay, synchronization]
 sourceAreas: [packages/contracts/src/orchestration.ts, packages/contracts/src/rpc.ts, packages/contracts/src/environmentHttp.ts, apps/server/src/ws.ts, packages/client-runtime/src]
 visuals: [contract stack, animated resume interleaver, cursor decision lab]
-updatedAt: 2026-08-24
+updatedAt: "2026-09-11"
 ---
 
 import Callout from "../../components/Callout.astro";
@@ -36,7 +36,7 @@ typed Effect RPC methods, and a deliberately ordered snapshot/catch-up/live prot
 
 ## Four layers, one contract boundary
 
-<Figure number="7.1" title="From domain schema to bytes and back" hint="do not collapse these layers" caption="Domain schemas define decoded values; HTTP and RPC declarations bind those values to operations; server handlers implement them; Effect RPC and its JSON serialization layer own the WebSocket envelope; client runtime turns sessions into durable subscriptions." textEquivalent="Contracts contain domain snapshot and event schemas. A typed environment HTTP API and typed Effect RPC groups refer to those schemas. Server HTTP and WebSocket handlers implement the operations. The WebSocket route authenticates a session and installs Effect RPC's JSON protocol. The client creates one protocol session and replaces subscriptions when that session changes." sources={["orchestration-snapshot-contracts", "orchestration-rpc-schema-map", "rpc-orchestration-definitions", "environment-http-contracts", "ws-route-json-protocol", "client-rpc-session", "client-rpc-subscriptions"]}>
+<Figure number="22.1" title="From domain schema to bytes and back" hint="do not collapse these layers" caption="Domain schemas define decoded values; HTTP and RPC declarations bind those values to operations; server handlers implement them; Effect RPC and its JSON serialization layer own the WebSocket envelope; client runtime turns sessions into durable subscriptions." textEquivalent="Contracts contain domain snapshot and event schemas. A typed environment HTTP API and typed Effect RPC groups refer to those schemas. Server HTTP and WebSocket handlers implement the operations. The WebSocket route authenticates a session and installs Effect RPC's JSON protocol. The client creates one protocol session and replaces subscriptions when that session changes." sources={["orchestration-snapshot-contracts", "orchestration-rpc-schema-map", "rpc-orchestration-definitions", "environment-http-contracts", "ws-route-json-protocol", "client-rpc-session", "client-rpc-subscriptions"]}>
   <Mermaid id="typed-transport-stack" label="T3 typed transport stack" chart={`flowchart LR
     S[domain schemas] --> H[environment HTTP API]
     S --> R[Effect RPC definitions]
@@ -154,7 +154,7 @@ then inspect authoritative state.
   The event store makes catch-up possible, but each live subscription buffer is an
   unbounded in-memory queue bound to that stream's scope. Process loss clears it.
   Reconnection converges by persisted replay or a fresh snapshot—not by restoring
-  the old queue. Chapter 12 compares this with the mobile durable outbox.
+  the prior queue. Chapter 27 compares this with the mobile durable outbox.
 </Callout>
 
 The `threadSequence` attached to an older-page snapshot is a thread-scoped merge
@@ -174,6 +174,19 @@ while its subscription continues to advance on the global sequence.
   open for future events and will be replaced when the supervisor installs another
   RPC session.
 </EvidenceClaim>
+
+## The typed surface extends beyond thread orchestration
+
+The RPC catalog also carries agent-session scanning and import, provider setup and
+authentication, provider-reported usage limits, device inventory and sessions,
+shared-setting patches, and plural pull-request operations. Each family keeps its own
+snapshot, subscription, or command semantics; adding them to one WebSocket transport
+does not make them one aggregate.
+
+The broad catalog is useful because version negotiation and authorization remain
+method-specific. An older environment can serve core thread state while a client
+hides an unsupported device, import, or review action. See the current
+[RPC contract](https://github.com/pingdotgg/t3code/blob/859304b7808ab9a4be87b1bddcd07c6485bf9c4f/packages/contracts/src/rpc.ts).
 
 <SourceList ids={[
   "orchestration-snapshot-contracts",

@@ -1,0 +1,141 @@
+---
+slug: source-control
+order: 80
+number: "8"
+kind: chapter
+part: "Part I · Product guide"
+partOrder: 1
+title: "Source control: checkpoints, pull requests, reviews, and stacks"
+shortTitle: Source control
+summary: "Turn agent work into reviewable Git history, inspect per-turn checkpoints, collaborate through hosted pull requests, and manage dependent GitHub stacks."
+status: source-checked
+gates: [sources, links, interaction, editorial]
+objectives:
+  - Distinguish T3 checkpoints from commits and hosted pull requests.
+  - Configure a hosting account on the environment that owns the repository.
+  - Create, link, review, merge, and stack pull requests with the right safeguards.
+keywords: [Git, checkpoints, pull requests, code review, GitHub stacks, GitLab, Bitbucket, Azure DevOps]
+sourceAreas: [docs/user/source-control.md, apps/server/src/checkpointing, apps/server/src/vcs, apps/web/src/components/GitActionsControl.tsx, apps/web/src/components/pullRequest]
+visuals: [source-control promotion path, hosting capability matrix]
+updatedAt: "2026-09-11"
+---
+
+import Callout from "../../components/Callout.astro";
+import Mermaid from "../../components/Mermaid.astro";
+
+T3 Code gives agent work three useful levels of history. A **checkpoint** captures
+the workspace around a turn. A **commit** creates normal local Git history. A
+**pull request** publishes a branch for checks and human review. Promote work from
+one level to the next only when it has earned it.
+
+<Mermaid id="product-source-control-path" label="From an agent turn to a merged change" chart={`flowchart LR
+  T[Agent turn] --> C[Hidden checkpoint]
+  C --> D[Inspect turn or branch diff]
+  D -->|wrong direction| R[Revert to checkpoint]
+  R --> T
+  D -->|verified| L[Local commit]
+  L --> P[Push and create PR]
+  P --> V[Checks and review]
+  V -->|changes requested| T
+  V -->|approved| M[Merge]
+  P -. optional .-> K[Link PR to thread]
+  K -. keeps context .-> V`} />
+
+## Checkpoints are the thread's safety net
+
+When a turn changes files, T3 Code records checkpoint metadata and can show a
+turn-scoped diff in the conversation or Changes panel. Use it to answer “what did
+that instruction change?” without mixing the result with every uncommitted edit on
+the branch. If a turn went in the wrong direction, revert from its checkpoint UI.
+
+A checkpoint is not a substitute for a commit. It is an internal restoration point,
+and reverting can affect workspace files and provider conversation state. Before a
+revert, inspect later turns and preserve anything you still need. If the workspace
+contains valuable manual edits, commit or copy them first. After reverting, verify
+the working tree and tell the agent what should happen next.
+
+## Connect the host where Git actually runs
+
+Install Git and authenticate the hosting provider **on the environment server**.
+For a remote project, signing in on your viewing laptop does not authenticate the
+remote host. Then open **Settings → Source Control** and choose **Rescan**.
+
+| Host | Required setup | Product scope and limitations |
+| --- | --- | --- |
+| GitHub | GitHub CLI 2.81.0+ and `gh auth login` | Clone, publish, PRs, review, auto-merge, fork-workflow approval, revert PRs, and stacks. |
+| GitLab | GitLab CLI and `glab auth login` | Merge requests, review, and auto-merge. |
+| Bitbucket | Access token, or email plus API token, in server environment | Restart after environment changes; declined PRs cannot be reopened. |
+| Azure DevOps | Azure CLI, DevOps extension, and `az login` | Use the host website for diff viewing or comment changes. |
+
+API access and Git remote authentication are related but separate. A connected
+provider account can load PR metadata while `git push` still fails because the
+repository remote uses different SSH or HTTPS credentials.
+
+## Clone, publish, and create a pull request
+
+Open the command palette with `Cmd/Ctrl+K`, choose **Add Project**, select a host or
+paste a Git URL, and choose the destination directory. To publish an existing local
+repository, use **Publish Repository**. This creates the hosted repository, adds
+`origin`, and pushes commits; if the repository has no commits, create one before
+the first push.
+
+From a thread's Git actions:
+
+1. Inspect the branch or turn diff. Exclude secrets, generated debris, and unrelated
+   edits.
+2. Run the relevant checks and create a focused local commit.
+3. Push the branch and create the pull request. T3 Code can draft commit subjects,
+   PR titles, and descriptions from the change.
+4. Set the writing model and style in **Settings → Source Control**. **Repository
+   conventions** uses project instructions and recent commit subjects.
+5. Read the generated text before publishing. It should state the user-visible
+   problem, resulting behavior, and validation rather than narrate the conversation.
+
+<Callout title="Publishing is a real boundary" tone="warning">
+  Creating a remote repository, pushing a branch, posting a review, and merging all
+  change shared state. Inspect the exact repository, branch, diff, and audience
+  before you perform each action.
+</Callout>
+
+## Review without losing the implementation context
+
+Open **Pull requests** to inspect changes and comments, request reviewers, check out
+a branch, or merge. GitLab names them merge requests. GitHub, GitLab, and Azure
+DevOps can enable auto-merge while checks are pending. Auto-merge still obeys branch
+rules; use it when the change is final and only external gates remain.
+
+A thread may link several PRs, even review work from another repository on the same
+host. Use **Link pull request** from the palette or Linked pull requests panel, link
+from a detected badge, or choose **Link to thread** from a review. PRs created by the
+thread are linked automatically. Linking adds context; it does not copy or merge the
+changes.
+
+The linked panel groups stacks and shows current review state. Unlinking a layer
+keeps it out of later synchronization. With **Auto-settle merged threads**, a thread
+can settle after every linked review reaches a terminal state; an open or unsynced
+link keeps it active. Mobile can open linked reviews and their stacks, while linking
+and unlinking are done on web or desktop.
+
+## GitHub stacks: treat dependencies as dependencies
+
+A stack is an ordered set of PRs where a higher layer depends on work below it.
+Open a stack badge to navigate the layers.
+
+**Merge stack** submits the selected PR and every unmerged layer below it together,
+respecting branch rules and merge queues. Read the confirmation because its scope is
+larger than one visible PR. After a merge, GitHub rebases remaining layers.
+
+**Rebase stack** updates remote branches bottom to top without changing your local
+checkout. It can rewrite remote history and restart checks. The operation is not
+atomic: if layer three fails, layers one and two may already be updated. Resolve the
+failed layer before retrying, and expect a manual conflict after amending a lower
+layer even when the files look independent.
+
+## Recovery checklist
+
+If source control appears disconnected, authenticate on the environment host and
+rescan. For GitHub verification errors, confirm CLI 2.81.0 or newer. If metadata
+loads but pushing fails, inspect the remote URL and its credentials. If a review
+cannot load, use the host website while checking network access, permissions, and
+rate limits. The complete, revision-pinned behavior is in the
+[source-control user guide](https://github.com/pingdotgg/t3code/blob/859304b7808ab9a4be87b1bddcd07c6485bf9c4f/docs/user/source-control.md).

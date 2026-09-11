@@ -1,9 +1,10 @@
 ---
 slug: request-trace
-order: 4
-kind: front
-part: Start here
-partOrder: 0
+order: 150
+number: "15"
+kind: chapter
+part: Part II · Architecture orientation
+partOrder: 2
 title: One request, every boundary
 shortTitle: Request trace
 summary: Step through a user turn from a client command to an ordered SQL commit, provider-native execution, canonical event ingestion, checkpoint diff, and streamed UI state.
@@ -16,7 +17,7 @@ objectives:
 keywords: [turn lifecycle, command, event, provider, checkpoint, stream]
 sourceAreas: [packages/contracts/src/orchestration.ts, apps/server/src/orchestration, apps/server/src/provider]
 visuals: [interactive request stepper, sequence diagram]
-updatedAt: 2026-08-24
+updatedAt: "2026-09-11"
 ---
 
 import Callout from "../../components/Callout.astro";
@@ -78,12 +79,12 @@ existing thread—optional lifecycle resets, then message and turn-start—is de
 and committed atomically.
 
 <Callout title="Pre-transaction filesystem boundary" tone="warning">
-  Attachment normalization persists decoded bytes before the engine transaction. A command can therefore fail after external filesystem work has begun; Chapter 9 models that branch explicitly.
+  Attachment normalization persists decoded bytes before the engine transaction. A command can therefore fail after external filesystem work has begun; Chapter 24 models that branch explicitly.
 </Callout>
 
 ## The full causal loop
 
-<Figure number="0.3" title="Existing-thread turn sequence" hint="dashed arrows cross hot streams or parallel consumers" caption="This scoped trace omits attachment writes and multi-step bootstrap. Runtime ingestion and checkpoint capture independently subscribe to provider events; neither writes durable domain state except by dispatching back through the engine." textEquivalent="An existing-thread command is authorized, normalized, serialized, decided, and atomically stored with its accepted receipt. The client receives only the committed sequence. A hot post-commit event starts provider work through ProviderService and an adapter. Canonical provider events independently feed runtime ingestion and optional checkpoint capture. Both return durable results by sending internal commands to the same engine. HTTP snapshots and WebSocket live events synchronize the client." sources={["turn-normalizer", "orchestration-transaction", "dispatch-result", "provider-turn-reactor", "provider-event-routing", "provider-runtime-ingestion", "checkpoint-runtime-triggers", "checkpoint-diff-dispatch", "ws-thread-subscription"]}>
+<Figure number="15.3" title="Existing-thread turn sequence" hint="dashed arrows cross hot streams or parallel consumers" caption="This scoped trace omits attachment writes and multi-step bootstrap. Runtime ingestion and checkpoint capture independently subscribe to provider events; neither writes durable domain state except by dispatching back through the engine." textEquivalent="An existing-thread command is authorized, normalized, serialized, decided, and atomically stored with its accepted receipt. The client receives only the committed sequence. A hot post-commit event starts provider work through ProviderService and an adapter. Canonical provider events independently feed runtime ingestion and optional checkpoint capture. Both return durable results by sending internal commands to the same engine. HTTP snapshots and WebSocket live events synchronize the client." sources={["turn-normalizer", "orchestration-transaction", "dispatch-result", "provider-turn-reactor", "provider-event-routing", "provider-runtime-ingestion", "checkpoint-runtime-triggers", "checkpoint-diff-dispatch", "ws-thread-subscription"]}>
   <Mermaid id="turn-sequence" label="End-to-end T3 Code turn sequence" chart={`sequenceDiagram
     participant U as User
     participant C as Client

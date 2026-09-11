@@ -1,0 +1,143 @@
+---
+slug: recipes-troubleshooting
+order: 130
+number: "13"
+kind: chapter
+part: "Part I · Product guide"
+partOrder: 1
+title: "Complete recipes and troubleshooting"
+shortTitle: Recipes and troubleshooting
+summary: "Combine projects, agents, workbench tools, source control, remote access, mobile, and devices into repeatable workflows, then diagnose failures from the owning layer."
+status: source-checked
+gates: [sources, links, interaction, editorial]
+objectives:
+  - Run end-to-end feature, review, remote, and mobile verification workflows.
+  - Diagnose failures by separating client, connection, environment, provider, workspace, and host-service state.
+  - Preserve evidence and recover without duplicating work or losing useful changes.
+keywords: [recipes, troubleshooting, workflow, verification, recovery, remote, source control]
+sourceAreas: [docs/user, apps/web/src, apps/mobile/src, apps/server/src]
+visuals: [layered troubleshooting flow, recipe checklists]
+updatedAt: "2026-09-11"
+---
+
+import Callout from "../../components/Callout.astro";
+import Mermaid from "../../components/Mermaid.astro";
+
+The most reliable way to use T3 Code is to keep intent, execution, evidence, and
+review in the same thread. When something breaks, identify which owner failed
+before changing settings: the viewing client, its connection, the environment
+server, the provider, the workspace, or an external service.
+
+<Mermaid id="product-troubleshooting-layers" label="Troubleshoot from the outside toward the work" chart={`flowchart TD
+  A[Unexpected result] --> C{Client responsive?}
+  C -->|no| C1[Restart or update the client; preserve drafts]
+  C -->|yes| N{Environment connected?}
+  N -->|no| N1[Check host power, reachability, pairing, clock, and service status]
+  N -->|yes| S{Thread and snapshots synchronized?}
+  S -->|no| S1[Reconnect once; select correct environment and project]
+  S -->|yes| P{Provider can start or resume?}
+  P -->|no| P1[Check provider auth, model, permissions, and host logs]
+  P -->|yes| W{Workspace or test failed?}
+  W -->|yes| W1[Inspect checkpoint diff, terminal output, and device or preview]
+  W -->|no| E[Check external host API, Git credentials, browser profile, or device dependency]
+  W1 --> R[Send one bounded correction and verify]
+  E --> R`} />
+
+## Recipe 1: take a feature from request to reviewed pull request
+
+1. Open or add the project on the environment that has the required tools and
+   credentials. Create a fresh thread and choose the provider, model, and permission
+   mode appropriate to the task.
+2. Describe the problem, constraints, and acceptance checks. Attach the smallest
+   relevant file, image, or SnapShot.
+3. Let the agent inspect and implement. Answer permission or input requests after
+   reading their exact scope.
+4. Inspect per-turn checkpoints and the branch diff. Use Files for exact source,
+   Terminal for focused checks, Preview for browser behavior, or Device for mobile
+   behavior.
+5. If the direction is wrong, preserve unrelated work and revert the appropriate
+   checkpoint. Send a concrete correction.
+6. When behavior and checks pass, create a focused commit. Review the generated
+   message, push, and create a PR only when you intend to publish.
+7. Link the PR to the thread, follow checks and review comments, and return to the
+   same thread for revisions. Merge or enable auto-merge after the final diff and
+   scope are correct.
+
+## Recipe 2: fix a visual bug with browser or SnapShot evidence
+
+Start the app in one terminal and keep a second terminal for tests. Open its port in
+Preview, reproduce at the exact viewport and state, and annotate the affected
+region. If the bug is in another desktop app, capture a SnapShot with app text when
+useful. Ask for the expected visual behavior and a focused verification. Refresh
+after the change, test a nearby breakpoint or theme, inspect the diff, and turn off
+or revoke temporary capture permissions when you no longer want them.
+
+## Recipe 3: supervise a long task from mobile
+
+On the host, enable T3 Connect and a background service; verify `t3 service status`
+before leaving. On mobile, sign in, enable Device Notifications and optional ongoing
+activity, then open the environment and thread. When alerted, read the final message
+and inspect the relevant file or review diff. Answer approvals carefully. Use voice,
+photo, video, or file context for one clear follow-up. If the host goes offline,
+restore host power, login/linger state, and service reachability before resending.
+
+## Recipe 4: verify a mobile UI across adverse states
+
+Open the Device panel, start the target simulator, and authorize agent device access
+only if automation is needed. Establish a baseline, then change one Tools setting at
+a time: dark mode, larger text, accessibility frames, denied permission, fake
+location, rotation, or offline network. Capture the failing condition, ask the agent
+to fix and verify it, and repeat the user path yourself. Restore state afterward and
+record device, OS, orientation, and conditions with the result.
+
+## Recipe 5: work on a remote SSH machine
+
+Add the SSH environment from desktop and confirm non-interactive Node and provider
+commands work. Open the remote project; remember that Files, Terminal, Git, and the
+agent now operate on that host. If you need mobile access later, expose the server
+through T3 Connect or a routable private path and keep it running with the supported
+service. Never diagnose a remote missing binary by installing it on the viewing
+laptop.
+
+## Symptom-to-owner table
+
+| Symptom | Likely owner | First useful evidence | Recovery |
+| --- | --- | --- | --- |
+| Environment is offline | Host/service/network | `t3 service status`, its log path, host clock and route | Start/repair service, wake host, fix route or pairing; restart after permanent Connect rejection. |
+| T3 Connect login exists but host is absent | Exposure/server lifecycle | `t3 connect status` plus service status | Start `t3 serve` or install/start service; login alone is insufficient. |
+| Hosted web cannot connect to LAN URL | TLS/reachability | Endpoint scheme and route from browser | Use HTTPS such as Tailscale Serve/T3 Connect, or a local browser that can open direct HTTP. |
+| Provider does not start | Provider on environment | Provider login command, model availability, server log | Authenticate on host, rescan/restart, choose supported model/provider. |
+| Push metadata loads but Git push fails | Git remote credentials | `git remote -v` and host-side SSH/HTTPS auth | Configure the remote's credentials; provider API login is separate. |
+| Terminal history is missing | Scrollback bounds/client view | Whether output exceeded 5,000 lines or 8 MiB | Rerun focused command or use a saved log; do not rely on scrollback as archive. |
+| Browser preview lacks login | Preview profile | Selected profile and import time | Import once with source browser closed or sign in directly; imports do not stay synchronized. |
+| SnapShot shortcut does nothing | OS/compositor setup | SnapShots Settings status and desktop session | Check permission, shortcut collision, Wayland helper/extension, and compositor config. |
+| Device video is blank remotely | Secure-context/platform path | URL scheme and device platform | Use HTTPS/localhost; plain HTTP gives iOS stills and no Android video. |
+| Simulator cannot reach Metro | Network topology | Simulator host and Metro bind address | Bind or forward Metro to an address reachable from the device host. |
+| Usage totals seem low | Available history/filter | Selected environments and scan state | Wait for scans, refresh, inspect model pricing; estimates remain incomplete if history is absent. |
+| Update notice remains | Wrong host/version | Named environment and client version | Update the server machine with the exact client version and preserve startup options. |
+
+## Recover without compounding the failure
+
+Capture the current thread, environment, command, and first meaningful error. Avoid
+repeated Send, repeated merge, or repeated update actions while state is unknown.
+Inspect the workspace diff before reverting or restarting. A client reconnect does
+not necessarily stop the agent; a server restart can interrupt it. After recovery,
+wait for synchronized thread state and verify files and Git status before issuing a
+new instruction.
+
+<Callout title="One correction at a time" tone="warning">
+  When an agent, update, or remote action has an uncertain outcome, first re-read the
+  authoritative thread and workspace state. Repeating the action can create a second
+  turn, duplicate external work, or hide the original failure.
+</Callout>
+
+## Collect a useful bug report
+
+Record the client surface and version, environment/server version, connection mode,
+host OS, provider, project state, exact action, and visible error. Include a trace ID
+or Cloudflare Ray ID when T3 displays one. Redact pairing URLs, authorization codes,
+tokens, prompts, private source, and unrelated terminal output. Prefer a minimal
+reproduction and a small screenshot or video over a full session dump.
+
+The user-facing facts in these recipes are pinned to the reference repository's
+[user documentation](https://github.com/pingdotgg/t3code/tree/859304b7808ab9a4be87b1bddcd07c6485bf9c4f/docs/user).

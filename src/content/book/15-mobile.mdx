@@ -1,0 +1,144 @@
+---
+slug: mobile
+order: 100
+number: "10"
+kind: chapter
+part: "Part I · Product guide"
+partOrder: 1
+title: "Mobile: supervise agents from anywhere"
+shortTitle: Mobile
+summary: "Navigate projects and threads, send rich prompts, inspect files and reviews, and use push and live activity updates without keeping the app connected."
+status: source-checked
+gates: [sources, links, interaction, editorial]
+objectives:
+  - Connect the mobile app and navigate efficiently across environments, projects, and threads.
+  - Compose with photos, videos, files, paste, and voice while preserving drafts through interruptions.
+  - Configure notifications and understand what requires T3 Connect.
+keywords: [mobile, iOS, Android, navigation, notifications, live activities, attachments, voice]
+sourceAreas: [docs/user/mobile-notifications.md, apps/mobile/src/Stack.tsx, apps/mobile/src/features/home, apps/mobile/src/features/files, apps/mobile/src/features/review, apps/mobile/src/state/thread-outbox-model.ts]
+visuals: [mobile supervision loop, capability table]
+updatedAt: "2026-09-11"
+---
+
+import Callout from "../../components/Callout.astro";
+import Mermaid from "../../components/Mermaid.astro";
+
+The mobile app is a remote control for real development environments. It is suited
+to checking progress, answering an approval, adding context, reviewing a diff, or
+starting the next task while away from the host. Agent execution and project files
+remain on the connected environment.
+
+<Mermaid id="product-mobile-supervision" label="A mobile supervision cycle" chart={`flowchart LR
+  N[Push or live activity] --> T[Open the thread]
+  T --> R{What is needed?}
+  R -->|approval or answer| Q[Respond to request]
+  R -->|inspect| F[Files or review diff]
+  R -->|redirect work| C[Compose text, voice, or media]
+  Q --> A[Agent continues on host]
+  F --> C
+  C --> A
+  A --> N`} />
+
+## Connect and orient yourself
+
+Use **Settings → Environments** to add a direct pairing URL or manage known
+environments. For T3 Connect, sign in with the same account as the host and select
+the linked environment. A connection indicator tells you whether the selected host
+is reachable; switching environments changes the machine whose projects and threads
+you are viewing.
+
+The Home screen groups work by project and thread and can filter or search the list.
+Open a thread to see its durable conversation, running state, requests, linked pull
+requests, and composer. On wider phones and tablets, adaptive navigation can keep a
+sidebar and detail visible together; on compact layouts, destinations open as a
+stack and Back returns to the previous list. Hardware keyboard commands are
+available on supported devices.
+
+Use swipe and row actions deliberately: archive or settle work when it is finished,
+and use the archived view when you need it again. A thread remains tied to the
+environment where it started; mobile does not move it to another machine.
+
+## Do real review work from a small screen
+
+From a thread, open **Files** to browse its workspace tree and preview source,
+Markdown, images, video, and supported web content. Open the Git overview or a
+linked review to inspect changed files, review state, comments, and stack context.
+Keep the question narrow on a phone: verify one behavior or file, then send a clear
+follow-up. A desktop remains better for a broad, multi-file audit.
+
+Mobile shows provider permission and input requests in the timeline. Read the exact
+tool, path, or question before responding. Approval lets the environment act; the
+phone itself does not perform the command.
+
+## Compose with the context you already have
+
+The composer supports text plus photos, videos, images pasted from the clipboard,
+and files when the connected server advertises attachment uploads. Use the
+attachment menu to choose the camera, photo library, or file picker, review the
+tiles, and remove anything irrelevant before sending. Large or unsupported items
+can be rejected, and a message has an attachment-count limit shown by the app.
+
+On iOS, voice input transcribes speech on the device before placing the text in the
+draft. It is useful for a quick correction but still deserves an edit for filenames,
+commands, and acceptance criteria. Drafts are local to the mobile app and survive
+normal navigation. If a send fails or the connection disappears, T3 Code can retain
+queued intent and retry once the environment has a live synchronized connection.
+Check the final thread state rather than repeatedly tapping Send; duplicate
+instructions can make an agent redo work.
+
+<Callout title="Make mobile prompts executable" tone="success">
+  State the target, observed behavior, desired behavior, and how to verify it. Attach
+  one relevant image or file. “The checkout button overlaps the total on this
+  screenshot at 390 px; fix it and verify the mobile breakpoint” is enough to drive
+  a focused turn.
+</Callout>
+
+## Notifications, ongoing activity, and Live Activities
+
+Sign in to T3 Connect, link the environment, and enable **Device Notifications** in
+Settings. Alerts cover completion, failure, approvals, and input requests; tapping
+one opens its thread. The environment must have agent-activity publishing enabled.
+
+Enable **Ongoing Agent Activity** on Android or **Live Activity Updates** on iOS to
+follow active work outside the app. Finished results can remain visible for up to
+15 minutes. Dismissing Android's activity card does not disable future alerts;
+change the setting to stop future cards.
+
+When several threads change together, T3 Code can combine them into one attention
+alert or one finished-work alert. The summary lists thread titles, prioritizes work
+that needs input or failed, and opens the highest-priority thread when tapped. An
+individual alert continues to open its own thread. This keeps a burst of agent
+updates actionable without requiring one notification per thread.
+
+Ordinary alerts remain quiet while the mobile app is foregrounded, while ongoing
+activity continues to update. Watching the thread on another device does not silence
+the phone. The mobile app does not have to keep a live environment connection for
+push delivery because the notification path uses T3 Connect.
+
+Reopening the app can silently reconcile the current aggregate after a cold start or
+time away. Replaying the same state does not create another alert or extend a
+finished card's deadline, and old completions are not presented as fresh alerts.
+After tapping any notification, treat the synchronized thread as current; the
+notification is a route and attention signal, not a copy of authoritative thread
+state.
+
+| Situation | Expected behavior |
+| --- | --- |
+| Direct or Tailscale connection only | Interactive control works while reachable; background push does not. |
+| Android 7+ with Google Play services | Ordinary notifications are supported. |
+| Android 16+ | The system may promote ongoing activity to a Live Update, depending on settings and device support. |
+| iOS with Live Activity Updates | Current agent state can appear as a Live Activity. |
+| Android app force-stopped in system Settings | Push delivery pauses until the app is opened again. |
+
+OS notification permissions and Android channels remain under system Settings.
+Battery-saving modes can delay cleanup, especially on Android 7. See the pinned
+[mobile-notifications guide](https://github.com/pingdotgg/t3code/blob/859304b7808ab9a4be87b1bddcd07c6485bf9c4f/docs/user/mobile-notifications.md).
+
+## A sensible mobile routine
+
+Use notifications as an invitation to inspect, not as proof that the result is
+correct. Open the target thread, read the last agent message and tool state, inspect
+the relevant diff or file, then answer the request or send one bounded follow-up.
+For a visual issue, attach a photo or video and include a reproducible condition.
+When the host is offline, fix host reachability first; changing screens or
+reinstalling the app cannot start a powered-off environment.

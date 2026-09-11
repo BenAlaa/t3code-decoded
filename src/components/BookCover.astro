@@ -1,3 +1,4 @@
+
 ---
 import { Image } from "astro:assets";
 import cover from "../../cover.png";
@@ -8,20 +9,20 @@ const base = import.meta.env.BASE_URL.endsWith("/") ? import.meta.env.BASE_URL :
 <div class="book-cover">
   <div class="cover-stage">
     <div class="cover-art">
-      <Image src={cover} alt="T3 Code Decoded book cover: an octopus connecting Codex, Claude Code, Cursor, Grok, OpenCode, and tools" widths={[320, 480, 720]} sizes="(max-width: 720px) 90vw, 420px" loading="eager" />
+      <Image src={cover} alt="T3 Code Decoded book cover with an octopus linking coding-agent tools" widths={[320, 480, 720]} sizes="(max-width: 720px) 90vw, 420px" loading="eager" />
     </div>
     <div class="cover-copy">
-      <span class="cover-mark">Source-level field guide</span>
-      <h2>Follow the control plane all the way down.</h2>
-      <p>From a tap on a phone to a provider subprocess, persisted event, hidden Git checkpoint, and streamed UI update—every layer is explained against one pinned source revision.</p>
+      <span class="cover-mark">Product guide + source-level field guide</span>
+      <h2>Use the whole product. Then follow it all the way down.</h2>
+      <p>Start with installation, daily workflows, remote work, reviews, mobile, and device testing. Continue from one user action into provider processes, durable events, checkpoints, clients, and recovery.</p>
       <div class="cover-actions">
-        <a class="button primary" href={`${base}how-to-read/`}>Start with the reading guide</a>
-        <a class="button" href={`${base}request-trace/`}>Trace one complete turn</a>
+        <a class="button primary" href={`${base}product-overview/`}>Start with the product guide</a>
+        <a class="button" href={`${base}how-to-read/`}>Choose a reading path</a>
       </div>
       <div class="cover-meta">
         <span>pingdotgg/t3code · commit {lock.shortCommit}</span>
         <span>Local/hosted web · Electron · iOS/Android</span>
-        <span>Codex · Claude · Cursor · Grok · OpenCode</span>
+        <span>Codex · Claude · Cursor · Grok · OpenCode · Antigravity</span>
       </div>
     </div>
   </div>

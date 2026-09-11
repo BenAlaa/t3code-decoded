@@ -1,10 +1,10 @@
 ---
 slug: persistence-recovery
-order: 130
-number: "13"
+order: 280
+number: "28"
 kind: chapter
-part: Part III · Transactional domain core and post-commit delivery
-partOrder: 3
+part: Part IV · Transactional domain core and post-commit delivery
+partOrder: 4
 title: Persistence, reconstruction, and crash recovery
 shortTitle: Persistence and recovery
 summary: SQLite is the durable domain core, but settings, secrets, attachments, terminal history, logs, and hidden Git refs cross separate filesystems and recovery protocols with sharply different guarantees.
@@ -18,7 +18,7 @@ objectives:
 keywords: [SQLite, WAL, migrations, recovery, settings, secrets, attachments, terminal history, Git refs, tombstones]
 sourceAreas: [apps/server/src/persistence, apps/server/src/orchestration/Layers/ProjectionPipeline.ts, apps/server/src/serviceLauncher.ts, apps/server/src/serverSettings.ts, apps/server/src/terminal, apps/server/src/vcs]
 visuals: [startup reconstruction DAG, projector replay counter, recovery matrix, retention taxonomy]
-updatedAt: 2026-08-24
+updatedAt: "2026-09-11"
 ---
 
 import Callout from "../../components/Callout.astro";
@@ -62,8 +62,8 @@ busy timeout waits for locks instead of immediately returning `SQLITE_BUSY`.
 
 ## Migrations are a numbered program
 
-`Migrations.ts` imports every migration and constructs a statically ordered map. At
-this pinned revision the manifest contains 41 migrations. Startup invokes the
+`Migrations.ts` imports every migration and constructs a statically ordered map. The
+current manifest reaches migration 050. Startup invokes the
 migration runner after the SQLite pragmas; it does not discover filenames and sort
 them at runtime.
 
@@ -91,8 +91,8 @@ The first migrations establish the architectural core:
   legacy evidence, not proof that checkpoint blobs currently drive recovery.
 </EvidenceClaim>
 
-Selected migration tests exercise upgrades from older shapes. There is no injected
-process-crash test halfway through the full 41-step startup runner.
+Selected migration tests exercise upgrades from earlier shapes. There is no injected
+process-crash test halfway through the full migration program.
 
 ## Projectors reconstruct from cursors—with a 1,000-event ceiling
 
@@ -107,13 +107,13 @@ pages internally. Bootstrap calls it without supplying a larger or unlimited
 value. A projector that is 1,001 events behind applies only the first 1,000 during
 that startup and the server proceeds with the projector still behind.
 
-<Figure number="13.1" title="Startup reconstructs selected state, not every side effect" hint="the projection replay edge is capped at 1,000 events" caption="The service launcher may repair an interrupted SQLite-triplet rollback before the server starts. SQLite then configures pragmas and migrations. Projector cursors rebuild derived tables, after which an optimized command model loads. Reactors remain parked while provider-session reconciliation runs. Activation opens hot consumers, but it does not replay their missing side effects or reconcile every adjacent file store." textEquivalent="Before boot, the service launcher checks a durable restore marker and can restore state.sqlite plus its WAL and SHM sidecars. SQLite opens, applies pragmas, and runs 41 ordered migrations. The projection pipeline reads each projector cursor and requests at most 1,000 remaining events. The engine loads projects, threads, plans, sessions, latest turns, and projector states into its command model. Reactor roots are parked while active provider sessions are reconciled. After listeners prepare, startup activates reactors and admits commands. Provider sessions may recover lazily on future operations; terminal text loads on first open. Attachments, hidden refs, settings-secret pairs, and missed reactor jobs have no general startup reconciler." sources={["service-update-recovery", "sqlite-runtime-pragmas", "migration-runner", "projection-bootstrap-cursors", "projection-read-cap", "startup-parked-reactors"]}>
+<Figure number="28.1" title="Startup reconstructs selected state, not every side effect" hint="the projection replay edge is capped at 1,000 events" caption="The service launcher may repair an interrupted SQLite-triplet rollback before the server starts. SQLite then configures pragmas and migrations. Projector cursors rebuild derived tables, after which an optimized command model loads. Reactors remain parked while provider-session reconciliation runs. Activation opens hot consumers, but it does not replay their missing side effects or reconcile every adjacent file store." textEquivalent="Before boot, the service launcher checks a durable restore marker and can restore state.sqlite plus its WAL and SHM sidecars. SQLite opens, applies pragmas, and runs the statically registered migrations through 050. The projection pipeline reads each projector cursor and requests at most 1,000 remaining events. The engine loads projects, threads, plans, sessions, latest turns, and projector states into its command model. Reactor roots are parked while active provider sessions are reconciled. After listeners prepare, startup activates reactors and admits commands. Provider sessions may recover lazily on future operations; terminal text loads on first open. Attachments, hidden refs, settings-secret pairs, and missed reactor jobs have no general startup reconciler." sources={["service-update-recovery", "sqlite-runtime-pragmas", "migration-runner", "projection-bootstrap-cursors", "projection-read-cap", "startup-parked-reactors"]}>
   <Mermaid id="startup-reconstruction-dag" label="Startup reconstruction and recovery DAG" chart={`flowchart TB
     U{restore marker?} -->|yes| R[restore state.sqlite + WAL + SHM]
     U -->|no| O[open SQLite]
     R --> O
     O --> P[busy timeout + FK + WAL]
-    P --> M[run 41 migrations]
+    P --> M[run 50 migrations]
     M --> C[read each projector cursor]
     C -->|default total limit 1000| F[fold persisted events]
     F --> Q[load optimized command model]
@@ -149,6 +149,12 @@ repository. The active child first persists a pending update record. After the
 handoff delay, the launcher stops that child, stages and syncs copies of
 `state.sqlite`, `state.sqlite-wal`, and `state.sqlite-shm`, and then starts the trial.
 It does **not** write the restore marker before the trial.
+
+Only the stable launcher writes durable service state. It records pending state
+before acknowledging the request, and its same-directory state replacement syncs
+both the file and directory. The trial must finish migrations, acquire startup
+dependencies, bind HTTP, and park its long-running roots at the activation gate
+before reporting `prepared`; a listening socket alone is insufficient.
 
 The marker belongs to the rollback path: immediately before copying backup files
 over the live triplet, the launcher creates and syncs a marker inside the backup.
@@ -236,7 +242,7 @@ garbage collector was found at this revision.
 
 ## Terminal history restores text, not a process
 
-Terminal history is capped at 5,000 lines by default and persisted through a keyed
+Terminal history is capped at 5,000 lines and 8 MiB of UTF-8 text and persisted through a keyed
 coalescing worker after a 40 ms debounce. Output updates memory, schedules the
 history write, and then reaches live subscribers. The worker directly overwrites the
 history file; it does not use the settings atomic-rename helper.
@@ -248,11 +254,16 @@ Because the worker directly overwrites the target instead of using an atomic ren
 an abruptly interrupted write also carries a partial-file risk; the exact filesystem
 outcome is an inference, not a behavior asserted by the normal write path.
 
-On first open after restart, the manager reads and sanitizes saved text and then
+On first open after restart, the manager reads only the bounded tail, skips an
+incomplete UTF-8 prefix, applies the line limit, sanitizes saved text, and then
 starts a new PTY. Saved text does not encode the old shell process, working job,
 input buffer, or terminal emulator state. Tests cover caps, sanitization, deletion,
 inactive-history eviction, and legacy filename migration—not crash injection or
 scope-finalizer flush.
+
+The client render buffer has its own 512 KiB limit. Retained device-query traffic is
+removed, and the web renderer detaches its PTY writer during replay, so a historical
+terminal query cannot produce a fresh reply in the replacement shell.
 
 ## Provider logs are diagnostic, not recovery truth
 

@@ -1,10 +1,10 @@
 ---
 slug: worktree-topology
-order: 220
-number: "22"
+order: 370
+number: "37"
 kind: chapter
-part: Part V · The work lifecycle
-partOrder: 5
+part: Part VI · The work lifecycle
+partOrder: 6
 title: Current checkout versus isolated worktrees
 shortTitle: Worktree topology
 summary: "A new thread may operate in the project's current checkout or, for a Git repository, receive a newly created branch in a linked Git worktree; both routes retain Git as the authority for branch occupancy, filesystem state, and cleanup."
@@ -18,7 +18,7 @@ objectives:
 keywords: [Git, worktree, branch, base branch, origin, setup scripts, cleanup, bootstrap, topology, recovery]
 sourceAreas: [packages/contracts/src/git.ts, packages/contracts/src/vcs.ts, apps/server/src/vcs/GitVcsDriverCore.ts, apps/server/src/ws.ts, apps/server/src/git/GitWorkflowService.ts, apps/mobile/src/lib/projectThreadStartTurn.ts, apps/server/src/checkpointing/Utils.ts, apps/server/src/orchestration/Layers/ThreadDeletionReactor.ts, apps/web/src/hooks/useThreadActions.ts]
 visuals: [worktree topology lab, current checkout versus linked worktree]
-updatedAt: 2026-08-24
+updatedAt: "2026-09-11"
 ---
 
 import Callout from "../../components/Callout.astro";
@@ -125,7 +125,7 @@ different checkout.
 
 <SourceExcerpt id="worktree-setup-test" focus={[93, 112, 123, 130, 137, 142, 147]} note="The test asserts deterministic setup terminal creation, cwd, both environment labels, and command write." />
 
-<Figure number="22.1" title="Current checkout and isolated worktree are different topologies" hint="only one branch creates a linked path" caption="A local request creates no linked Git checkout; its runtime cwd resolves from a stored thread path first, then the project root. Worktree mode first confirms Git, optionally refreshes origin, creates a new branch in a linked path, records the returned path on the thread, then runs setup there. Both modes ultimately dispatch the turn, but no arrow claims that Git creation and durable thread updates are one transaction." textEquivalent="The local route connects a local request to no-new-worktree creation, then resolves the existing stored thread path if present or the project root before a turn starts. The worktree route connects the project root through an optional origin fetch and remote base resolution, then Git worktree creation, then a thread worktree-path update and a setup terminal at the linked checkout, then the turn. A failure arrow from the bootstrap goes to thread cleanup only; Git remains the authority for any linked directory it created." sources={["worktree-non-git-fallback", "worktree-local-selected-path", "worktree-runtime-cwd-resolution", "worktree-bootstrap-path", "worktree-create-command", "worktree-setup-runner", "worktree-setup-launch-outcome", "worktree-bootstrap-failure-cleanup"]}>
+<Figure number="37.1" title="Current checkout and isolated worktree are different topologies" hint="only one branch creates a linked path" caption="A local request creates no linked Git checkout; its runtime cwd resolves from a stored thread path first, then the project root. Worktree mode first confirms Git, optionally refreshes origin, creates a new branch in a linked path, records the returned path on the thread, then runs setup there. Both modes ultimately dispatch the turn, but no arrow claims that Git creation and durable thread updates are one transaction." textEquivalent="The local route connects a local request to no-new-worktree creation, then resolves the existing stored thread path if present or the project root before a turn starts. The worktree route connects the project root through an optional origin fetch and remote base resolution, then Git worktree creation, then a thread worktree-path update and a setup terminal at the linked checkout, then the turn. A failure arrow from the bootstrap goes to thread cleanup only; Git remains the authority for any linked directory it created." sources={["worktree-non-git-fallback", "worktree-local-selected-path", "worktree-runtime-cwd-resolution", "worktree-bootstrap-path", "worktree-create-command", "worktree-setup-runner", "worktree-setup-launch-outcome", "worktree-bootstrap-failure-cleanup"]}>
   <Mermaid id="current-checkout-versus-worktree" label="Thread workspace topology" chart={`flowchart LR
     P[Project root checkout] --> L[local request: no new worktree]
     L --> R[stored thread path, else project root]

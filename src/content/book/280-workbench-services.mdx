@@ -1,11 +1,11 @@
 ---
 slug: workbench-services
-order: 280
-number: "28"
+order: 430
+number: "43"
 kind: chapter
-part: Part V · The work lifecycle
-partOrder: 5
-title: Terminals, files, previews, MCP, VCS, and pull requests
+part: Part VI · The work lifecycle
+partOrder: 6
+title: Terminals, files, previews, MCP, VCS, and review graphs
 shortTitle: Workbench services
 summary: "T3 Code's chat surrounds itself with server-owned workbench services. Their transports differ deliberately: terminal and preview state stream, assets use expiring signed HTTP paths, pull-request diffs use authenticated HTTP slices, and desktop owns the only in-app browser host."
 status: source-checked
@@ -18,7 +18,7 @@ objectives:
 keywords: [terminal, PTY, assets, signed URL, preview, browser automation, MCP, VCS, worktree, pull request, authorization, streaming]
 sourceAreas: [apps/server/src/terminal, apps/server/src/assets, apps/server/src/preview, apps/server/src/mcp, apps/server/src/vcs, apps/server/src/pullRequest, packages/contracts/src]
 visuals: [interactive workbench capability matrix, service data paths, surface parity ledger]
-updatedAt: 2026-08-24
+updatedAt: "2026-09-11"
 ---
 
 import Callout from "../../components/Callout.astro";
@@ -61,7 +61,7 @@ result through surface-specific code.
 | VCS / worktrees | server driver and filesystem | RPC snapshots/commands | “A client branch selector creates a checkout locally.” |
 | Pull requests | server host-provider service | RPC controls; HTTP diff slices | “A rendered action proves the user may write.” |
 
-<Figure number="28.1" title="Workbench capabilities cross different transport boundaries" hint="follow authority, not panel chrome" caption="Clients use authenticated environment RPC for terminal commands, workspace files, preview metadata, VCS, and most pull-request controls. Terminal state also streams. Assets and large pull-request diffs take separate HTTP paths. A provider may receive a scoped T3 MCP bearer credential whose preview requests are brokered to an available desktop automation host; Electron main owns the guest Chromium WebContents." textEquivalent="Web, desktop, and mobile clients call authenticated server workbench services. The terminal returns a snapshot and live stream. Asset RPC returns an expiring signed HTTP URL. Pull-request RPC handles controls while authenticated HTTP carries diff slices. Server preview state is metadata; desktop Electron main owns the Chromium guest. A provider can call the bearer-authenticated T3 MCP preview toolkit, which brokers work to a compatible desktop host." sources={["workbench-terminal-contract", "workbench-terminal-manager-interface", "workbench-asset-contract", "workbench-asset-issue", "workbench-preview-contract", "workbench-desktop-preview-manager", "workbench-mcp-registry", "workbench-preview-automation-broker", "workbench-vcs-contract", "workbench-pr-rpc-contract", "workbench-pr-http-contract"]}>
+<Figure number="43.1" title="Workbench capabilities cross different transport boundaries" hint="follow authority, not panel chrome" caption="Clients use authenticated environment RPC for terminal commands, workspace files, preview metadata, VCS, and most pull-request controls. Terminal state also streams. Assets and large pull-request diffs take separate HTTP paths. A provider may receive a scoped T3 MCP bearer credential whose preview requests are brokered to an available desktop automation host; Electron main owns the guest Chromium WebContents." textEquivalent="Web, desktop, and mobile clients call authenticated server workbench services. The terminal returns a snapshot and live stream. Asset RPC returns an expiring signed HTTP URL. Pull-request RPC handles controls while authenticated HTTP carries diff slices. Server preview state is metadata; desktop Electron main owns the Chromium guest. A provider can call the bearer-authenticated T3 MCP preview toolkit, which brokers work to a compatible desktop host." sources={["workbench-terminal-contract", "workbench-terminal-manager-interface", "workbench-asset-contract", "workbench-asset-issue", "workbench-preview-contract", "workbench-desktop-preview-manager", "workbench-mcp-registry", "workbench-preview-automation-broker", "workbench-vcs-contract", "workbench-pr-rpc-contract", "workbench-pr-http-contract"]}>
   <Mermaid id="workbench-transport-boundaries" label="Workbench service owners and transports" chart={`flowchart LR
     C[Web / desktop / mobile client] -->|authenticated RPC| S[Environment server services]
     S -->|snapshot + live events| T[Server PTY]
@@ -187,14 +187,15 @@ desktop host is connected.
 
 T3 can attach its own `t3-code` MCP server to a provider session when the agent
 browser-access setting permits it. This is not the same as discovering or managing
-every external MCP server configured by Codex, Claude, Cursor, Grok, or OpenCode.
+every external MCP server configured by Codex, Claude, Cursor, Grok, Antigravity,
+or OpenCode.
 It is a narrowly scoped T3 endpoint for preview operations.
 
 At provider-session preparation, the server either revokes/clears prior MCP state
 when access is disabled or issues a fresh random bearer credential. Its scope is
 bound to the environment, thread, provider instance, and a registry-generated MCP
-session id—the latter is not an adapter-native Codex, Claude, Cursor, Grok, or
-OpenCode session identity. The registry stores a hash, not the raw token, and only
+session id—the latter is not an adapter-native Codex, Claude, Cursor, Grok,
+Antigravity, or OpenCode session identity. The registry stores a hash, not the raw token, and only
 advertises the `preview` capability. The `/mcp` route sits outside ordinary
 environment auth, so it requires that provider-scoped bearer credential. Registry
 liveness is refreshed by both MCP traffic and active provider turns; stop/revoke
@@ -203,7 +204,8 @@ liveness window.
 
 <SourceExcerpt id="workbench-mcp-credential-issue" focus={[120, 123, 125, 128, 137, 145, 157]} note="The registry generates both the bearer token and its own MCP session id, hashes the token, and binds the resulting preview-only scope to environment, thread, and provider instance." />
 
-All five adapter paths can consume the T3-owned MCP configuration, but their native
+The six adapter paths can consume the T3-owned MCP configuration according to their
+declared support, but their native
 injection mechanisms differ: Codex uses app-server arguments plus a bearer-token
 environment variable; Claude supplies an HTTP MCP server; Cursor and Grok pass ACP
 MCP server definitions; OpenCode registers the remote server only when T3 owns the
@@ -246,9 +248,9 @@ access merely by rendering a branch, diff, or worktree picker.
 
 Two earlier boundaries matter here:
 
-- [Chapter 22](../worktree-topology/) traces the start-turn worktree
+- [Chapter 37](../worktree-topology/) traces the start-turn worktree
   saga, including its server filesystem effects and failure seam.
-- [Chapter 27](../checkpoints-revert/) traces hidden checkpoint refs,
+- [Chapter 42](../checkpoints-revert/) traces hidden checkpoint refs,
   comparison modes, and the destructive restore/revert path.
 
 The workbench is where those results become visible: a terminal's cwd can be the
@@ -295,6 +297,21 @@ future mobile release.
   invalidate shared epochs. Large diff slices use authenticated HTTP, while the web
   route selects only environments that advertised pull-request capability.
 </EvidenceClaim>
+
+## 8. A thread can own a review graph
+
+Source control and review state no longer collapse to one pull-request link. A thread
+can link several reviews, including another repository on the same host. The server
+refreshes open links and periodically revisits closed ones so reopen state can return;
+terminal merged state stays terminal. GitHub stacks add layer discovery, navigation,
+sync, guarded rebase, and merge operations that verify expected heads before changing
+remote state.
+
+This graph remains separate from Git checkpoints. A checkpoint identifies workspace
+state for diff and restore. A linked review identifies hosted collaboration state.
+Creating a pull request may connect both workflows, but no transaction spans the Git
+working tree and the hosting provider. The user-facing rules are documented in
+[source-control.md](https://github.com/pingdotgg/t3code/blob/859304b7808ab9a4be87b1bddcd07c6485bf9c4f/docs/user/source-control.md).
 
 ## What a surface can honestly claim
 

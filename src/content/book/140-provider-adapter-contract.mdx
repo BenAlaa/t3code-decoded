@@ -1,10 +1,10 @@
 ---
 slug: provider-adapter-contract
-order: 140
-number: "14"
+order: 290
+number: "29"
 kind: chapter
-part: Part IV · Five harnesses, one product model
-partOrder: 4
+part: Part V · Six providers, one product model
+partOrder: 5
 title: The ProviderAdapter contract
 shortTitle: ProviderAdapter contract
 summary: ProviderAdapter is the narrow provider-native command and event boundary; ProviderService supplies instance routing and recovery, while orchestration remains the durable product model.
@@ -18,7 +18,7 @@ objectives:
 keywords: [ProviderAdapter, ProviderService, provider runtime, canonical events, sessions, turns, capabilities, errors]
 sourceAreas: [apps/server/src/provider/Services/ProviderAdapter.ts, apps/server/src/provider/Layers/ProviderService.ts, apps/server/src/provider/Errors.ts, packages/contracts/src/provider.ts, packages/contracts/src/providerRuntime.ts, apps/server/src/orchestration/Layers/ProviderCommandReactor.ts, apps/server/src/orchestration/Layers/ProviderRuntimeIngestion.ts]
 visuals: [adapter boundary map, operation ledger, canonical event funnel, round-trip swimlane, interactive contract tracer]
-updatedAt: 2026-08-24
+updatedAt: "2026-09-11"
 ---
 
 import AdapterContractLab from "../../components/AdapterContractLab.astro";
@@ -48,9 +48,9 @@ event in the canonical union.
 
 ## The contract is deliberately smaller than the product
 
-<SourceExcerpt id="provider-adapter-core" focus={[47, 51, 52, 57, 64, 71]} note="The adapter exposes its driver kind and one capability, then session start, turn send, and interruption. Instance lookup and orchestration semantics live outside this interface." />
+<SourceExcerpt id="provider-adapter-core" focus={[67, 71, 72, 77, 84, 89, 94]} note="The adapter exposes its driver kind and capabilities, then session start, turn send, optional compaction, and interruption. Instance lookup and orchestration semantics live outside this interface." />
 
-<SourceExcerpt id="provider-adapter-interactions" focus={[73, 76, 82, 85, 91, 94]} note="Approval and structured-input responses are separate operations. Session stop is part of the same native boundary." />
+<SourceExcerpt id="provider-adapter-interactions" focus={[97, 99, 103, 106, 108, 112, 115, 117]} note="Approval and structured-input responses are separate operations. Session stop is part of the same native boundary." />
 
 The complete shape has fourteen required members and one optional operation.
 Reading them by responsibility is more useful than reading them in file order.
@@ -79,7 +79,7 @@ activity, plan changes, requests, usage, completion, and failures arrive later o
   There is no <code>steer</code> member in the SPI. A provider can interpret
   <code>sendTurn</code> while a turn is already active as steering—OpenCode has a
   concrete tested implementation—but the generic contract alone promises only a
-  send request. Chapters 16–19 document each adapter's behavior separately.
+  send request. Chapters 31–35 document each adapter's behavior separately.
 </EvidenceClaim>
 
 ## A session uses T3 identity and opaque native continuation
@@ -104,29 +104,28 @@ the envelope while the owning adapter remains responsible for decoding it.
   it.
 </EvidenceClaim>
 
-## Capability negotiation is only one field today
+## Capability negotiation stays deliberately small
 
-The declared capability object contains one property:
-`sessionModelSwitch: "in-session" | "unsupported"`. It tells the provider reactor
-whether a model change may stay within an existing native session or requires a
-restart.
+The declared capability object records whether model changes may stay in-session,
+whether a resumed turn can continue without a synthetic prompt, and whether native
+conversation history supports rollback. Manual compaction is an optional adapter
+operation with either a native start function or a slash command.
 
-That is the entire SPI capability surface at this revision. Approvals, structured
-input, plans, tasks, skills, usage telemetry, rollback, steering, and native modes
-must not be inferred from this one object. They are concrete adapter behaviors,
+Approvals, structured input, plans, tasks, skills, usage limits, attachments,
+steering, and native modes must not be inferred from those few fields. They are concrete adapter behaviors,
 sometimes expressed through typed failure, sometimes absent, and sometimes
 implemented through provider-specific extensions.
 
-<EvidenceClaim kind="verified" title="Every shipped adapter currently selects the same model-switch branch" refs={["codex-adapter-capabilities", "claude-adapter-capabilities", "cursor-adapter-capabilities", "grok-adapter-capabilities", "opencode-adapter-capabilities"]}>
-  Codex, Claude, Cursor, Grok, and OpenCode all advertise
-  <code>sessionModelSwitch: "in-session"</code> at the pinned commit. The
-  <code>unsupported</code> branch is real reactor logic and part of the contract,
-  but it is not a current five-provider difference.
+<EvidenceClaim kind="verified" title="Capabilities prevent unsafe universal behavior" refs={["provider-adapter-contract", "codex-adapter-capabilities", "claude-adapter-capabilities", "cursor-adapter-capabilities", "grok-adapter-capabilities", "opencode-adapter-capabilities"]}>
+  The shared contract gives orchestration explicit switches for operations that can
+  corrupt provider continuity when guessed. Antigravity, for example, declares that
+  conversation rollback is unavailable; the UI and revert path must preserve that
+  distinction.
 </EvidenceClaim>
 
 ## Canonical events are a grammar, not a checklist
 
-<SourceExcerpt id="provider-adapter-stream" focus={[126, 129, 131, 134]} note="The adapter exposes one stream of ProviderRuntimeEvent values. The interface does not attach replay or acknowledgement semantics to it." />
+<SourceExcerpt id="provider-adapter-stream" focus={[149, 152, 155, 157]} note="The adapter exposes one stream of ProviderRuntimeEvent values. The interface does not attach replay or acknowledgement semantics to it." />
 
 Every runtime event shares an id, driver kind, T3 thread, timestamp, optional
 instance/turn/item/request ids, provider references, and optional raw provenance.
@@ -136,10 +135,10 @@ configuration, file, warning, and error events.
 
 That breadth provides a stable **target vocabulary** for adapters and consumers.
 It is not proof of feature parity. For example, the schema can represent token
-usage for any provider, while Chapter 20 verifies that only Codex and Claude emit
-that event at this revision.
+usage for any provider, while Chapter 35 separates live context snapshots,
+historical transcript accounting, and provider-reported subscription limits.
 
-<Figure number="14.1" title="One normalized boundary, two asynchronous crossings" hint="solid arrows are calls; dashed arrows are hot events" caption="A committed orchestration intent wakes the provider reactor, which asks ProviderService to route the thread to one configured instance. The adapter translates the generic call into a native protocol. Immediate return values acknowledge session or turn start, not assistant output. Native messages flow back through the adapter's canonical hot stream; ProviderService correlates the source instance and offers the event to its own hot stream. Runtime ingestion then issues internal commands whose events, synchronous projections, and accepted receipt become durable together inside each orchestration command transaction." textEquivalent="On the outbound lane, a committed thread turn-start intent is published to a hot provider reactor. The reactor calls ProviderService. ProviderService uses the thread's provider-instance binding to resolve a live adapter. The adapter calls a native SDK, JSON-RPC, ACP, or OpenCode runtime. Its immediate ProviderTurnStartResult means a turn request started and carries no generated text. On the inbound lane, native notifications are normalized to ProviderRuntimeEvent. ProviderService validates the driver and instance, writes an optional best-effort canonical event log, then publishes to a hot PubSub. ProviderRuntimeIngestion serially maps selected events to internal commands. For each accepted command, the orchestration engine appends events, runs synchronous projections, and writes the accepted receipt inside one outer SQL transaction. A crash can interrupt either hot bridge." sources={["provider-turn-reactor", "provider-service-runtime-correlation", "provider-adapter-contract", "provider-runtime-event-union", "provider-runtime-ingestion", "hot-reactor-no-replay", "engine-commit-publication"]}>
+<Figure number="29.1" title="One normalized boundary, two asynchronous crossings" hint="solid arrows are calls; dashed arrows are hot events" caption="A committed orchestration intent wakes the provider reactor, which asks ProviderService to route the thread to one configured instance. The adapter translates the generic call into a native protocol. Immediate return values acknowledge session or turn start, not assistant output. Native messages flow back through the adapter's canonical hot stream; ProviderService correlates the source instance and offers the event to its own hot stream. Runtime ingestion then issues internal commands whose events, synchronous projections, and accepted receipt become durable together inside each orchestration command transaction." textEquivalent="On the outbound lane, a committed thread turn-start intent is published to a hot provider reactor. The reactor calls ProviderService. ProviderService uses the thread's provider-instance binding to resolve a live adapter. The adapter calls a native SDK, JSON-RPC, ACP, or OpenCode runtime. Its immediate ProviderTurnStartResult means a turn request started and carries no generated text. On the inbound lane, native notifications are normalized to ProviderRuntimeEvent. ProviderService validates the driver and instance, writes an optional best-effort canonical event log, then publishes to a hot PubSub. ProviderRuntimeIngestion serially maps selected events to internal commands. For each accepted command, the orchestration engine appends events, runs synchronous projections, and writes the accepted receipt inside one outer SQL transaction. A crash can interrupt either hot bridge." sources={["provider-turn-reactor", "provider-service-runtime-correlation", "provider-adapter-contract", "provider-runtime-event-union", "provider-runtime-ingestion", "hot-reactor-no-replay", "engine-commit-publication"]}>
   <Mermaid id="adapter-round-trip" label="Provider adapter outbound and inbound round trip" chart={`flowchart LR
     I[(durable turn intent)] -->|hot domain event| R[ProviderCommandReactor]
     R --> S[ProviderService]
@@ -218,9 +217,9 @@ events in order. Every concrete adapter has behavior tests for its own transport
 normalization.
 
 There is no repository-wide executable conformance suite that feeds the same full
-feature script to all five adapters and proves semantic equivalence. That absence
+feature script to all six adapters and proves semantic equivalence. That absence
 is appropriate to surface: one interface gives the product a stable integration
-point, while Chapters 16–19 retain provider differences instead of hiding them.
+point, while Chapters 31–35 retain provider differences instead of hiding them.
 
 <Callout title="Design transfer: normalize facts, preserve provenance" tone="info">
   A meta-harness benefits from a small command SPI and a rich canonical event

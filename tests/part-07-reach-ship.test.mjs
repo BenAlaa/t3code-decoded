@@ -1,3 +1,4 @@
+// Public-branch reconstruction of the validated guide.
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
@@ -34,12 +35,12 @@ const idsIn = (source) => [
   ...[...source.matchAll(/<SourceList\s+ids=\{\[([\s\S]*?)\]\}/g)].flatMap((match) => [...match[1].matchAll(/"([^"]+)"/g)].map((item) => item[1])),
 ];
 
-test("Part VII chapters form the ordered, source-checked reach-and-ship sequence", () => {
-  assert.deepEqual(chapters.map((source) => Number(source.match(/^order: (\d+)$/m)?.[1])), [340, 350, 360, 370, 380]);
-  assert.deepEqual(chapters.map((source) => source.match(/^number: [\"']?([^\"'\n]+)[\"']?$/m)?.[1]), ["34", "35", "36", "37", "38"]);
+test("Part VIII chapters form the ordered, source-checked reach-and-ship sequence", () => {
+  assert.deepEqual(chapters.map((source) => Number(source.match(/^order: (\d+)$/m)?.[1])), [490, 500, 510, 520, 530]);
+  assert.deepEqual(chapters.map((source) => source.match(/^number: [\"']?([^\"'\n]+)[\"']?$/m)?.[1]), ["49", "50", "51", "52", "53"]);
   for (const source of chapters) {
-    assert.match(source, /^part: ["']Part VII · Reach and ship["']$/m);
-    assert.match(source, /^partOrder: 7$/m);
+    assert.match(source, /^part: ["']Part VIII · Reach and ship["']$/m);
+    assert.match(source, /^partOrder: 8$/m);
     assert.match(source, /^status: source-checked$/m);
     assert.match(source, /<SourceList\s+ids=\{/);
     assert.doesNotMatch(source, /provisional source ledger/i);
@@ -47,26 +48,26 @@ test("Part VII chapters form the ordered, source-checked reach-and-ship sequence
   }
 });
 
-test("Part VII chapters retain their route, relay, and recovery teaching anchors", () => {
+test("Part VIII chapters retain their route, relay, and recovery teaching anchors", () => {
   for (const [source, figure, anchors] of [
-    [chapters[0], "34.1", ["launch and access", "Primary", "Bearer", "Tailscale", "SSH"]],
-    [chapters[1], "35.1", ["direct environment session", "DPoP", "relay", "Cloudflare tunnel"]],
-    [chapters[2], "36.1", ["environment boundary", "one reconnect owner", "notification", "version"]],
-    [chapters[3], "37.1", ["artifact contracts", "npm", "AppImage", "Windows arm64"]],
-    [chapters[4], "38.1", ["exact server runtime", "desktop", "mobile", "observability"]],
+    [chapters[0], "49.1", ["launch and access", "Primary", "Bearer", "Tailscale", "SSH"]],
+    [chapters[1], "50.1", ["direct environment session", "DPoP", "relay", "Cloudflare tunnel"]],
+    [chapters[2], "51.1", ["environment boundary", "one reconnect owner", "notification", "version"]],
+    [chapters[3], "52.1", ["artifact contracts", "npm", "AppImage", "Windows arm64"]],
+    [chapters[4], "53.1", ["exact server runtime", "desktop", "mobile", "observability"]],
   ]) {
     assert.match(source, new RegExp(`<Figure number="${figure.replace(".", "\\.")}"`));
     for (const anchor of anchors) assert.match(source, new RegExp(anchor, "i"));
   }
 });
 
-test("Part VII internal chapter links stay base-path safe", () => {
+test("Part VIII internal chapter links stay base-path safe", () => {
   for (const source of chapters) {
     assert.doesNotMatch(source, /\]\(\/(?!\/)/, "internal links must remain relative for GitHub Pages deployment");
   }
 });
 
-test("Part VII labs provide a static fallback and one concise live status", () => {
+test("Part VIII labs provide a static fallback and one concise live status", () => {
   for (const source of labs) {
     assert.match(source, /data-ready="pending"/);
     assert.match(source, /<noscript>[\s\S]*?<\/noscript>/);
@@ -81,7 +82,7 @@ test("Part VII labs provide a static fallback and one concise live status", () =
   for (const source of labs.slice(1)) assert.match(source, /<details[\s\S]*?<summary>/);
 });
 
-test("Part VII labs gate enhanced controls and retain native keyboard controls", () => {
+test("Part VIII labs gate enhanced controls and retain native keyboard controls", () => {
   for (const source of labs) {
     assert.match(source, /dataset\.ready\s*=\s*"true"/);
   }
@@ -104,7 +105,7 @@ test("Part VII labs gate enhanced controls and retain native keyboard controls",
   assert.match(labs[4], /data-next/);
 });
 
-test("Part VII labs move only in response to a reader action", () => {
+test("Part VIII labs move only in response to a reader action", () => {
   for (const source of labs) {
     assert.match(source, /requestAnimationFrame|\.animate\s*\(|is-(?:changing|moving)|data-motion/, "each lab should make its selected transition visible");
   }
@@ -115,7 +116,7 @@ test("Part VII labs move only in response to a reader action", () => {
   }
 });
 
-test("Part VII preserves the architecture's semantic boundaries", () => {
+test("Part VIII preserves the architecture's semantic boundaries", () => {
   const [access, connect, recovery, distribution, release] = chapters;
   assert.match(access, /launch transport[\s\S]*access transport/i);
   assert.match(access, /Tailscale[\s\S]*not a (?:fifth|new) target/i);
@@ -134,11 +135,5 @@ test("Part VII preserves the architecture's semantic boundaries", () => {
   assert.match(release, /fingerprint runtime version/i);
   assert.match(release, /PostHog[\s\S]{0,240}(?:opt-out|disabled)/i);
   assert.match(release, /local file trace sink[\s\S]{0,220}OTLP/i);
-  assert.match(release, /one-hour \*\*in-memory\*\*/i);
-});
-
-test("release Mermaid quotes package identifiers used as edge labels", () => {
-  const release = chapters[4];
-  assert.match(release, /N -->\|"t3@V must already exist"\| S/);
-  assert.doesNotMatch(release, /N -->\|t3@V must already exist\| S/);
+  assert.match(release, /bounded in-memory history[\s\S]{0,180}independent limits/i);
 });

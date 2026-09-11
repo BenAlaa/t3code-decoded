@@ -1,10 +1,10 @@
 ---
 slug: server-composition
-order: 60
-number: "6"
+order: 210
+number: "21"
 kind: chapter
-part: Part II · Boot and connect
-partOrder: 2
+part: Part III · Boot and connect
+partOrder: 3
 title: Server composition, activation, and readiness
 shortTitle: Server activation
 summary: Effect layers acquire the server graph, while an explicit activation barrier separates listening, parked roots, command admission, and lifecycle readiness.
@@ -17,7 +17,7 @@ objectives:
 keywords: [Effect layers, activation, readiness, server startup, SQLite, shutdown]
 sourceAreas: [apps/server/src/server.ts, apps/server/src/serverRuntimeStartup.ts, apps/server/src/serverActivation.ts, apps/server/src/persistence]
 visuals: [layer stack, activation-barrier flow, startup failure explorer]
-updatedAt: 2026-08-24
+updatedAt: "2026-09-11"
 ---
 
 import Callout from "../../components/Callout.astro";
@@ -29,7 +29,7 @@ import ScenarioLab from "../../components/ScenarioLab.astro";
 import SourceExcerpt from "../../components/SourceExcerpt.astro";
 import SourceList from "../../components/SourceList.astro";
 
-Chapter 5 ended with one resolved `ServerConfig`. It does not get passed to a
+Chapter 20 ended with one resolved `ServerConfig`. It does not get passed to a
 constructor that imperatively starts everything. `runServer` launches an Effect
 layer whose acquisition builds a graph of platform services, application services,
 routes, long-running roots, and release finalizers. A second mechanism—the
@@ -37,7 +37,7 @@ activation barrier—controls when already-acquired roots may begin external wor
 
 ## The server is a scoped graph
 
-<Figure number="6.1" title="Layer acquisition and runtime ownership" hint="solid arrows provide dependencies; dotted arrows open parked roots" caption="Platform services support durable and runtime services; those services support HTTP, WebSocket RPC, MCP, and static routes. Activation crosses the graph separately, after every required root has reported that it is parked." textEquivalent="ServerConfig selects Bun or Node platform services. Platform and SQLite services support persistence, authentication, settings, orchestration, providers, VCS, checkpoints, terminals, preview, relay, and telemetry. Those application services support HTTP, WebSocket RPC, MCP, and static routes. The HTTP server owns the assembled graph for one Effect scope. An activation deferred is a separate gate shared by long-running roots." sources={["server-platform-layers", "server-service-composition", "server-route-composition", "server-activation-barrier"]}>
+<Figure number="21.1" title="Layer acquisition and runtime ownership" hint="solid arrows provide dependencies; dotted arrows open parked roots" caption="Platform services support durable and runtime services; those services support HTTP, WebSocket RPC, MCP, and static routes. Activation crosses the graph separately, after every required root has reported that it is parked." textEquivalent="ServerConfig selects Bun or Node platform services. Platform and SQLite services support persistence, authentication, settings, orchestration, providers, VCS, checkpoints, terminals, preview, relay, and telemetry. Those application services support HTTP, WebSocket RPC, MCP, and static routes. The HTTP server owns the assembled graph for one Effect scope. An activation deferred is a separate gate shared by long-running roots." sources={["server-platform-layers", "server-service-composition", "server-route-composition", "server-activation-barrier"]}>
   <Mermaid id="server-layer-graph" label="T3 server layer graph" chart={`flowchart TB
     C[ServerConfig] --> P[Bun or Node platform]
     P --> DB[SQLite + migrations]
@@ -53,7 +53,7 @@ activation barrier—controls when already-acquired roots may begin external wor
 </Figure>
 
 The graph is broad because the environment server is the execution authority from
-Chapter 1. Composition still preserves boundaries: each service exposes a typed
+Chapter 16. Composition still preserves boundaries: each service exposes a typed
 interface, layers declare requirements, and the launched scope owns acquisition and
 release. `makeServerLayer` is the composition root; `Layer.launch` keeps it alive.
 
@@ -61,7 +61,7 @@ release. `makeServerLayer` is the composition root; `Layer.launch` keeps it aliv
 
 The SQLite layer configures a busy timeout, enables foreign keys, selects WAL, and
 runs a statically ordered migration manifest during acquisition. At this revision
-the manifest contains 41 migrations. That number is a fact about the pinned source,
+the manifest contains 50 migrations. That number describes the implementation,
 not a compatibility promise for later revisions.
 
 <EvidenceClaim kind="verified" title="Migration order is code, not directory discovery" refs={["sqlite-acquisition", "sqlite-migration-manifest"]}>
@@ -157,7 +157,7 @@ magically roll back every effect that crossed an external boundary.
 
 <Callout title="The internal overview is stale at this boundary" tone="warning">
   `docs/internals/overview.md` places command readiness before listener readiness and
-  describes a different final order. At the pinned revision, executable code places
+  describes a different final order. Executable code places
   listener/auxiliary preparation first, then launcher trial, welcome, activation,
   command readiness, and `ready`. This book follows code and keeps the contradictory
   documentation as evidence of drift.
@@ -168,6 +168,20 @@ magically roll back every effect that crossed an external boundary.
   which consumers may proceed at each boundary. Treating “socket accepted” as “server
   ready” erases the command gate and makes the stale overview look plausible.
 </EvidenceClaim>
+
+## Provider, import, review, and device services
+
+The server graph also assembles four control areas that deliberately remain outside
+the provider adapter itself. Model manifests and provider-auth services manage
+catalog and sign-in state. Agent-session scanners and importers turn selected native
+history into durable project/thread records. Pull-request synchronization observes
+linked reviews without making the Git host part of the orchestration transaction.
+DeviceService owns local and SSH hosts, targets, sessions, and frame/control traffic.
+
+Keeping these as services preserves the narrow adapter rule: a provider integration
+translates its runtime, while the environment server owns product policy and access.
+The authoritative composition is in [server.ts](https://github.com/pingdotgg/t3code/blob/859304b7808ab9a4be87b1bddcd07c6485bf9c4f/apps/server/src/server.ts) and
+[serverRuntimeStartup.ts](https://github.com/pingdotgg/t3code/blob/859304b7808ab9a4be87b1bddcd07c6485bf9c4f/apps/server/src/serverRuntimeStartup.ts).
 
 <SourceList ids={[
   "server-platform-layers",

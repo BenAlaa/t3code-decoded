@@ -1,0 +1,187 @@
+---
+slug: personalize-usage-updates
+order: 120
+number: "12"
+kind: chapter
+part: "Part I · Product guide"
+partOrder: 1
+title: "Personalize, measure usage, update, and protect privacy"
+shortTitle: Personalize and operate
+summary: "Tune appearance, motion, and keybindings; understand usage estimates and pooled limits; update clients and servers safely; and control product telemetry."
+status: source-checked
+gates: [sources, links, interaction, editorial]
+objectives:
+  - Personalize each client without confusing device-local and environment-shared settings.
+  - Read estimated costs and provider limits accurately across environments.
+  - Update a client/server pair with minimal disruption and make an informed telemetry choice.
+keywords: [appearance, themes, motion, keybindings, usage, limits, updates, telemetry, privacy]
+sourceAreas: [docs/user/appearance.md, docs/user/keybindings.md, docs/user/keyboard-focus.md, docs/user/usage.md, docs/user/updating.md, docs/user/telemetry.md]
+visuals: [settings ownership map, update decision path]
+updatedAt: "2026-09-11"
+---
+
+import Callout from "../../components/Callout.astro";
+import Mermaid from "../../components/Mermaid.astro";
+
+T3 Code spans clients and environments, so settings do not all live in one place.
+Appearance is usually device-local, keybindings belong to an environment, model
+price overrides are shared by clients of their target environments, and updates may
+need action on a different machine from the one in your hands.
+
+<Mermaid id="product-settings-ownership" label="Where operational preferences take effect" chart={`flowchart TD
+  U[Your choice] --> D[Device or browser]
+  U --> E[Environment server]
+  U --> O[Operating system]
+  D --> A[Theme, mobile typography, panel motion]
+  E --> K[Keybindings and project scripts]
+  E --> P[Price overrides and telemetry setting]
+  O --> R[Reduced motion, notification permissions, app permissions]
+  C[Connected client version] --> V[Server version compatibility]
+  V --> E`} />
+
+## Make the interface comfortable for long sessions
+
+Open **Settings → Appearance** to choose a theme and system, light, or dark mode.
+You can select separate theme variants for light and dark. Preferences are stored
+per device or browser. Mobile has its own theme plus text, code, and terminal
+preferences; Android 12+ can use wallpaper-driven **Material You**, and Material You
+Layout changes spacing and shape separately from color.
+
+Panels open immediately by default. Raise **Panel animations** from 0 up to 400 ms
+to add motion. The OS reduced-motion setting overrides animation, and switching
+threads restores that thread's panel state without replaying transitions.
+
+Web and desktop can create a palette or import T3 Code and VS Code themes. Export
+JSON to share it. An environment can publish themes and set a default with `t3 theme
+set <id>`; connected clients apply that command once and can choose another theme
+later. `t3 theme clear` removes the default without changing current clients. Keep a
+published theme filename stable, write updates atomically, and avoid reserved IDs.
+Environment-published themes come only from the server serving the web app or the
+desktop app's main local environment; app.t3.codes and additional connections do
+not supply them. **Duplicate** makes an editable independent copy, and a custom
+theme with the same ID wins. If a selected published theme disappears, the client
+returns to the standard theme.
+See the [appearance guide](https://github.com/pingdotgg/t3code/blob/859304b7808ab9a4be87b1bddcd07c6485bf9c4f/docs/user/appearance.md).
+
+## Build a keyboard layer around your habits
+
+Use **Settings → Keybindings** on web and desktop to inspect command IDs, defaults,
+and conflicts. The environment stores rules in `~/.t3/userdata/keybindings.json`:
+
+```json
+[
+  { "key": "mod+g", "command": "terminal.toggle" },
+  { "key": "mod+shift+g", "command": "terminal.new", "when": "terminalFocus" }
+]
+```
+
+`mod` means Command on macOS and Control elsewhere. Conditions include
+`terminalFocus`, `terminalOpen`, `previewFocus`, `previewOpen`, and
+`modelPickerOpen`, with `!`, `&&`, `||`, and parentheses. The **last matching rule
+wins**, so put a specific rule after a general one. Preserve `!terminalFocus` on
+global bindings that should not steal shell input. Project scripts use
+`script.{id}.run`.
+
+Assign `thread.stop` yourself if you want a dedicated interrupt key. In desktop,
+`mod+w` closes the focused terminal or right-panel tab before the window; in a web
+browser it closes the browser tab, so choose another binding. The palette retains
+focus while open and returns it to the composer when closed. Full syntax and quit
+behavior are in the [keybinding guide](https://github.com/pingdotgg/t3code/blob/859304b7808ab9a4be87b1bddcd07c6485bf9c4f/docs/user/keybindings.md).
+
+T3 Code creates the keybinding file with defaults and adds later defaults without
+overwriting your custom commands. Invalid rules are ignored; an unreadable JSON
+document falls back to defaults. `chat.new` can ask for a project, while
+`chat.newLocal` uses the current one. While the palette or model picker is open,
+number shortcuts select its entries, and model shortcuts also work in Settings. A
+terminal becoming ready does not steal focus from a composer you returned to.
+
+Desktop quit uses **Hold** by default: hold `Cmd/Ctrl+Q` for 1.2 seconds or press it
+twice within 500 ms. If keyboard repeat is disabled, use two presses. Settings can
+change this to one **Direct** press or **Double press** only; the app menu quits
+immediately.
+
+## Read Usage as evidence, not an invoice
+
+**Usage** combines available Codex, Claude Code, and Grok Build session history
+across selected environments. It reports tokens, cache savings, model breakdowns,
+and estimated API-equivalent cost. The estimate is not a subscription bill, and
+totals can omit history the server does not have. Filter environments to locate a
+machine or refresh when recent sessions or model prices are missing. Grok turns
+without a saved completed-turn record are absent from totals.
+
+From the environment dropdown, **Model prices** lets you override exact model IDs
+and USD rates per million tokens. Optional cache rates fall back to input price; `0`
+means free. Target one or several environments. Each destination reports success;
+offline destinations are not queued after the dialog closes, so reconnect and use
+**Retry failed saves**. In a mixed multi-environment table, untouched cells keep
+each environment's existing rate.
+
+**Usage → Limits** pools provider-reported subscription accounts, deduplicates the
+same account across environments and hubs, and shows windows, resets, and reset
+credits where available. Account columns stay aligned across windows; a gap means
+that account does not report the window, and a hatched segment shows what the next
+reset restores. Codex accounts with banked reset credits expose **Use reset** from
+their account details. API
+key and proxied accounts may expose no subscription limit. `/usage-limits` opens the
+current cached snapshot above the composer; it does not run the agent or refresh.
+For pooled CLIProxyAPI accounts, add a hub under **Settings → Providers → Usage
+providers**. No plugin is required. This connection reports usage but does not
+route provider requests.
+
+## Update the machine named in the notice
+
+Client and server can be on different versions and machines. When a notice appears,
+identify the environment named by it and finish active agents and terminal commands:
+server updates restart the connection. Projects, threads, settings, and files remain.
+
+<Mermaid id="product-update-path" label="Choose the correct T3 Code update action" chart={`flowchart TD
+  N[Version notice] --> H[Identify named host]
+  H --> W{How does its server run?}
+  W -->|managed service| S[Use Update server or matching service update]
+  W -->|desktop hosted| D[Update desktop app on host]
+  W -->|foreground CLI| C[Copy exact-version command and preserve serve options]
+  S --> R[Restart and reconnect]
+  D --> R
+  C --> R
+  R -->|failure| X[Retry once, check correct host, launch exact version]
+  R -->|success| V[Verify thread and terminal state]`} />
+
+Enable **Settings → General → Continue threads after restarts** when you want
+supported active threads to resume after an update, crash, or reboot. Apply it to
+all connected environments after older servers update. It does not enable startup,
+terminals can still be interrupted, and sessions without provider resume state need
+a new message.
+
+Keep the client open while a remote update installs and reconnects. **Update
+server** can update a supported background service; for a desktop-hosted server it
+also closes and relaunches the desktop app on that host. A failed service update can
+roll back to its previous version. If recovery still fails, retry once, confirm you
+updated the named host, then relaunch a command-line server at the exact client
+version. Older servers may need one local update before remote update, rollback, or
+shared continuation settings are available.
+
+For a service, use `npx t3@<client-version> service update`; `@latest` helps only
+when the client is on latest. For a foreground host, relaunch the copied exact
+version and preserve `serve`, `--host`, or `--tailscale-serve`. Mobile store releases
+install normally; background app updates preserve drafts and queued messages and
+apply when you leave, or ask after a long foreground session. Follow the pinned
+[updating guide](https://github.com/pingdotgg/t3code/blob/859304b7808ab9a4be87b1bddcd07c6485bf9c4f/docs/user/updating.md).
+
+## Privacy and product telemetry
+
+The server sends PostHog product events tied to a hashed account or installation ID.
+Events can include provider, model, reasoning effort, permission mode, result,
+duration, and main-agent token totals. They exclude prompts, responses, file
+contents, authentication tokens, conversation IDs, raw provider events, and child
+agent output; child token usage is excluded from totals.
+
+Disable collection by setting `T3CODE_TELEMETRY_ENABLED=false` in the **server's
+environment before startup**. Restart the server so the value takes effect. This
+stops product events from being recorded or sent. See the
+[product-usage-data guide](https://github.com/pingdotgg/t3code/blob/859304b7808ab9a4be87b1bddcd07c6485bf9c4f/docs/user/telemetry.md).
+
+<Callout title="Keep ownership visible" tone="info">
+  When a preference appears not to stick, first ask whether it belongs to this
+  device, the selected environment, or the operating system. That single check
+  resolves most multi-environment settings confusion.
+</Callout>

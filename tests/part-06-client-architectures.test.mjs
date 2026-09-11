@@ -1,3 +1,4 @@
+// Public-branch reconstruction of the validated guide.
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
@@ -28,12 +29,12 @@ const idsIn = (source) => [
   ...[...source.matchAll(/<SourceList\s+ids=\{\[([\s\S]*?)\]\}/g)].flatMap((match) => [...match[1].matchAll(/"([^"]+)"/g)].map((item) => item[1])),
 ];
 
-test("Part VI chapters form the ordered, source-checked client-architectures sequence", () => {
-  assert.deepEqual(chapters.map((source) => Number(source.match(/^order: (\d+)$/m)?.[1])), [290, 300, 310, 320, 330]);
-  assert.deepEqual(chapters.map((source) => source.match(/^number: [\"']?([^\"'\n]+)[\"']?$/m)?.[1]), ["29", "30", "31", "32", "33"]);
+test("Part VII chapters form the ordered, source-checked client-architectures sequence", () => {
+  assert.deepEqual(chapters.map((source) => Number(source.match(/^order: (\d+)$/m)?.[1])), [440, 450, 460, 470, 480]);
+  assert.deepEqual(chapters.map((source) => source.match(/^number: [\"']?([^\"'\n]+)[\"']?$/m)?.[1]), ["44", "45", "46", "47", "48"]);
   for (const source of chapters) {
-    assert.match(source, /^part: ["']Part VI · Client architectures: shared semantics, platform edges["']$/m);
-    assert.match(source, /^partOrder: 6$/m);
+    assert.match(source, /^part: ["']Part VII · Client architectures: shared semantics, platform edges["']$/m);
+    assert.match(source, /^partOrder: 7$/m);
     assert.match(source, /^status: source-checked$/m);
     assert.match(source, /<SourceList\s+ids=\{/);
     assert.doesNotMatch(source, /provisional source ledger/i);
@@ -41,20 +42,20 @@ test("Part VI chapters form the ordered, source-checked client-architectures seq
   }
 });
 
-test("Part VI figures and teaching anchors preserve platform authority boundaries", () => {
+test("Part VII figures and teaching anchors preserve platform authority boundaries", () => {
   for (const [source, figure, anchors] of [
-    [chapters[0], "29.1", ["Prepared connection", "one-attempt RPC session", "history epoch"]],
-    [chapters[1], "30.1", ["one React renderer", "hash history", "virtualized timeline"]],
-    [chapters[2], "31.1", ["canonical thread", "projection", "optimistic"]],
-    [chapters[3], "32.1", ["Electron main", "preload", "SSH"]],
-    [chapters[4], "33.1", ["SQLite", "secure storage", "remote environment"]],
+    [chapters[0], "44.1", ["Prepared connection", "one-attempt RPC session", "history epoch"]],
+    [chapters[1], "45.1", ["one React renderer", "hash history", "virtualized timeline"]],
+    [chapters[2], "46.1", ["canonical thread", "projection", "optimistic"]],
+    [chapters[3], "47.1", ["Electron main", "preload", "SSH"]],
+    [chapters[4], "48.1", ["SQLite", "secure storage", "remote environment"]],
   ]) {
     assert.match(source, new RegExp(`<Figure number="${figure.replace(".", "\\.")}"`));
     for (const anchor of anchors) assert.match(source, new RegExp(anchor, "i"));
   }
 });
 
-test("Part VI labs expose one live status, labelled fallback content, and no autonomous timers", () => {
+test("Part VII labs expose one live status, labelled fallback content, and no autonomous timers", () => {
   for (const source of labs) {
     assert.match(source, /interface Props \{[\s\S]*id\??: string;[\s\S]*\}/);
     assert.match(source, /aria-labelledby=/);
@@ -70,7 +71,7 @@ test("Part VI labs expose one live status, labelled fallback content, and no aut
   }
 });
 
-test("Part VI interactive labs gate controls until ready and begin in a still state", () => {
+test("Part VII interactive labs gate controls until ready and begin in a still state", () => {
   for (const source of labs) {
     assert.match(source, /data-(?:[a-z-]+-)?ready="(?:pending|initializing)"/);
     assert.match(source, /dataset\.(?:[a-zA-Z]+Ready|ready)\s*=\s*"true"/);
@@ -95,7 +96,7 @@ test("define:vars labs contain browser-valid JavaScript rather than TypeScript s
   }
 });
 
-test("Part VI lab-specific teaching boundaries remain explicit", () => {
+test("Part VII lab-specific teaching boundaries remain explicit", () => {
   assert.match(labs[0], /snapshot|cursor|history epoch/i);
   assert.match(labs[1], /One canonical thread, six product surfaces/);
   assert.match(labs[1], /data-projection/);

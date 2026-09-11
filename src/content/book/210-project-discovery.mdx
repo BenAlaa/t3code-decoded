@@ -1,13 +1,13 @@
 ---
 slug: project-discovery
-order: 210
-number: "21"
+order: 360
+number: "36"
 kind: chapter
-part: Part V · The work lifecycle
-partOrder: 5
-title: Project discovery and t3.json
+part: Part VI · The work lifecycle
+partOrder: 6
+title: Project discovery, onboarding import, and t3.json
 shortTitle: Project discovery
-summary: "A T3 project is an environment-local durable record for one normalized workspace root; checked-in t3.json and Git-remote identity enrich its behavior and presentation without replacing that record."
+summary: "A T3 project is an environment-local durable record for one normalized workspace root; onboarding can import existing agent sessions, while checked-in t3.json and Git-remote identity enrich behavior and presentation without replacing that record."
 status: source-checked
 gates: [sources, interaction]
 objectives:
@@ -18,7 +18,7 @@ objectives:
 keywords: [projects, workspace root, discovery, t3.json, repository identity, environments, configuration, setup scripts, projection]
 sourceAreas: [apps/server/src/workspace/WorkspacePaths.ts, apps/server/src/project, packages/contracts/src/t3ProjectFile.ts, packages/shared/src/threadEnvMode.ts, packages/client-runtime/src/state/projectGrouping.ts]
 visuals: [filesystem discovery decision explainer, project identity projection]
-updatedAt: 2026-08-24
+updatedAt: "2026-09-11"
 ---
 
 import Callout from "../../components/Callout.astro";
@@ -29,8 +29,8 @@ import ProjectDiscoveryLab from "../../components/ProjectDiscoveryLab.astro";
 import SourceExcerpt from "../../components/SourceExcerpt.astro";
 import SourceList from "../../components/SourceList.astro";
 
-“Project” is deliberately not a synonym for “Git repository.” At this pinned
-revision, it starts as an environment-local durable record with a normalized
+“Project” is deliberately not a synonym for “Git repository.” It starts as an
+environment-local durable record with a normalized
 directory as its `workspaceRoot`. Git can later provide an identity for that
 directory; clients can then choose to group equivalent identities across
 environments. Neither upgrade makes paths, directories, and project records the
@@ -140,7 +140,7 @@ entries merely because a checkout contains `t3.json`.
 
 <SourceExcerpt id="project-script-import-flow" focus={[80, 83, 87, 92, 110, 120, 134, 139]} note="File actions are filtered against stored scripts and appear under an explicit From t3.json import menu; selecting one calls the normal add-script path." />
 
-<Figure number="21.1" title="A checked-in action crosses an explicit import boundary" hint="the setup runner reads durable project scripts" caption="The loader exposes valid t3.json actions as file suggestions. The web filters command/name duplicates and waits for a person to import one. The normal project update path saves the converted script into the durable project scripts list. Worktree setup later selects the first stored script marked runOnWorktreeCreate and executes that stored command." textEquivalent="Valid t3.json actions flow into a list of import suggestions. Existing project scripts remove duplicate command or name suggestions. A user import converts one suggestion and updates the durable project scripts list. The setup selector and runner read that durable list, not the raw t3.json action array." sources={["project-t3-file-loader", "project-script-import-flow", "project-script-durable-save", "project-script-setup-selection", "project-setup-script-runner"]}>
+<Figure number="36.1" title="A checked-in action crosses an explicit import boundary" hint="the setup runner reads durable project scripts" caption="The loader exposes valid t3.json actions as file suggestions. The web filters command/name duplicates and waits for a person to import one. The normal project update path saves the converted script into the durable project scripts list. Worktree setup later selects the first stored script marked runOnWorktreeCreate and executes that stored command." textEquivalent="Valid t3.json actions flow into a list of import suggestions. Existing project scripts remove duplicate command or name suggestions. A user import converts one suggestion and updates the durable project scripts list. The setup selector and runner read that durable list, not the raw t3.json action array." sources={["project-t3-file-loader", "project-script-import-flow", "project-script-durable-save", "project-script-setup-selection", "project-setup-script-runner"]}>
   <Mermaid id="project-script-import-boundary" label="t3.json script import and setup execution" chart={`flowchart LR
     F[t3.json actions] --> L[best-effort file loader]
     L --> I[deduplicated import suggestions]
@@ -174,7 +174,7 @@ not promise that a remote URL is permanently frozen into project history.
 
 <SourceExcerpt id="project-projector" focus={[207, 212, 215, 217, 219, 236, 244, 251, 257]} note="Projection creates the durable project shape, initializes its environment override to null, and applies later metadata updates." />
 
-<Figure number="21.2" title="Project identity is a layered projection" hint="a remote name enriches a project; it does not replace its root" caption="A candidate path first passes workspace-root validation. An accepted project command emits durable project events, which project into a project row. Separately, the snapshot query resolves a Git remote identity for each active root and attaches it to the shell. Clients may group physical entries by that identity and show an environment label, but retain a concrete environment/project target." textEquivalent="The diagram has a path-validation lane leading to project.create and a durable project read model. A separate Git remote lookup from the workspace root produces an optional repository identity, which enriches a snapshot. A client grouping step combines eligible physical project entries for presentation and annotates members with environment labels. The concrete project record remains the operational target." sources={["project-root-normalization", "project-durable-projection", "project-projector", "project-repository-identity", "project-identity-read-projection", "project-logical-grouping", "project-environment-label"]}>
+<Figure number="36.2" title="Project identity is a layered projection" hint="a remote name enriches a project; it does not replace its root" caption="A candidate path first passes workspace-root validation. An accepted project command emits durable project events, which project into a project row. Separately, the snapshot query resolves a Git remote identity for each active root and attaches it to the shell. Clients may group physical entries by that identity and show an environment label, but retain a concrete environment/project target." textEquivalent="The diagram has a path-validation lane leading to project.create and a durable project read model. A separate Git remote lookup from the workspace root produces an optional repository identity, which enriches a snapshot. A client grouping step combines eligible physical project entries for presentation and annotates members with environment labels. The concrete project record remains the operational target." sources={["project-root-normalization", "project-durable-projection", "project-projector", "project-repository-identity", "project-identity-read-projection", "project-logical-grouping", "project-environment-label"]}>
   <Mermaid id="project-identity-projection" label="Project discovery and identity layers" chart={`flowchart LR
     P[Candidate path] --> R{validated directory?}
     R -->|yes| C[project.create]
@@ -243,6 +243,21 @@ coexist—but none automatically proves the next one.
   source inspected here validates a root supplied to project creation; it does not
   establish such a recursive importer.
 </EvidenceClaim>
+
+## Importing native agent history
+
+The welcome flow can scan Codex and Claude homes for work the user already did,
+group candidates by repository identity, and import selected conversations into T3
+projects. Git repositories sort ahead of ordinary folders, and recent, repeated work
+can be preselected without importing every scratch session.
+
+The scanner reads provider-native metadata. The importer creates canonical T3
+messages and activities with a stable source identity so retries do not duplicate the
+same history. Imported history is durable and searchable; resumability remains a
+provider decision because display records alone cannot recreate a missing native
+session. The boundaries live in
+[AgentSessionScanner.ts](https://github.com/pingdotgg/t3code/blob/859304b7808ab9a4be87b1bddcd07c6485bf9c4f/apps/server/src/project/AgentSessionScanner.ts) and
+[AgentSessionImporter.ts](https://github.com/pingdotgg/t3code/blob/859304b7808ab9a4be87b1bddcd07c6485bf9c4f/apps/server/src/project/AgentSessionImporter.ts).
 
 <SourceList ids={[
   "project-root-normalization",

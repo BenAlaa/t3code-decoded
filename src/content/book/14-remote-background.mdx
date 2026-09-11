@@ -1,0 +1,191 @@
+---
+slug: remote-background
+order: 90
+number: "9"
+kind: chapter
+part: "Part I · Product guide"
+partOrder: 1
+title: "Remote environments and unattended work"
+shortTitle: Remote and background
+summary: "Connect securely through T3 Connect, direct pairing, Tailscale, or desktop-managed SSH, then keep Linux and macOS hosts available with the background service."
+status: source-checked
+gates: [sources, links, interaction, editorial]
+objectives:
+  - Choose a remote connection mode from reachability, setup, and hosting constraints.
+  - Pair and revoke devices without confusing a pairing link with permanent reachability.
+  - Install, update, and troubleshoot the per-user background service.
+keywords: [remote access, T3 Connect, pairing, Tailscale, SSH, background service, load balancing]
+sourceAreas: [docs/user/remote-access.md, docs/user/background-service.md, apps/server/src/cloud, apps/server/src/serviceLauncher.ts, apps/desktop/src]
+visuals: [remote-mode decision tree, reachability path]
+updatedAt: "2026-09-11"
+---
+
+import Callout from "../../components/Callout.astro";
+import Mermaid from "../../components/Mermaid.astro";
+
+A remote T3 Code client controls the environment on another machine. The project,
+Git checkout, provider credentials, agent process, and terminals stay on that host.
+The host must remain running, awake where required, and reachable through the mode
+you choose.
+
+<Mermaid id="product-remote-mode-choice" label="Choose a T3 Code remote connection" chart={`flowchart TD
+  A[Need another device to reach the host] --> B{Want managed internet setup?}
+  B -->|yes| C[T3 Connect]
+  B -->|no| D{Both devices share a LAN or private network?}
+  D -->|plain LAN is enough| E[Direct pairing]
+  D -->|tailnet available| F[Tailscale HTTPS]
+  D -->|desktop can SSH to host| G[Desktop-managed SSH]
+  C --> H[Pair client and connect directly to environment]
+  E --> H
+  F --> H
+  G --> H
+  H --> I{Must survive logout or closed terminal?}
+  I -->|Linux or macOS| J[Install user background service]
+  I -->|foreground is acceptable| K[Keep t3 serve session open]`} />
+
+## Compare the four paths
+
+| Mode | Best fit | Host setup | Main limitation |
+| --- | --- | --- | --- |
+| **T3 Connect** | Reach your environments across networks with account-based discovery. | Sign in and enable Connect, or run `npx t3@latest connect`. | A saved login alone does not expose a stopped server; push notifications use this path. |
+| **Direct pairing** | LAN or an existing private network can route directly to the host. | Enable Network access or run `npx t3 serve --host <private-ip>`. | `127.0.0.1` is reachable only on the host; hosted web needs HTTPS. |
+| **Tailscale HTTPS** | Both devices share a tailnet and you want a private HTTPS endpoint. | Enable Tailscale HTTPS or use `--tailscale-serve`. | Requires Tailscale and a free Serve port/mapping. |
+| **Desktop-managed SSH** | Your desktop can SSH to a development machine. | Add an SSH environment; remote Node and provider setup must work non-interactively. | Managed by desktop; password prompts and broken non-interactive version-manager setup block launch. |
+
+## T3 Connect
+
+On a desktop host, open **Settings → Connections**, sign in, and enable **T3
+Connect**. On a command-line host run:
+
+```sh
+npx t3@latest connect
+```
+
+Follow the browser sign-in flow; over SSH, paste the returned authorization code.
+Accept the offered background service when you want unattended access. If you
+decline it, start `npx t3 serve` yourself and keep that process alive. On the other
+device, sign in to the same account and choose the environment.
+
+Connect renews credentials without deliberately dropping a healthy conversation.
+A failed renewal can fail that request while the existing connection remains alive.
+If an environment is offline, `t3 connect status` checks saved authorization and
+link configuration, but it is not a live reachability test; follow with `t3 service
+status` and inspect the reported log.
+
+## Direct pairing and Tailscale
+
+For LAN access, enable **Settings → Connections → Network access** on the desktop
+host; changing it restarts the app. For a CLI server, bind to an address the other
+device can actually route to:
+
+```sh
+npx t3 serve --host 192.168.1.20
+```
+
+Generate a fresh one-time pairing URL with `npx t3 pair`, then scan its QR code or
+paste it into **Add environment**. Settings are under **Connections** on web and
+desktop and **Environments** on mobile. Pairing grants that client a renewable
+session; the original link is not needed for reconnecting. Create a fresh link for
+each device and treat it like a password.
+
+The link and the paired session have different lifetimes. A link created in
+**Settings → Connections** can be copied only by the client that created it, while
+that Connections page remains open. Leaving or reloading the page discards the
+displayed one-time link; create another instead of trying to recover it. This does
+not disconnect devices that already paired. To remove an already paired device,
+revoke its session on the host.
+
+For Tailscale, join both devices to the same tailnet and enable **Tailscale HTTPS**,
+or run `npx t3 serve --tailscale-serve`. For an already running server, `npx t3 pair
+--tailscale` creates a persistent Serve mapping. Choose another port with
+`--tailscale-serve-port` if 443 is occupied. Remove the default mapping with:
+
+```sh
+tailscale serve --https=443 off
+```
+
+[app.t3.codes](https://app.t3.codes) requires an HTTPS server endpoint. A hosted
+pairing link provides credentials; it cannot make a private HTTP endpoint reachable
+or add TLS to it.
+
+## Desktop-managed SSH
+
+Choose **Settings → Connections → Add environment → SSH** and enter an SSH alias or
+`user@host`. T3 Code starts or reuses the remote server and maintains the forwarding
+path. The remote host needs a compatible Node.js and provider credentials. When the
+launch cannot find Node, test the same non-interactive shell T3 uses:
+
+```sh
+ssh user@example.com 'sh -lc "command -v node && node --version"'
+```
+
+Configure the version manager's default for non-interactive shells if this differs
+from your login terminal. Removing the connection stops a server T3 Code launched,
+but leaves a server that was already running. After an app update, retry a failed
+SSH launch once before rebuilding the connection.
+
+## Balance new threads across environments
+
+On web or desktop, enable **Settings → Connections → Load balancing**. Grouped
+projects can then place new drafts on an eligible machine according to **Prefer**,
+**Normal**, **Less often**, or **Manual only**. These are preferences, not reserved
+percentages. Resource checks happen while choosing a new draft; once chosen, its
+environment stays stable. Selecting a branch, worktree, or explicit machine also
+pins it. Existing threads never migrate, and mobile selects manually.
+
+## Run the host in the background
+
+Linux and macOS can install a per-user service:
+
+| Task | Command |
+| --- | --- |
+| Install and start | `npx t3@latest service install` |
+| Inspect state and log path | `npx t3@latest service status` |
+| Update or repair | `npx t3@latest service update` |
+| Stop and remove startup entry | `npx t3@latest service uninstall` |
+
+Uninstalling leaves projects, threads, and settings intact. Update uses the CLI
+version you invoke; use an exact version to pin, or a matching channel such as
+`@nightly`. An older CLI refuses to replace a newer service unless you explicitly
+allow a downgrade. Updates restart the server, so finish active turns and terminal
+commands first.
+
+Linux requires systemd user services and lingering to survive logout. If status
+reports `linger-disabled`, an administrator can run `sudo loginctl enable-linger
+"$(id -un)"`; run T3 itself as your normal user. macOS starts at login and stops at
+logout, so keep the Mac logged in and awake. Installing it over SSH while nobody is
+logged in at the Mac can leave the service installed but unable to start until the
+next graphical login. Windows background services are not supported.
+
+<Callout title="Connect and service are separate" tone="warning">
+  Signing out or deregistering T3 Connect changes cloud access. It does not stop or
+  uninstall the local background service. Likewise, installing a service does not
+  sign the environment into T3 Connect.
+</Callout>
+
+## Revoke and recover
+
+Use **Settings → Connections** on the host to revoke an unused link or a device's
+existing session. Deregister an environment from the account's **T3 Connect** page
+to remove cloud access and free its slot. CLI hosts can use `t3 connect unlink` to
+disable exposure while keeping login, or `t3 connect logout` to clear login too.
+
+For clock/proof errors, correct time on both devices, update, and restart the host.
+For link limits, deregister an unused environment. For 403 errors, inspect relay,
+proxy, and firewall policy; retain any trace or Cloudflare Ray ID. For transient
+408, 429, or 5xx failures, check reachability and allow startup retry.
+
+For service failures, start with `t3 service status` on the host and use the log
+path it prints. On Linux, `linger-disabled` points to logout persistence;
+`user-manager-unavailable` points to the systemd user session; and
+`service-disabled` or `service-stopped` calls for the reported log and
+`systemctl --user status t3code.service`. Use the repair command T3 prints. On
+macOS, check **System Settings → General → Login Items** when startup disappears.
+If background agent work cannot read Desktop, Documents, or Downloads, grant Full
+Disk Access to the Node executable named in the service's launch-agent plist.
+
+An open connection can remain listed after its access credential expires. That is
+not evidence that a revoked device can reconnect: use the host's session list and a
+fresh connection attempt when verifying revocation. The complete tables live in the
+[remote-access guide](https://github.com/pingdotgg/t3code/blob/859304b7808ab9a4be87b1bddcd07c6485bf9c4f/docs/user/remote-access.md)
+and [background-service guide](https://github.com/pingdotgg/t3code/blob/859304b7808ab9a4be87b1bddcd07c6485bf9c4f/docs/user/background-service.md).

@@ -3,7 +3,7 @@
 
   # T3 Code Decoded
 
-  **A source-grounded, interactive guide to the architecture and implementation of T3 Code.**
+  **A complete product guide and source-grounded interactive guide to T3 Code's architecture and implementation.**
 
   [Read the book](#read-the-book) · [Explore the plan](./BOOK_PLAN.md) ·
   [Contribute](./CONTRIBUTING.md) · [Source policy](#source-grounding)
@@ -18,25 +18,31 @@ Created and maintained by [Ahmed Alaa (`@BenAlaa`)](https://github.com/BenAlaa).
 
 > [!NOTE]
 > The public Pages site is deployed from protected `main`. It reflects the latest
-> merged revision; topic branches remain local or unmerged until their reviewed
-> pull requests are ready.
+> merged milestone; stacked local authoring branches can be ahead while later parts
+> wait for their own reviewed pull requests.
 > No authored work is pushed directly to `main`.
 
 ## Read the book
 
 [Read the published book](https://benalaa.github.io/t3code-decoded/). When reviewing
-an unmerged change, run that branch locally with the instructions below—the
-published site intentionally tracks protected `main`, not unpublished work.
+an unmerged milestone, run that branch locally with the instructions below—the
+published site intentionally tracks protected `main`, not local stacked work.
 
-The current edition is pinned to
-[`pingdotgg/t3code@fa219001d`](https://github.com/pingdotgg/t3code/tree/fa219001dc2f14cfd9c7774c2c03c153359144be).
+The book is synchronized with
+[`pingdotgg/t3code@859304b78`](https://github.com/pingdotgg/t3code/tree/859304b7808ab9a4be87b1bddcd07c6485bf9c4f),
+captured on 11 September 2026.
 Every exact excerpt in the book is generated from that revision, checksum-verified,
 and linked back to immutable GitHub source lines.
 
 ## What this book explains
 
-T3 Code is not the reasoning engine inside Codex, Claude, Cursor, Grok, or
-OpenCode. It is the server-authoritative control plane around them: it normalizes
+The product guide explains installation, onboarding, environments, projects,
+threads, worktrees, composing with rich context, providers, permissions, files,
+terminals, previews, SnapShots, source control, remote access, mobile, device
+testing, usage, updates, privacy, complete workflows, and troubleshooting.
+
+The technical guide explains that T3 Code is not the reasoning engine inside Codex,
+Claude, Cursor, Grok, OpenCode, or Antigravity. It is the server-authoritative control plane around them: it normalizes
 intent, durably records product state, starts and supervises provider runtimes,
 projects ordered state to several clients, and surrounds the conversation with
 worktrees, Git checkpoints, terminals, files, previews, remote access, usage, and
@@ -48,30 +54,29 @@ Web · Desktop · Mobile
           ▼
 T3 server: command → event → projection → reactor
           │                         │
-          │                         └─ files · Git · terminal · tunnel
+          │                         └─ files · Git · terminal · devices · tunnel
           ▼
 ProviderAdapter
           │ native protocol
           ▼
-Codex · Claude · Cursor · Grok · OpenCode
+Codex · Claude · Cursor · Grok · OpenCode · Antigravity
 ```
 
-The book follows that causal path instead of mirroring repository folders. Its
-eight parts cover:
+The book starts with product tasks, then follows that causal path instead of
+mirroring repository folders. Its eight parts cover:
 
-1. ownership boundaries, vocabulary, repository topology, and runtime shapes;
-2. CLI/server boot, Effect RPC, pairing, authorization, subscriptions, and resume;
-3. commands, events, receipts, projections, reactors, SQLite, and recovery;
-4. the provider adapter contract, all five harness integrations, and both usage
-   systems;
-5. projects, worktrees, turns, permissions, plans, tasks, context, memory,
-   checkpoints, terminals, files, VCS, MCP, preview, and pull requests;
-6. the shared client runtime plus web, Electron, and React Native clients;
-7. direct/relay/Tailscale/SSH access, reconnection, packaging, releases, updates, and telemetry;
-8. complete end-to-end traces, architectural trade-offs, limitations, and
-   evidence-bounded roadmap analysis.
+1. the complete product guide and task recipes;
+2. architecture orientation, ownership boundaries, vocabulary, repository topology, and runtime shapes;
+3. CLI/server boot, Effect RPC, pairing, authorization, subscriptions, and resume;
+4. commands, events, receipts, projections, reactors, SQLite, and recovery;
+5. the provider adapter contract, all six provider integrations, historical usage,
+   live context, and subscription limits;
+6. projects, worktrees, turns, permissions, plans, tasks, context, memory,
+   checkpoints, terminals, files, VCS, MCP, previews, pull requests, and devices;
+7. the shared client runtime plus web, Electron, and React Native clients;
+8. direct/relay/Tailscale/SSH access, reconnection, packaging, releases, updates, and telemetry.
 
-See [BOOK_PLAN.md](./BOOK_PLAN.md) for the complete 40-chapter specification,
+See [BOOK_PLAN.md](./BOOK_PLAN.md) for the complete 53-chapter specification,
 figure/lab inventory, review gates, and definition of done.
 
 ## Why another set of docs?
@@ -82,7 +87,7 @@ answers a different class of questions:
 - Where is the transaction boundary?
 - What does a command receipt actually prove?
 - Which state survives a server restart?
-- How do five provider protocols become one product vocabulary?
+- How do six provider integrations become one product vocabulary?
 - Why does reconnect logic live above a one-attempt RPC session?
 - What is shared across clients, and what deliberately differs?
 - Which remote component allocates credentials, and where does application traffic
@@ -192,7 +197,7 @@ checkout:
 
 ```sh
 git clone https://github.com/pingdotgg/t3code.git ../t3code
-git -C ../t3code checkout fa219001dc2f14cfd9c7774c2c03c153359144be
+git -C ../t3code checkout 859304b7808ab9a4be87b1bddcd07c6485bf9c4f
 npm run source:check
 ```
 

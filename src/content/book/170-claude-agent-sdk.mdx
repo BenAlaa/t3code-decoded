@@ -1,10 +1,10 @@
 ---
 slug: claude-agent-sdk
-order: 170
-number: "17"
+order: 320
+number: "32"
 kind: chapter
-part: Part IV · Five harnesses, one product model
-partOrder: 4
+part: Part V · Six providers, one product model
+partOrder: 5
 title: Claude through the Agent SDK
 shortTitle: Claude Agent SDK
 summary: Claude uses an SDK query stream rather than app-server RPC; T3 holds live query context and deferred interactions while normalizing assistant, tool, task, plan, usage, and result observations into one product contract.
@@ -14,7 +14,7 @@ objectives: [Follow Claude query configuration resume steering interruption and 
 keywords: [Claude, Agent SDK, query stream, permissions, skills, commands, TodoWrite, tasks, resume, usage]
 sourceAreas: [apps/server/src/provider/Layers/ClaudeAdapter.ts, apps/server/src/provider/Drivers/ClaudeDriver.ts, apps/server/src/provider/Drivers/ClaudeSkills.ts]
 visuals: [Claude SDK message normalization, skill precedence, query lifecycle]
-updatedAt: 2026-08-24
+updatedAt: "2026-09-11"
 ---
 
 import Callout from "../../components/Callout.astro";
@@ -49,7 +49,7 @@ accepting legacy `sessionId`), optional `resumeSessionAt`, and a turn count, the
 supplies those hints to a fresh query. T3 durable history remains an independent
 orchestration record.
 
-<Figure number="17.1" title="A Claude SDK stream is normalized, then durably re-entered" hint="query state and deferred responses are live memory" caption="T3 configures a Claude SDK query with model, mode, cwd, and optional resume metadata. Assistant, tool, TodoWrite/task, request, result, and error messages flow into the adapter. It emits canonical runtime events that ingestion turns into internal commands; only those command transactions become durable T3 events and projections." textEquivalent="A T3 thread starts or resumes a Claude SDK query. The adapter keeps a live context containing pending approval and input deferreds, task and plan state, turn metadata, model selection, resume ids, and last-known token usage. SDK messages map to canonical content, item, plan, task, request, completion, error, and token-usage events. Runtime ingestion dispatches internal commands. The event store and projections are durable; query objects, deferred responses, stream position, and adapter maps are volatile." sources={["claude-adapter-query-config", "claude-query-invocation", "claude-adapter-resume", "claude-adapter-runtime-events", "provider-runtime-ingestion"]}>
+<Figure number="32.1" title="A Claude SDK stream is normalized, then durably re-entered" hint="query state and deferred responses are live memory" caption="T3 configures a Claude SDK query with model, mode, cwd, and optional resume metadata. Assistant, tool, TodoWrite/task, request, result, and error messages flow into the adapter. It emits canonical runtime events that ingestion turns into internal commands; only those command transactions become durable T3 events and projections." textEquivalent="A T3 thread starts or resumes a Claude SDK query. The adapter keeps a live context containing pending approval and input deferreds, task and plan state, turn metadata, model selection, resume ids, and last-known token usage. SDK messages map to canonical content, item, plan, task, request, completion, error, and token-usage events. Runtime ingestion dispatches internal commands. The event store and projections are durable; query objects, deferred responses, stream position, and adapter maps are volatile." sources={["claude-adapter-query-config", "claude-query-invocation", "claude-adapter-resume", "claude-adapter-runtime-events", "provider-runtime-ingestion"]}>
   <Mermaid id="claude-sdk-normalization" label="Claude Agent SDK query stream normalization" chart={`flowchart LR
     S[ProviderService start / resume] --> Q[Claude SDK query]
     Q -->|assistant · tool · TodoWrite · result| A[Claude adapter]
@@ -116,11 +116,11 @@ every installed skill was discoverable.
 
 Claude result and selected message usage can update a per-thread token/context
 snapshot, including input/cache/output/reasoning/tool/duration fields where present.
-This supports the live context meter. Chapter 20’s Usage page independently scans
+This supports the live context meter. Chapter 35’s Usage page independently scans
 provider-owned transcripts, de-duplicates them, and prices where possible; it does
 not use this runtime event as its source of truth.
 
-At the pinned revision only Codex and Claude emit this live telemetry. A generic
+Only Codex and Claude emit this live telemetry. A generic
 runtime schema can represent future data, but that is not evidence Cursor, Grok, or
 OpenCode emit it now.
 
