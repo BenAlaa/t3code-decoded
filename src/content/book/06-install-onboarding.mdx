@@ -1,0 +1,196 @@
+---
+slug: install-onboarding
+order: 20
+number: "2"
+kind: chapter
+part: Part I · Product guide
+partOrder: 1
+title: Install and reach a useful first thread
+shortTitle: Install and onboarding
+summary: Choose a host, install the right T3 Code surface, connect a provider, import useful projects, and verify the first agent task.
+status: source-checked
+gates: [sources, links, interaction, editorial]
+objectives:
+  - Select an installation path for local, WSL, SSH, and mobile use.
+  - Complete the welcome flow without confusing client and environment machines.
+  - Verify a provider and project with a small first task.
+keywords: [installation, onboarding, welcome wizard, providers, import, updates]
+sourceAreas: [docs/user/install.md, docs/user/welcome-wizard.md, docs/user/background-service.md, docs/user/updating.md]
+visuals: [installation decision flow]
+updatedAt: "2026-09-11"
+---
+
+import Callout from "../../components/Callout.astro";
+import Mermaid from "../../components/Mermaid.astro";
+
+Your first decision is where agents will run. Choose the machine that already has
+the repositories, build tools, and credentials you want the agent to use. That
+machine becomes the environment host. You may operate it from the same desktop,
+a browser, or a phone later.
+
+## Choose an installation path
+
+<Mermaid id="installation-decision-flow" label="Choose a T3 Code installation path" chart={`flowchart TD
+  S[Where should agents run?] --> L{This desktop?}
+  L -->|yes| D[Install desktop app]
+  L -->|quick trial| N[Run npx t3 at latest]
+  L -->|no, SSH host| H[Add SSH environment from desktop]
+  L -->|no, persistent Linux or macOS host| B[Install user background service]
+  D --> W{Use WSL workspace?}
+  W -->|yes| WS[Select distro in Connections; install Node and providers inside WSL]
+  W -->|no| P[Configure provider on host]
+  N --> P
+  H --> P
+  B --> P
+  WS --> P
+  P --> O[Run welcome wizard and import projects]
+  O --> F[Send a small first task]`} />
+
+| Path | Best for | Requirement or tradeoff |
+|---|---|---|
+| Desktop app | Everyday local use, native integrations, easiest host setup | Bundles the server runtime; provider tools still need setup where projects run. |
+| `npx t3@latest` | Fast trial or foreground command-line host | Requires a supported Node.js release and stops with the terminal process. |
+| Background service | Always-available Linux or macOS host | Runs as your user; Windows services are not supported. |
+| Desktop-managed SSH | Projects and credentials on another machine | Remote host needs supported Node.js and provider tools visible to non-interactive SSH. |
+| Mobile app | Supervision away from the host | Connects to another environment; it does not run agents locally. |
+
+Command-line and SSH environments require Node.js 22.16+ in the 22 line, 23.11+
+in the 23 line, or 24.10+. The desktop app includes its own server runtime.
+
+## Install the client or server
+
+For a no-install trial, run:
+
+```bash
+npx t3@latest
+```
+
+It starts the server and opens its local web client. Use
+`npx t3@latest --help` to see launch options.
+
+For desktop, install a release from GitHub or use the supported platform package:
+
+| Platform | Command |
+|---|---|
+| Windows | `winget install T3Tools.T3Code` |
+| macOS | `brew install --cask t3-code` |
+| Arch Linux stable | `yay -S t3code-bin` |
+| Arch Linux nightly | `yay -S t3code-nightly-bin` |
+
+With desktop already running, `npx t3 app` opens a new thread for the current
+directory. Pass a path to open another directory. This command talks to the local
+desktop app; it is not a general command for a standalone or SSH server.
+
+### WSL
+
+In **Settings → Connections**, choose the WSL distribution that should own your
+projects. Install Node.js and provider CLIs inside that distribution. Desktop
+installs its matching T3 server there. The first start after an app update can take
+longer while that runtime catches up.
+
+### Background host
+
+On Linux or macOS, install and inspect the user service with:
+
+```bash
+npx t3@latest service install
+npx t3@latest service status
+```
+
+Use `service update` to repair or update it and `service uninstall` to stop and
+remove startup. Uninstalling leaves project, thread, and setting data intact.
+Linux uses a systemd user service and normally needs lingering; macOS starts at
+login and requires the machine to remain logged in and awake.
+
+## Connect at least one provider
+
+Open **Settings → Providers**, select the environment, enable a provider, and
+complete its installation and login on that machine.
+
+| Provider | Host-side setup |
+|---|---|
+| Codex | Install Codex CLI; run `codex login`. |
+| Claude | Install Claude Code; run `claude auth login`. |
+| Cursor | Install Cursor CLI; run `agent login` (the executable is `cursor-agent`). |
+| Grok Build | Install Grok Build CLI; run `grok login`. |
+| OpenCode | Install OpenCode; run `opencode auth login`. |
+| Antigravity | Install its managed runtime and sign in from provider settings. |
+
+If a CLI is not on the server process's `PATH`, set **Binary path**. This is common
+with language version managers. Provider cards can detect available upgrades;
+**Update now** appears only when T3 Code recognizes the installer that owns the
+binary. Mark API keys and other private instance variables as **Sensitive**. After
+you save them, Settings keeps the value available to the provider but no longer
+shows the original text.
+
+<Callout title="The display device is not the setup target" tone="warning">
+  When you connect from mobile, a browser, or another desktop, install and
+  authenticate providers on the selected environment machine. Settings sends the
+  setup intent there; credentials do not migrate from the client device.
+</Callout>
+
+## Use the welcome wizard deliberately
+
+The welcome flow has three useful stages:
+
+1. **Connect computers.** Select the environments you want to set up. Add hosts
+   through T3 Connect or a direct pairing link if needed. Removing a computer from
+   this setup selection does not disconnect it.
+2. **Check agents.** The wizard checks Codex and Claude on each selected computer
+   and can open a terminal with the relevant install or login command. Other
+   providers remain available in Settings.
+3. **Import projects.** Select directories discovered from recent Codex and Claude
+   use. Git repositories appear first and matching remotes are grouped.
+
+The initial project selection favors Git repositories active in the last 30 days
+with at least three conversations. Linked worktrees, Codex scratch directories
+under `Documents/Codex`, and paths under `Downloads` are excluded. You can change
+every checkbox or skip import entirely.
+
+Imported history is a practical bridge, not a byte-for-byte archive. T3 Code
+imports recent visible conversation content, omits tool activity and attachments,
+and keeps at most 200 messages per conversation. One import attempt reads up to
+100 conversation files and 64 MiB per project, with at most 100,000 input records;
+individual files larger than 16 MiB are skipped. Large histories may require
+another pass. Completed conversations are not duplicated, and navigation pauses
+while an import is running.
+
+The setup terminal uses the selected provider instance's home and environment.
+Sensitive settings stay redacted in the interface and terminal metadata while the
+process can use them.
+
+<Callout title="Recover setup without discarding saved state" tone="info">
+  **Still connecting** means the workspace could not yet be confirmed; choose
+  **Reload**. **Could not read settings** means storage is unavailable or unreadable;
+  restore access and choose **Retry**. T3 Code does not replace unreadable settings
+  with defaults.
+</Callout>
+
+## Verify the installation
+
+Create or import one small project, then start a thread with a bounded prompt such
+as: “Read the repository README and tell me the test command. Do not change
+files.” Choose **Supervised** for this check. A healthy setup proves four things:
+
+- the client reaches the intended environment;
+- the environment can read the project directory;
+- the provider is authenticated and can start a session;
+- questions, responses, and permission requests return to the thread.
+
+After that, try a small edit and inspect the diff. Do not diagnose Git, SDK, and
+provider failures at once; the read-only task separates basic connectivity from
+toolchain setup.
+
+## Keep client and server versions aligned
+
+The app in front of you and the environment server can be on different versions.
+When a mismatch appears, update the machine named in the notice after active work
+finishes. The update choices and recovery behavior live in
+[Personalize, measure usage, update, and protect privacy](../personalize-usage-updates/).
+
+### Source trail
+
+Sources: [install](https://github.com/pingdotgg/t3code/blob/859304b7808ab9a4be87b1bddcd07c6485bf9c4f/docs/user/install.md),
+[welcome wizard](https://github.com/pingdotgg/t3code/blob/859304b7808ab9a4be87b1bddcd07c6485bf9c4f/docs/user/welcome-wizard.md),
+[background service](https://github.com/pingdotgg/t3code/blob/859304b7808ab9a4be87b1bddcd07c6485bf9c4f/docs/user/background-service.md), and
+[updating](https://github.com/pingdotgg/t3code/blob/859304b7808ab9a4be87b1bddcd07c6485bf9c4f/docs/user/updating.md).

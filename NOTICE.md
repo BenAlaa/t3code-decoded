@@ -7,8 +7,8 @@ architecture. The upstream project is available at:
 
 https://github.com/pingdotgg/t3code
 
-The source snapshot used by this edition is commit
-`fa219001dc2f14cfd9c7774c2c03c153359144be`. T3 Code is licensed under the MIT
+The referenced T3 Code source is commit
+`859304b7808ab9a4be87b1bddcd07c6485bf9c4f`. T3 Code is licensed under the MIT
 License. The following upstream notice and permission terms remain applicable to
 every included excerpt:
 

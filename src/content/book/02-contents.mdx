@@ -4,94 +4,112 @@ order: 2
 kind: front
 part: Start here
 partOrder: 0
-title: Contents and learning route
+title: Contents and learning routes
 shortTitle: Contents
-summary: "The complete ordered reading route: establish ownership, then trace the durable control plane, adapters, work lifecycle, clients, remote paths, shipping system, and architectural synthesis."
+summary: "The complete product-first route through T3 Code, followed by its control plane, six providers, work lifecycle, clients, device hosts, remote paths, and shipping system."
 status: source-checked
 gates: [sources, links, editorial]
 objectives:
-  - See why the order follows runtime causality instead of repository folders.
-  - Understand the scope of every completed part and its visual explanations.
-keywords: [contents, chapters, roadmap, learning path]
-sourceAreas: [BOOK_PLAN.md]
+  - Choose a product, workflow, or implementation route.
+  - See every product and technical chapter in the guide.
+keywords: [contents, product guide, chapters, learning path]
+sourceAreas: [BOOK_PLAN.md, docs/user]
 visuals: [chapter roadmap]
-updatedAt: 2026-08-24
+updatedAt: "2026-09-11"
 ---
 
 import Callout from "../../components/Callout.astro";
 
-The old book introduced several keystone concepts long after depending on them. This edition orders the material by **causal distance from one user request**. The repository atlas remains available as reference, but it does not dictate the story.
+The product guide comes first. The technical guide then follows one request from
+the client through authorization, durable state, provider execution, work services,
+client convergence, remote access, and release operations.
 
 ## Start here
 
-- **How to read a changing system** — evidence, revision, and reading paths.
-- **The complete system map** — the same architecture in spatial form.
-- **One request, every boundary** — a step-through trace before the zoomed chapters.
+- **Cover** — scope and source synchronization.
+- **How to read this guide** — product, workflow, and architecture routes.
+- **Contents and learning routes** — this complete map.
 
-## Part I · Boundaries and vocabulary
+## Part I · Product guide
 
-1. Control surface, not agent brain
-2. Environment · project · thread · turn · session
-3. Repository and dependency atlas
-4. Runtime topologies and technology choices
+1. T3 Code as a product
+2. Install and reach a useful first thread
+3. Environments, clients, and connection paths
+4. Organize projects, threads, and worktrees
+5. Compose tasks with the right context
+6. Choose providers, models, accounts, and permissions
+7. The workbench: files, terminals, browser preview, and SnapShots
+8. Source control: checkpoints, pull requests, reviews, and stacks
+9. Remote environments and unattended work
+10. Mobile: supervise agents from anywhere
+11. Device lab: simulators, emulators, and agent-driven testing
+12. Personalize, measure usage, update, and protect privacy
+13. Complete recipes and troubleshooting
 
-## Part II · Boot and connect
+## Part II · Architecture orientation and boundaries
 
-5. The `npx t3` bootstrap path
-6. Server composition and execution boundary
-7. Effect RPC, subscriptions, and wire contracts
-8. Pairing, scopes, credentials, and WebSocket upgrade
+14. The complete system map
+15. One request, every boundary
+16. Control surface, not agent brain
+17. Environment · project · thread · turn · session
+18. Repository and dependency atlas
+19. Runtime topologies and technology choices
 
-## Part III · The durable domain kernel
+## Part III · Boot and connect
 
-9. Commands and invariants
-10. Events, receipts, and idempotency
-11. Projection tables and read models
-12. Post-commit reactors: serialized handling without durable delivery
-13. SQLite, files, settings, secrets, migrations, and recovery
+20. The `npx t3` bootstrap path
+21. Server composition, activation, and readiness
+22. HTTP, WebSocket RPC, snapshots, and resume
+23. Pairing, credentials, TTLs, and scopes
 
-## Part IV · Five harnesses, one product model
+## Part IV · The durable domain kernel
 
-14. The `ProviderAdapter` contract
-15. Drivers, instances, registries, and multi-instance routing
-16. Codex through app-server JSON-RPC
-17. Claude through the Agent SDK
-18. Cursor and Grok through ACP
-19. OpenCode and the normalization matrix
-20. Two usage systems: live context telemetry and transcript accounting
+24. Commands, invariants, and the boundary of atomicity
+25. Events, receipts, idempotency, and the post-commit gap
+26. Projection tables and read models
+27. Post-commit reactors and the delivery gap
+28. Persistence, reconstruction, and crash recovery
 
-## Part V · The work lifecycle
+## Part V · Six providers, one product model
 
-21. Project discovery and `t3.json`
-22. Current checkout vs isolated worktrees
-23. Start, stream, steer, interrupt, settle
-24. Permission modes, approvals, and structured input
-25. Threads, provider tasks, plans, skills, and subagents
-26. Who owns context, compaction, and memory
-27. Hidden-ref checkpoints, diffs, and revert
-28. Terminals, files, previews, MCP, VCS, and pull requests
+29. The `ProviderAdapter` contract
+30. Drivers, instances, registries, and multi-instance routing
+31. Codex through app-server JSON-RPC
+32. Claude through the Agent SDK
+33. ACP transport, Cursor, and Grok
+33A. Antigravity through ACP, managed auth, and account catalogs
+34. OpenCode ownership, recovery, and six-provider normalization
+35. Usage accounting and provider limits without a false ledger
 
-## Part VI · Client architectures: shared semantics, platform edges
+## Part VI · The work lifecycle and integrated tools
 
-29. The shared client runtime
-30. Web routes, state, and rendering performance
-31. Composer, work log, review, and sidebar lifecycle
-32. Desktop: Electron, IPC, server ownership, browser, SSH
-33. Mobile: React Native, persistence, outbox, sharing, notifications
+36. Project discovery, onboarding import, and `t3.json`
+37. Current checkout versus isolated worktrees
+38. Start, stream, steer, interrupt, settle
+39. Permission modes, approvals, and structured input
+40. Threads, provider tasks, plans, skills, and subagents
+41. Context is provider-owned; history is T3-owned
+42. Hidden-ref checkpoints, diffs, and revert
+43. Terminals, files, previews, MCP, VCS, and review graphs
+43A. Device hosts, targets, sessions, and agent control
 
-## Part VII · Reach and ship
+## Part VII · Client architectures: shared semantics, platform edges
 
-34. Primary, paired bearer, Tailscale endpoints, and SSH access
-35. T3 Connect: OAuth, DPoP, relay, and tunnel
-36. Reconnect, multi-environment state, notifications, version skew
-37. Distribution artifacts: CLI, hosted app, desktop, mobile, marketing, and AUR
-38. Release graph, three update systems, and observability/privacy
+44. Shared runtime: connections, state, and convergence
+45. One React renderer, three runtime edges
+46. One thread, many deliberate projections
+47. Electron desktop: one renderer, explicit native authority
+48. Mobile: adaptive workspaces, persistence, and native systems
 
-## Part VIII · Synthesis
+## Part VIII · Reach and ship
 
-39. Six complete traces: ownership, convergence, and failure boundaries
-40. Decisions, trade-offs, limitations, and an honest roadmap
+49. Reachability is a route; authority is a separate proof
+50. T3 Connect: OAuth, DPoP, relay, and tunnel
+51. Reconnect, environments, notifications, and version skew
+52. Distribution: artifacts, channels, and what actually ships
+53. Release, update, and observability: three safety boundaries
 
-<Callout title="A plan is not a promise">
-  `BOOK_PLAN.md` is the authoring contract for this repository. Product roadmap claims inside the book use a stricter split: shipped code, explicit maintainer future work, and community ideas are three different categories.
+<Callout title="Use search as a second table of contents" tone="info">
+  Press `Cmd/Ctrl+K` to search product tasks, concepts, source paths, provider names,
+  and implementation terms across the entire guide.
 </Callout>

@@ -1,10 +1,10 @@
 ---
 slug: checkpoints-revert
-order: 270
-number: "27"
+order: 420
+number: "42"
 kind: chapter
-part: Part V · The work lifecycle
-partOrder: 5
+part: Part VI · The work lifecycle
+partOrder: 6
 title: Hidden-ref checkpoints, diffs, and revert
 shortTitle: Checkpoints and revert
 summary: Each completed turn can leave a Git tree snapshot under a hidden ref. Review reads those snapshots; revert restores workspace content first, then attempts provider-history rollback before it can complete the durable history rewrite.
@@ -18,7 +18,7 @@ objectives:
 keywords: [checkpoint, git, hidden ref, diff, restore, revert, rollback, worktree, projection]
 sourceAreas: [apps/server/src/checkpointing, apps/server/src/orchestration/Layers/CheckpointReactor.ts, apps/server/src/vcs/GitVcsDriver.ts, apps/server/src/provider/Layers, apps/web/src/components/DiffPanel.tsx]
 visuals: [checkpoint timeline, checkpoint graph lab, revert saga]
-updatedAt: 2026-08-24
+updatedAt: "2026-09-11"
 ---
 
 import Callout from "../../components/Callout.astro";
@@ -99,7 +99,7 @@ side-by-side review modes, but they answer different questions.
 | Working tree | `HEAD` → current tracked worktree, plus patches for untracked files | live filesystem | yes |
 | Branch changes | merge-base(selected base, `HEAD`) → `HEAD` via `git diff <base>...HEAD` | live repository refs | yes |
 
-<Figure number="27.1" title="One turn creates a reviewable content boundary" hint="capture is attempted through hot and durable trigger paths" caption="The reactor first attempts a baseline hidden ref. An observed matching completion can directly trigger post-turn capture; when that shared-stream path is missed, a durable missing-placeholder event can trigger a replacement attempt. Successful capture computes the patch and changed-file summary before dispatching checkpoint metadata to orchestration. Turn and full-thread review read hidden refs; working-tree and branch review use separate live Git paths." textEquivalent="A pre-turn workspace can become hidden checkpoint zero. The provider runs and changes the workspace. A matching completion can reach the checkpoint reactor directly through the hot runtime stream, or runtime ingestion can create a durable missing placeholder whose event triggers a later replacement attempt. Successful capture creates hidden checkpoint one. A diff from checkpoint zero to one is parsed into changed files and committed into the durable thread model. Turn review reads zero to one, while working-tree and branch review go directly to live Git state." sources={["checkpoint-git-capture", "checkpoint-git-diff-delete", "checkpoint-capture-dispatch-order", "turn-lifecycle-checkpoint-triggers", "checkpoint-live-review-diffs"]}>
+<Figure number="42.1" title="One turn creates a reviewable content boundary" hint="capture is attempted through hot and durable trigger paths" caption="The reactor first attempts a baseline hidden ref. An observed matching completion can directly trigger post-turn capture; when that shared-stream path is missed, a durable missing-placeholder event can trigger a replacement attempt. Successful capture computes the patch and changed-file summary before dispatching checkpoint metadata to orchestration. Turn and full-thread review read hidden refs; working-tree and branch review use separate live Git paths." textEquivalent="A pre-turn workspace can become hidden checkpoint zero. The provider runs and changes the workspace. A matching completion can reach the checkpoint reactor directly through the hot runtime stream, or runtime ingestion can create a durable missing placeholder whose event triggers a later replacement attempt. Successful capture creates hidden checkpoint one. A diff from checkpoint zero to one is parsed into changed files and committed into the durable thread model. Turn review reads zero to one, while working-tree and branch review go directly to live Git state." sources={["checkpoint-git-capture", "checkpoint-git-diff-delete", "checkpoint-capture-dispatch-order", "turn-lifecycle-checkpoint-triggers", "checkpoint-live-review-diffs"]}>
   <Mermaid id="checkpoint-review-boundary" label="Checkpoint capture and diff boundaries" chart={`flowchart LR
     B[turn start] --> Z[hidden baseline ref · turn 0]
     Z --> P[provider changes workspace]
@@ -161,7 +161,7 @@ the implementation is not uniform. Codex delegates to its live app-server runtim
 Claude and Cursor truncate their adapter-maintained turn arrays (Claude also updates
 its resume cursor). OpenCode reads native session messages, finds the earlier
 assistant-message boundary, then calls `session.revert`. Grok deliberately returns
-an unsupported provider-side rollback error at this pinned revision.
+an unsupported provider-side rollback error.
 
 That table is a capability map for this implementation, not a promise that the
 upstream provider has erased files, billed tokens, cached context, tool side effects,
@@ -179,7 +179,7 @@ general remote-history deletion guarantee.
 <Callout title="A completed revert changes thread history; a client cache is another layer" tone="info">
   This chapter stops at server-side completion and derived projection pruning. How
   web and mobile invalidate, race, refetch, and reconcile a reverted snapshot is a
-  client history-epoch concern deferred to Chapter 29.
+  client history-epoch concern deferred to Chapter 44.
   Do not infer that a fresh server event alone settles every local cache race.
 </Callout>
 

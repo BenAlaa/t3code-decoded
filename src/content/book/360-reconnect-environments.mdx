@@ -1,10 +1,10 @@
 ---
 slug: reconnect-environments
-order: 360
-number: "36"
+order: 510
+number: "51"
 kind: chapter
-part: "Part VII · Reach and ship"
-partOrder: 7
+part: "Part VIII · Reach and ship"
+partOrder: 8
 title: "Reconnect, environments, notifications, and version skew"
 shortTitle: Reachability recovery
 summary: "T3 Code recovers reachability one environment at a time: a registry leases a single supervisor and RPC session per environment, projections reconcile independently after a new generation, background work follows declared demand, notifications wake attention rather than synchronize state, and capability plus exact-version recovery makes skew explicit."
@@ -18,7 +18,7 @@ objectives:
 keywords: [reconnect, environment, generation, lease, supervisor, cache, background, APNs, notifications, awareness relay, version skew, self-update]
 sourceAreas: [packages/client-runtime/src/connection, packages/client-runtime/src/state, apps/mobile/src/connection, apps/mobile/src/features/agent-awareness, infra/relay/src/agentActivity, packages/contracts/src/environment.ts, apps/web/src/versionSkew.ts, apps/server/src/cloud]
 visuals: [environment recovery boundary, reachability and notification recovery lab]
-updatedAt: 2026-08-24
+updatedAt: "2026-09-11"
 ---
 
 import Callout from "../../components/Callout.astro";
@@ -80,10 +80,10 @@ and do not use an environment A session to repair environment B cache.
 
 This constraint is useful even when a user has one desktop server exposed through
 direct LAN, relay, and SSH-assisted routes: access and launch can differ while the
-saved environment identity decides which runtime scope owns recovery. [Chapter 34](../access-transports/)
+saved environment identity decides which runtime scope owns recovery. [Chapter 49](../access-transports/)
 separates access from authority; this chapter follows the recovery consequence.
 
-<Figure number="36.1" title="Recovery stays inside one environment boundary" hint="solid arrows carry authoritative synchronization; dashed arrows are attention or presentation paths" caption="A catalog holds separate environment entries. Each entry receives one scoped supervisor, which creates a succession of connection generations and at most one active RPC lease. Shell and selected-thread synchronizers use that lease but retain their own cache and live status. A presentation layer may combine summaries without merging underlying records. The awareness relay and APNs can signal a target environment/thread, after which the normal supervisor and projection synchronizers establish current state." textEquivalent="The catalog contains Environment A and Environment B. Each has a separate supervisor, session generations, shell cache, and thread cache. Both can contribute summary information to one user interface, but their authoritative state does not merge. An awareness relay sends an APNs notification containing an environment and thread route. The notification causes the client to navigate and synchronize that environment; it is not itself a state snapshot." sources={["reconnect-environment-registry", "reconnect-supervisor-active-lease", "reconnect-supervisor-generation-loop", "reconnect-shell-authoritative-refresh", "reconnect-thread-snapshot-epoch", "reconnect-scoped-environment-refs", "awareness-notification-navigation"]}>
+<Figure number="51.1" title="Recovery stays inside one environment boundary" hint="solid arrows carry authoritative synchronization; dashed arrows are attention or presentation paths" caption="A catalog holds separate environment entries. Each entry receives one scoped supervisor, which creates a succession of connection generations and at most one active RPC lease. Shell and selected-thread synchronizers use that lease but retain their own cache and live status. A presentation layer may combine summaries without merging underlying records. The awareness relay and APNs can signal a target environment/thread, after which the normal supervisor and projection synchronizers establish current state." textEquivalent="The catalog contains Environment A and Environment B. Each has a separate supervisor, session generations, shell cache, and thread cache. Both can contribute summary information to one user interface, but their authoritative state does not merge. An awareness relay sends an APNs notification containing an environment and thread route. The notification causes the client to navigate and synchronize that environment; it is not itself a state snapshot." sources={["reconnect-environment-registry", "reconnect-supervisor-active-lease", "reconnect-supervisor-generation-loop", "reconnect-shell-authoritative-refresh", "reconnect-thread-snapshot-epoch", "reconnect-scoped-environment-refs", "awareness-notification-navigation"]}>
   <Mermaid id="reconnect-environment-boundary" label="Environment-scoped recovery and notification path" chart={`flowchart LR
     C[Environment catalog] --> A[Environment A scope]
     C --> B[Environment B scope]
@@ -166,8 +166,8 @@ The safe recovery order is therefore:
 
 No step says “replay every command because the connection returned.” Commands
 resolve their current environment runtime at execution time. Durable command and
-outbox semantics belong to [Chapter 24](../permissions-and-input/) and
-[Chapter 33](../mobile-client-continuity/); reconnect supplies reachability, not
+outbox semantics belong to [Chapter 39](../permissions-and-input/) and
+[Chapter 48](../mobile-client-continuity/); reconnect supplies reachability, not
 permission to duplicate intent.
 
 ## 4. Background work has demand and policy, not a hidden always-on connection
@@ -266,7 +266,19 @@ Do not make the transport layer a process manager merely to disguise that restar
   substitute for re-synchronizing after a server restart.
 </EvidenceClaim>
 
-## 7. The compact rule set
+## 7. Host-scoped and queued recovery
+
+Device sessions add a nested recovery problem: the client must reconnect to the T3
+environment, then DeviceService must reconnect to the configured local or SSH host,
+then the target and session identities must still match. A simulator with the same
+display name on another host is not a valid substitute.
+
+Mobile drafts, pending thread creation, attachment uploads, and notification launches
+can also outlive one connection attempt. Their local records wait for the environment
+and then reconcile against server evidence. Shared-setting mismatch is handled in a
+separate versioned channel so reconnect does not silently copy machine-local config.
+
+## 8. The compact rule set
 
 Keep these rules together when extending any client surface:
 

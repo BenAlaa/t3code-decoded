@@ -1,0 +1,145 @@
+---
+slug: product-overview
+order: 10
+number: "1"
+kind: chapter
+part: Part I · Product guide
+partOrder: 1
+title: T3 Code as a product
+shortTitle: Product overview
+summary: Understand what T3 Code gives you, where it fits in an agent workflow, and how its projects, threads, environments, providers, and clients work together.
+status: source-checked
+gates: [sources, links, interaction, editorial]
+objectives:
+  - Explain the product in user terms before introducing its architecture.
+  - Map the main capabilities to the problems they solve.
+  - Help readers choose a useful first workflow.
+keywords: [product, coding agents, remote work, clients, environments, threads]
+sourceAreas: [README.md, AGENTS.md, docs/user/install.md, docs/user/remote-access.md, docs/user/thread-sidebar.md, docs/user/source-control.md]
+visuals: [product workflow map]
+updatedAt: "2026-09-11"
+---
+
+import Callout from "../../components/Callout.astro";
+import Mermaid from "../../components/Mermaid.astro";
+
+T3 Code is a control surface for coding agents. You bring an agent account or
+provider installation—Codex, Claude Code, Cursor, Grok Build, OpenCode, or Google
+Antigravity—and T3 Code gives you one place to start work, follow it, answer it,
+inspect changes, and return later. The agent still runs on the machine that owns
+the project and uses that machine's files, credentials, tools, and network.
+
+That distinction is the key to the product. T3 Code is not a new model and it is
+not a hosted copy of your repository. It makes existing agent runtimes easier to
+operate across many tasks and devices.
+
+## What it gives you
+
+| Need | T3 Code capability | Why it helps |
+|---|---|---|
+| Run several tasks at once | Durable threads and separate worktrees | Each task keeps its conversation, branch, files, status, and review links together. |
+| Use the best agent for a job | Six provider integrations, multiple instances, model picker | You can change provider, account, model, and options without adopting a different workspace app. |
+| Leave your desk | Web, desktop, iOS, and Android clients | The work continues on the environment; another client can reconnect to it. |
+| Control risk | Thread-level permission modes and in-conversation approvals | You choose when the agent pauses before commands or file changes. |
+| Give better context | Files, images, citations, skills, commands, SnapShots, and question attachments | The request can carry the evidence the agent needs instead of relying on a long explanation. |
+| Review the result | Diffs, checkpoints, terminals, previews, source-control actions, linked pull requests | Conversation and repository work stay in one operational view. |
+| Keep remote machines useful | T3 Connect, direct pairing, Tailscale, SSH, and background services | A workstation or server can remain the execution host while you control it elsewhere. |
+| Test app work | Browser previews and live iOS/Android device panels | You and the agent can observe the same running product. |
+
+<Mermaid id="product-workflow-map" label="The T3 Code product workflow" chart={`flowchart LR
+  U[You on desktop, web, or mobile] --> D[Choose environment and project]
+  D --> T[Start or resume a thread]
+  T --> C[Compose task plus context]
+  C --> P[Choose provider, model, and permission mode]
+  P --> A[Agent works on environment machine]
+  A --> Q{Needs attention?}
+  Q -->|question or approval| U
+  Q -->|continues| A
+  A --> R[Inspect messages, tools, files, diff, terminal, or device]
+  R --> O{Outcome}
+  O -->|follow up| C
+  O -->|restore| T
+  O -->|review or PR| S[Source-control workflow]
+  O -->|done| X[Settle thread]`} />
+
+The loop is intentionally durable. Closing a browser does not redefine the task;
+the environment remains the authority for its threads. Mobile can queue a message
+while offline and upload it after reconnecting. Supported provider sessions can
+resume after a server restart when continuation is enabled.
+
+## The five objects you should know
+
+**A client** is the interface in front of you. The desktop and web clients expose
+the fullest setup and review surfaces. Mobile is optimized for supervising work,
+responding to questions and approvals, and sending follow-ups while away.
+
+**An environment** is one running T3 server plus its machine, filesystem, provider
+credentials, projects, and state. “Local,” “office workstation,” and “cloud VM”
+are common environments. A client may connect to several at once.
+
+**A project** points to a workspace directory inside one environment. Checkouts of
+the same repository can be grouped in the UI, while each machine still owns its
+own files and provider setup.
+
+**A thread** is a durable unit of work inside a project. It contains the
+conversation, agent activity, selected provider settings, workspace choice,
+checkpoints, and related review links.
+
+**A turn** begins when you send a message and includes the agent's response and
+work. A thread normally contains many turns: initial task, correction, test run,
+review response, and final cleanup.
+
+<Callout title="A useful mental check" tone="info">
+  When something is missing, ask two questions: “Which environment owns this
+  project?” and “Which thread owns this task?” Most setup and navigation mistakes
+  become obvious once both answers are explicit.
+</Callout>
+
+## Three good starting workflows
+
+### Focused local task
+
+Install the desktop app, add a repository, start a thread in the current checkout,
+attach the relevant issue or screenshot, and use **Supervised** or **Auto** while
+you learn the agent's behavior. Inspect the diff, then commit or continue from the
+same thread.
+
+### Parallel feature work
+
+Create one **New worktree** thread per independent change. Start background tasks
+with `Cmd/Ctrl+Enter`, then use the sidebar to move between them. Keep a task in
+one thread so its branch, decisions, approvals, and pull request remain connected.
+
+### Remote supervision
+
+Run T3 Code on the machine that has the repositories and provider logins. Keep it
+available with the desktop host or a background service, expose it through T3
+Connect or a private network, and connect from mobile. Notifications can take you
+straight to a completed turn, failure, question, or approval request.
+
+## Product boundaries that affect daily use
+
+- Work executes on the environment machine. Install provider CLIs, Git hosting
+  tools, SDKs, and credentials there—not merely on the device displaying the UI.
+- A phone does not become the host. It controls a server elsewhere.
+- Provider capabilities differ. Plan modes, rewind support, questions, attachment
+  limits, and approval behavior are not identical across runtimes.
+- T3 Code preserves product history and file diffs, but provider-native context
+  remains subject to that provider's continuation and compaction behavior.
+- Estimated usage cost is an analytical view, not a subscription invoice.
+
+## Where the rest of this guide goes
+
+The next chapters turn this map into tasks: install and first run; choose clients
+and environments; organize projects, threads, and worktrees; write context-rich
+requests; choose providers, models, and permissions; then use terminals, previews,
+devices, Git, remote access, recovery, and customization. The technical part of
+the book later explains why these product behaviors are reliable.
+
+### Source trail
+
+Sources:
+[product README](https://github.com/pingdotgg/t3code/blob/859304b7808ab9a4be87b1bddcd07c6485bf9c4f/README.md),
+[installation](https://github.com/pingdotgg/t3code/blob/859304b7808ab9a4be87b1bddcd07c6485bf9c4f/docs/user/install.md),
+[remote access](https://github.com/pingdotgg/t3code/blob/859304b7808ab9a4be87b1bddcd07c6485bf9c4f/docs/user/remote-access.md), and
+[working with threads](https://github.com/pingdotgg/t3code/blob/859304b7808ab9a4be87b1bddcd07c6485bf9c4f/docs/user/thread-sidebar.md).

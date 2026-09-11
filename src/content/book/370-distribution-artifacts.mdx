@@ -1,10 +1,10 @@
 ---
 slug: distribution-artifacts
-order: 370
-number: "37"
+order: 520
+number: "52"
 kind: chapter
-part: "Part VII · Reach and ship"
-partOrder: 7
+part: "Part VIII · Reach and ship"
+partOrder: 8
 title: "Distribution: artifacts, channels, and what actually ships"
 shortTitle: Distribution artifacts
 summary: "T3 Code distributes several deliberately different products: an npm CLI that contains a bundled web client, platform-specific Electron installers built from a staged closure, a release-controlled hosted web channel, store binaries plus fingerprint-gated mobile OTAs, and checksum-pinned AUR packages derived from the published Linux AppImage. The release matrix—not every target the builder knows—defines what is actually shipped."
@@ -19,7 +19,7 @@ objectives:
 keywords: [distribution, npm, CLI, Electron, DMG, AppImage, NSIS, GitHub Releases, Vercel, Expo, EAS, fingerprint, AUR, stable, nightly]
 sourceAreas: [apps/server/package.json, apps/server/scripts/cli.ts, scripts/build-desktop-artifact.ts, .github/workflows/release.yml, .github/workflows/mobile-eas-production.yml, apps/web/vercel.ts, apps/marketing/src, packaging/aur]
 visuals: [distribution artifact map, interactive artifact factory]
-updatedAt: 2026-08-24
+updatedAt: "2026-09-11"
 ---
 
 import ArtifactFactoryLab from "../../components/ArtifactFactoryLab.astro";
@@ -63,7 +63,7 @@ GitHub Release. A successful GitHub Release then unlocks the AUR handoff and hos
 web deploy. This is dependency ordering, not an assertion that all downstream
 consumer updates happen simultaneously.
 
-<Figure number="37.1" title="One revision, several artifact contracts" hint="solid arrows describe published or deployed products; dashed arrows are dependency gates" caption="A pinned release ref builds the web and server output. The CLI package embeds the web output and publishes to npm before GitHub Release publication. Desktop jobs stage desktop, server, web, dependencies, native resources, and platform packaging into four currently active installer lanes; their files are attached to GitHub Releases. The same release gates an AUR workflow that checksum-pins the released Linux AppImage, while hosted web deploys to the chosen latest or nightly channel. Mobile CI separately reconciles store builds and publishes an OTA only when a matching native fingerprint exists." textEquivalent="A release starts from a pinned source revision. Web output is copied into the CLI package, which publishes to npm. Desktop builds create macOS arm64 and x64 DMGs, a Linux x64 AppImage, and a Windows x64 NSIS installer, then those files go to GitHub Releases. AUR reads the Linux AppImage and digest from that release. Hosted web deploys one release-controlled latest or nightly channel. Mobile store binaries and OTA updates take their own EAS path; OTA requires a matching native fingerprint." sources={["distribution-cli-contract", "distribution-cli-bundles-web", "distribution-desktop-artifact-contract", "distribution-release-matrix", "distribution-cli-before-release", "distribution-mobile-fingerprint-publish", "distribution-aur-selection"]}>
+<Figure number="52.1" title="One revision, several artifact contracts" hint="solid arrows describe published or deployed products; dashed arrows are dependency gates" caption="A pinned release ref builds the web and server output. The CLI package embeds the web output and publishes to npm before GitHub Release publication. Desktop jobs stage desktop, server, web, dependencies, native resources, and platform packaging into four currently active installer lanes; their files are attached to GitHub Releases. The same release gates an AUR workflow that checksum-pins the released Linux AppImage, while hosted web deploys to the chosen latest or nightly channel. Mobile CI separately reconciles store builds and publishes an OTA only when a matching native fingerprint exists." textEquivalent="A release starts from a pinned source revision. Web output is copied into the CLI package, which publishes to npm. Desktop builds create macOS arm64 and x64 DMGs, a Linux x64 AppImage, and a Windows x64 NSIS installer, then those files go to GitHub Releases. AUR reads the Linux AppImage and digest from that release. Hosted web deploys one release-controlled latest or nightly channel. Mobile store binaries and OTA updates take their own EAS path; OTA requires a matching native fingerprint." sources={["distribution-cli-contract", "distribution-cli-bundles-web", "distribution-desktop-artifact-contract", "distribution-release-matrix", "distribution-cli-before-release", "distribution-mobile-fingerprint-publish", "distribution-aur-selection"]}>
   <Mermaid id="distribution-artifact-map" label="Distribution artifacts and gates" chart={`flowchart TB
     REF[Pinned release ref] --> WEB[Web build]
     REF --> SERVER[Server / CLI bundle]

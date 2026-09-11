@@ -1,10 +1,10 @@
 ---
 slug: t3-connect
-order: 350
-number: "35"
+order: 500
+number: "50"
 kind: chapter
-part: "Part VII · Reach and ship"
-partOrder: 7
+part: "Part VIII · Reach and ship"
+partOrder: 8
 title: "T3 Connect: OAuth, DPoP, relay, and tunnel"
 shortTitle: T3 Connect
 summary: "T3 Connect uses a Clerk account credential and a device-held DPoP key to authorize relay control-plane operations, links a local environment through a signed proof, provisions a Cloudflare tunnel, then gives the client a direct DPoP-bound connection to that environment. The relay authorizes, provisions, and brokers setup; normal T3 traffic does not transit it."
@@ -18,7 +18,7 @@ objectives:
 keywords: [T3 Connect, Clerk, OAuth, PKCE, DPoP, relay, Cloudflare Tunnel, cloudflared, environment registration, WebSocket]
 sourceAreas: [docs/internals/t3-connect.md, packages/shared/src/connectAuth.ts, apps/server/src/cloud/CliTokenManager.ts, apps/web/src/cloud/dpop.ts, packages/client-runtime/src/relay/managedRelay.ts, packages/client-runtime/src/authorization/service.ts, infra/relay/src/environments]
 visuals: [credential ladder, relay control-plane and direct data-plane map]
-updatedAt: 2026-08-24
+updatedAt: "2026-09-11"
 ---
 
 import Callout from "../../components/Callout.astro";
@@ -103,7 +103,7 @@ managed connector. `--publish-only` deliberately takes a different path: it link
 activity publishing but asks for no managed tunnel, so a client must reach the
 environment out of band.
 
-<SourceExcerpt id="connect-environment-link-handshake" focus={[418, 424, 428, 444, 459, 474, 480, 487]} note="The web link flow obtains a relay challenge, has the environment create the proof, submits it to the relay, then supplies returned credential and endpoint-runtime configuration to the environment." />
+<SourceExcerpt id="connect-environment-link-handshake" focus={[256, 272, 282, 298, 313, 328, 334, 346]} note="The web link flow obtains a relay challenge, has the environment create the proof, submits it to the relay, then supplies returned credential and endpoint-runtime configuration to the environment." />
 
 <SourceExcerpt id="connect-relay-linker-provision" focus={[227, 254, 282, 311, 318, 323, 331, 339]} note="The relay verifies challenge and replay state, requires loopback for a managed tunnel, provisions it, records the link, and creates the environment credential." />
 
@@ -115,13 +115,18 @@ HTTP origin, creates a proxied CNAME to `*.cfargotunnel.com`, obtains a connecto
 token, and marks the allocation ready. The environment runtime launches the managed
 client as `tunnel run` with that token and supervises it.
 
+Managed exposure accepts only a validated loopback HTTP origin. Link proof checks
+reject forwarded authority headers, allocation lookup uses relay-owned records, and
+health and mint requests do not follow redirects. Those constraints prevent endpoint
+setup from becoming arbitrary relay egress or exposing another host-local service.
+
 That is an endpoint-exposure path: client traffic can travel through the managed
 Cloudflare tunnel to the environment. It is not a relay data hop. The relay’s own
 README says that normal API and WebSocket traffic goes directly between client and
 selected environment after connection; the client runtime independently constructs
 the environment’s token and WebSocket-ticket requests from the endpoint URL.
 
-<Figure number="35.1" title="T3 Connect launches a direct environment session" hint="solid arrows are observed request paths; the dashed boundary separates relay control work from normal T3 traffic" caption="A signed-in client uses Clerk and a device DPoP key to call the relay for discovery, link, or connection authorization. Link setup gives the environment connector configuration for a Cloudflare tunnel. To connect, the relay asks the managed environment to mint a bootstrap credential bound to the device key. The client then directly exchanges that bootstrap at the managed environment for a DPoP access token and directly obtains a WebSocket ticket. Ordinary API and WebSocket traffic runs between client and environment through its endpoint; it does not traverse the relay." textEquivalent="Control-plane paths are client to Clerk, client to relay, and relay to environment while linking or minting. The environment’s cloudflared connector reaches the Cloudflare tunnel service. After launch, client-to-environment HTTP and WebSocket traffic uses the managed endpoint directly. The relay is not on that normal traffic path." sources={["connect-relay-control-plane", "connect-environment-link-handshake", "connect-managed-tunnel-provision", "connect-environment-runtime-tunnel", "connect-relay-environment-mint", "managed-relay-dpop-authorization"]}>
+<Figure number="50.1" title="T3 Connect launches a direct environment session" hint="solid arrows are observed request paths; the dashed boundary separates relay control work from normal T3 traffic" caption="A signed-in client uses Clerk and a device DPoP key to call the relay for discovery, link, or connection authorization. Link setup gives the environment connector configuration for a Cloudflare tunnel. To connect, the relay asks the managed environment to mint a bootstrap credential bound to the device key. The client then directly exchanges that bootstrap at the managed environment for a DPoP access token and directly obtains a WebSocket ticket. Ordinary API and WebSocket traffic runs between client and environment through its endpoint; it does not traverse the relay." textEquivalent="Control-plane paths are client to Clerk, client to relay, and relay to environment while linking or minting. The environment’s cloudflared connector reaches the Cloudflare tunnel service. After launch, client-to-environment HTTP and WebSocket traffic uses the managed endpoint directly. The relay is not on that normal traffic path." sources={["connect-relay-control-plane", "connect-environment-link-handshake", "connect-managed-tunnel-provision", "connect-environment-runtime-tunnel", "connect-relay-environment-mint", "managed-relay-dpop-authorization"]}>
   <Mermaid id="t3-connect-planes" label="T3 Connect control plane and direct data plane" chart={`flowchart LR
     U[Signed-in client\nClerk session + device DPoP key]
     C[Clerk]
@@ -175,7 +180,26 @@ and a ticket can have distinct expiry, audience, and replay rules.
 
 <ConnectPlaneLab id="credential-ladder" />
 
-## 6. Evidence boundary: what this pinned source does and does not establish
+## 6. Links, allocations, and connectors have different lifetimes
+
+Cloud authorization, desired exposure, an allocation, and a running connector do
+not begin or end together. Linking may record intent while the environment is down;
+startup reconciles that intent. A normal CLI-managed shutdown releases its active
+tunnel while retaining the hostname reservation and allocation record, so the
+environment appears offline rather than unauthorized.
+
+Two handoffs retain the tunnel: a client-installed link depends on its stored
+connector token, and an update starts a replacement environment immediately.
+Allocation cleanup claims a generation before deleting external resources so a
+delayed finalizer cannot remove a tunnel reused by a restart. Unlink commits
+authorization revocation before external teardown and retains enough state to retry
+a failed cleanup.
+
+## 7. Evidence boundary: what the implementation does and does not establish
+
+DPoP constrains credential replay, but it does not remove the relay trust
+assumption. The relay holds the signing authority for environment mint requests; a
+compromised relay signing key remains a privileged failure boundary.
 
 <EvidenceClaim kind="documented" title="The relay is explicitly outside normal traffic" refs={["connect-relay-control-plane", "managed-relay-dpop-authorization"]}>
   The relay README specifies the intended direct post-connection API/WebSocket path,

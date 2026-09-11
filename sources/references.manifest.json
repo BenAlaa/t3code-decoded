@@ -1,3 +1,4 @@
+
 [
   {
     "id": "rpc-group",
@@ -662,10 +663,8 @@
   {
     "id": "stale-startup-overview",
     "path": "docs/internals/overview.md",
-    "start": 124,
-    "end": 130,
     "kind": "file",
-    "label": "stale documented startup sequence"
+    "label": "current server boundaries and startup constraints"
   },
   {
     "id": "orchestration-snapshot-contracts",
@@ -1022,10 +1021,8 @@
   {
     "id": "auth-doc-ticket-overclaim",
     "path": "docs/internals/environment-auth.md",
-    "start": 95,
-    "end": 111,
     "kind": "file",
-    "label": "documentation claim that WebSocket tickets carry scopes"
+    "label": "current environment authentication contract"
   },
   {
     "id": "decider-effect-dependencies",
@@ -1634,8 +1631,8 @@
   {
     "id": "provider-adapter-registry-live",
     "path": "apps/server/src/provider/Layers/ProviderAdapterRegistry.ts",
-    "start": 36,
-    "end": 100,
+    "start": 30,
+    "end": 85,
     "kind": "file",
     "label": "live adapter facade excludes unavailable instances"
   },
@@ -1778,8 +1775,8 @@
   {
     "id": "codex-app-server-child-process",
     "path": "packages/effect-codex-app-server/src/client.ts",
-    "start": 212,
-    "end": 268,
+    "start": 213,
+    "end": 264,
     "kind": "file",
     "label": "Codex app-server child process and stdio client construction"
   },
@@ -2166,8 +2163,8 @@
   {
     "id": "claude-provider-skills-commands",
     "path": "apps/server/src/provider/Layers/ClaudeProvider.ts",
-    "start": 920,
-    "end": 962,
+    "start": 526,
+    "end": 588,
     "kind": "file",
     "label": "Claude snapshot combines discovered skills and initialization commands"
   },
@@ -2334,16 +2331,16 @@
   {
     "id": "turn-lifecycle-settlement-guards",
     "path": "packages/client-runtime/src/state/threadSettled.ts",
-    "start": 286,
-    "end": 312,
+    "start": 14,
+    "end": 45,
     "kind": "file",
-    "label": "Thread settlement eligibility guards"
+    "label": "queued turn-start guard used by thread lifecycle decisions"
   },
   {
     "id": "turn-lifecycle-waiting-ui-test",
     "path": "apps/web/src/components/chat/ComposerPrimaryActions.test.tsx",
-    "start": 214,
-    "end": 219,
+    "start": 95,
+    "end": 109,
     "kind": "file",
     "label": "Stop action retained while provider waits for input"
   },
@@ -2957,7 +2954,7 @@
   },
   {
     "id": "workbench-terminal-mobile",
-    "path": "apps/mobile/src/features/terminal/ThreadTerminalPanel.tsx",
+    "path": "apps/mobile/src/features/terminal/ThreadTerminalRouteScreen.tsx",
     "start": 31,
     "end": 210,
     "kind": "file",
@@ -3463,7 +3460,7 @@
     "id": "client-connection-resolver",
     "path": "packages/client-runtime/src/connection/resolver.ts",
     "start": 51,
-    "end": 280,
+    "end": 252,
     "kind": "file",
     "label": "Target-specific preparation into a prepared connection"
   },
@@ -3951,7 +3948,7 @@
     "id": "release-server-update-architecture",
     "path": "docs/internals/server-updates.md",
     "start": 1,
-    "end": 99,
+    "end": 58,
     "kind": "file",
     "label": "Stable launcher, reversible trial, database snapshot, and client correlation"
   },
@@ -3991,7 +3988,7 @@
     "id": "telemetry-browser-client-tracing",
     "path": "apps/web/src/observability/clientTracing.ts",
     "start": 16,
-    "end": 133,
+    "end": 125,
     "kind": "file",
     "label": "Web tracer delegates OTLP batches through the selected primary environment"
   },
@@ -4007,7 +4004,7 @@
     "id": "telemetry-resource-architecture",
     "path": "docs/internals/resource-telemetry.md",
     "start": 1,
-    "end": 352,
+    "end": 51,
     "kind": "file",
     "label": "Native resource telemetry topology, demand, retention, and packaging"
   },
@@ -4043,7 +4040,7 @@
     "id": "access-connection-resolver",
     "path": "packages/client-runtime/src/connection/resolver.ts",
     "start": 51,
-    "end": 277,
+    "end": 252,
     "kind": "file",
     "label": "Route-specific target resolution into a common prepared connection"
   },
@@ -4146,10 +4143,8 @@
   {
     "id": "remote-explicit-future-work",
     "path": "docs/internals/remote.md",
-    "start": 223,
-    "end": 229,
     "kind": "file",
-    "label": "Explicitly unbuilt remote endpoint-provider, callback-broker, and multi-environment work"
+    "label": "Current remote endpoint, SSH, Tailscale, and T3 Connect architecture"
   },
   {
     "id": "plan-ui-transition",
@@ -4163,7 +4158,7 @@
     "id": "plan-ui-capability-filter",
     "path": "apps/web/src/providerModels.ts",
     "start": 80,
-    "end": 112,
+    "end": 108,
     "kind": "file",
     "label": "Legacy plan-mode capability filtering before model dispatch"
   },

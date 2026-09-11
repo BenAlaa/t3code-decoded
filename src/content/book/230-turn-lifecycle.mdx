@@ -1,10 +1,10 @@
 ---
 slug: turn-lifecycle
-order: 230
-number: "23"
+order: 380
+number: "38"
 kind: chapter
-part: Part V · The work lifecycle
-partOrder: 5
+part: Part VI · The work lifecycle
+partOrder: 6
 title: Start, stream, steer, interrupt, settle
 shortTitle: Turn lifecycle
 summary: A T3 turn begins as a durably accepted command and later crosses hot reactor and provider-runtime boundaries; session state, output, checkpoints, and client liveness each have narrower guarantees.
@@ -18,7 +18,7 @@ objectives:
 keywords: [thread, turn, lifecycle, receipt, reactor, provider runtime, buffering, interrupt, checkpoint, settlement, liveness]
 sourceAreas: [packages/contracts/src/orchestration.ts, packages/contracts/src/providerRuntime.ts, apps/server/src/orchestration/decider.ts, apps/server/src/orchestration/Layers/ProviderCommandReactor.ts, apps/server/src/orchestration/Layers/ProviderRuntimeIngestion.ts, apps/server/src/orchestration/Layers/CheckpointReactor.ts, apps/server/src/provider/Layers/ProviderService.ts, packages/client-runtime/src/state/threads.ts]
 visuals: [turn lifecycle swimlane, illustrative-control state-machine lab]
-updatedAt: 2026-08-24
+updatedAt: "2026-09-11"
 ---
 
 import Callout from "../../components/Callout.astro";
@@ -137,7 +137,7 @@ The shared client reducer makes the same distinction: a completed assistant
 message does not settle its turn while that turn remains the session's active
 running turn; leaving `running` is the turn-end signal for the client model.
 
-<Figure number="23.1" title="One turn crosses durable and hot lanes repeatedly" hint="solid arrows are durable command paths; dashed arrows are hot provider or reactor paths" caption="The client command commits a user message, a turn-start request, projections, and a receipt together. A hot command reactor later prepares a provider session and sends the turn. A provider adapter emits canonical runtime events; ProviderService correlates them and publishes them hot. Runtime ingestion turns selected events into new durable commands for the session, messages, approvals, and turn data. Checkpoint capture is another asynchronous consumer. Completion is a provider fact folded into session readiness or error; a checkpoint is an additional filesystem-backed result, not the command receipt." textEquivalent="A client starts a turn. The engine durably stores a user message, turn-start request, projections, and accepted receipt. A hot provider reactor starts or resumes a session and sends the turn. The provider emits runtime events. ProviderService correlates them to an instance and hot-publishes them. Runtime ingestion emits later durable commands for session state, assistant messages, approvals, and turn records. A checkpoint reactor independently observes relevant events and records git checkpoints when possible. Provider completion can make the session ready or error; the initial receipt never represents provider completion or checkpoint capture." sources={["turn-lifecycle-start-decider", "turn-lifecycle-engine-commit", "turn-lifecycle-command-reactor", "turn-lifecycle-runtime-correlation", "turn-lifecycle-runtime-guards", "turn-lifecycle-checkpoint-triggers"]}>
+<Figure number="38.1" title="One turn crosses durable and hot lanes repeatedly" hint="solid arrows are durable command paths; dashed arrows are hot provider or reactor paths" caption="The client command commits a user message, a turn-start request, projections, and a receipt together. A hot command reactor later prepares a provider session and sends the turn. A provider adapter emits canonical runtime events; ProviderService correlates them and publishes them hot. Runtime ingestion turns selected events into new durable commands for the session, messages, approvals, and turn data. Checkpoint capture is another asynchronous consumer. Completion is a provider fact folded into session readiness or error; a checkpoint is an additional filesystem-backed result, not the command receipt." textEquivalent="A client starts a turn. The engine durably stores a user message, turn-start request, projections, and accepted receipt. A hot provider reactor starts or resumes a session and sends the turn. The provider emits runtime events. ProviderService correlates them to an instance and hot-publishes them. Runtime ingestion emits later durable commands for session state, assistant messages, approvals, and turn records. A checkpoint reactor independently observes relevant events and records git checkpoints when possible. Provider completion can make the session ready or error; the initial receipt never represents provider completion or checkpoint capture." sources={["turn-lifecycle-start-decider", "turn-lifecycle-engine-commit", "turn-lifecycle-command-reactor", "turn-lifecycle-runtime-correlation", "turn-lifecycle-runtime-guards", "turn-lifecycle-checkpoint-triggers"]}>
   <Mermaid id="turn-lifecycle-swimlane" label="Turn lifecycle across durable and hot boundaries" chart={`flowchart LR
     C[client command] --> E[(message + start intent + receipt)]
     E -. hot domain event .-> R[command reactor]
@@ -217,7 +217,7 @@ provenance; it must not be presented as a new T3 turn, completion, checkpoint,
 or a T3-owned summary artifact.
 
 <Callout title="Compaction is a signal, not an automatic lifecycle reset" tone="info">
-  At this pinned revision, the runtime vocabulary can represent context
+  The runtime vocabulary can represent context
   compaction and ingestion can preserve its observation as activity. The lifecycle
   folding inspected here does not establish a generic “compaction completed the
   turn” rule. Any future product behavior that does so should be explicitly sourced

@@ -1,10 +1,10 @@
 ---
 slug: web-product-surfaces
-order: 310
-number: "31"
+order: 460
+number: "46"
 kind: chapter
-part: "Part VI · Client architectures: shared semantics, platform edges"
-partOrder: 6
+part: "Part VII · Client architectures: shared semantics, platform edges"
+partOrder: 7
 title: One thread, many deliberate projections
 shortTitle: Web product surfaces
 summary: "The composer, timeline, Agents panel, review panel, and sidebar do not own competing thread records. They select and project one canonical environment-scoped thread through different interaction contracts, including optimistic local affordances that must yield to canonical state."
@@ -18,7 +18,7 @@ objectives:
 keywords: [composer, attachment, command, skill, optimistic UI, Agents, work log, review, sidebar, pinning, projection]
 sourceAreas: [apps/web/src/components/chat, apps/web/src/components/AgentsPanel.tsx, apps/web/src/components/DiffPanel.tsx, apps/web/src/components/Sidebar.tsx, packages/client-runtime/src/state]
 visuals: [interactive thread projection lab]
-updatedAt: 2026-08-24
+updatedAt: "2026-09-11"
 ---
 
 import Callout from "../../components/Callout.astro";
@@ -58,7 +58,7 @@ model and modes on the thread. The server's normalizer then owns timestamp,
 workspace, and attachment normalization before dispatch. A successful dispatch
 result names the accepted command/sequence boundary; it is stronger than a local
 button state, but later provider work still crosses the post-commit reactor seam
-described in Chapters 10–12 and 23.
+described in Chapters 25–27 and 38.
 
 <EvidenceClaim kind="verified" title="Composer state is preparation, not durable completion" refs={["turn-lifecycle-web-mode-persist", "turn-normalizer", "turn-lifecycle-command-contract", "dispatch-result", "turn-lifecycle-engine-commit"]}>
   The web persists chosen mode/model before sending a turn; normalization and
@@ -173,7 +173,7 @@ the displayed pin, task, review, and local-view fields to see why a quiet timeli
 and a detailed Agents panel can honestly look different without holding different
 canonical threads.
 
-<Figure number="31.1" title="One canonical thread, six focused projections" hint="change the durable scenario, then compare what each surface consumes and suppresses" caption="Chat, composer, quiet work log, Agents, review, and sidebar select different fields and expose different local controls around one environment-scoped thread identity. The lab separates server-state mutations from view-local state and makes intentional suppression visible; a quiet row is therefore not evidence that its underlying task activity disappeared." textEquivalent="The interactive lab offers three canonical thread scenarios and six product surfaces. For each surface it lists the canonical fields consumed, fields intentionally suppressed, server-state controls, and local-view controls. Chat emphasizes messages and session activity; composer combines a draft with submission controls; the quiet log condenses activity; Agents expands task evidence; review selects checkpoint and diff data; sidebar projects thread identity, pinning, and ordering. All retain the same thread identity and none becomes a second durable transcript." sources={["work-thread-record", "turn-lifecycle-web-mode-persist", "work-web-quiet-timeline", "work-subagent-fold", "checkpoint-web-review-modes", "web-sidebar-optimistic-pinning"]}>
+<Figure number="46.1" title="One canonical thread, six focused projections" hint="change the durable scenario, then compare what each surface consumes and suppresses" caption="Chat, composer, quiet work log, Agents, review, and sidebar select different fields and expose different local controls around one environment-scoped thread identity. The lab separates server-state mutations from view-local state and makes intentional suppression visible; a quiet row is therefore not evidence that its underlying task activity disappeared." textEquivalent="The interactive lab offers three canonical thread scenarios and six product surfaces. For each surface it lists the canonical fields consumed, fields intentionally suppressed, server-state controls, and local-view controls. Chat emphasizes messages and session activity; composer combines a draft with submission controls; the quiet log condenses activity; Agents expands task evidence; review selects checkpoint and diff data; sidebar projects thread identity, pinning, and ordering. All retain the same thread identity and none becomes a second durable transcript." sources={["work-thread-record", "turn-lifecycle-web-mode-persist", "work-web-quiet-timeline", "work-subagent-fold", "checkpoint-web-review-modes", "web-sidebar-optimistic-pinning"]}>
   <ThreadProjectionLab id="canonical-thread-projections" />
 </Figure>
 

@@ -1,3 +1,4 @@
+// Public-branch reconstruction of the validated guide.
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
@@ -88,7 +89,7 @@ test("usage accounting lab preserves two-lane semantics, accessible tables, and 
   assert.match(usage, /@media print[\s\S]*\.usage-static-walkthrough \{ display: block !important; \}/);
 });
 
-test("five-provider matrix keeps discovery, runtime, and historical usage surfaces separate", () => {
+test("six-provider matrix keeps discovery, runtime, and historical usage surfaces separate", () => {
   for (const row of [
     "transport",
     "resume",
@@ -102,7 +103,7 @@ test("five-provider matrix keeps discovery, runtime, and historical usage surfac
     "in-session model switch",
     "failure projection",
   ]) assert.match(normalizationChapter, new RegExp(row));
-  assert.match(normalizationChapter, /An absence cell means no implementation branch was found at this pinned revision/);
+  assert.match(normalizationChapter, /An absence cell means no implementation branch was found/);
   assert.match(normalizationChapter, /absent\/malformed\/wrong-version cursor means no resume/);
   assert.match(normalizationChapter, /provider discovery \(skills\/commands\), live adapter normalization/);
   assert.match(normalizationChapter, /independent transcript scanner/);

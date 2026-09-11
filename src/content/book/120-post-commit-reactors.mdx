@@ -1,10 +1,10 @@
 ---
 slug: post-commit-reactors
-order: 120
-number: "12"
+order: 270
+number: "27"
 kind: chapter
-part: Part III · Transactional domain core and post-commit delivery
-partOrder: 3
+part: Part IV · Transactional domain core and post-commit delivery
+partOrder: 4
 title: Post-commit reactors and the delivery gap
 shortTitle: Post-commit reactors
 summary: Durable intent crosses a non-durable hot-stream seam into independent reactor workers, whose serialized handlers can still fork overlapping provider work and whose progress is not reconstructed after a crash.
@@ -18,7 +18,7 @@ objectives:
 keywords: [reactors, PubSub, side effects, delivery gap, DrainableWorker, provider ingestion, crash recovery]
 sourceAreas: [apps/server/src/orchestration/Layers, apps/server/src/provider/Layers/ProviderService.ts, apps/server/src/serverRuntimeStartup.ts, packages/shared/src/DrainableWorker.ts]
 visuals: [commit publication sequence, crash cursor, reactor topology, worker ownership matrix]
-updatedAt: 2026-08-24
+updatedAt: "2026-09-11"
 ---
 
 import Callout from "../../components/Callout.astro";
@@ -43,7 +43,7 @@ database can say “accepted” while every side-effect subscriber sees nothing.
 
 <SourceExcerpt id="engine-commit-publication" focus={[197, 198, 203, 204, 206, 218, 226, 234, 243, 244, 245, 259]} note="The event append, SQL projection, and accepted receipt share one transaction. The in-memory model swap and PubSub loop occur only after that transaction returns." />
 
-<Figure number="12.1" title="Durable intent crosses a hot delivery seam" hint="the red break is a real process-crash window" caption="A successfully returned dispatch has committed the SQL transaction and completed its publication loop. It does not prove that every subscriber dequeued the event or that a provider accepted work. The inspected paths contain no durable outbox row joining the two halves." textEquivalent="The command worker decides events and commits the event log, SQL projection tables, and accepted receipt in one SQLite transaction. After commit it swaps the in-memory command model and publishes to a hot process-local event bus. Independent reactor workers consume that bus. The provider reactor can fork an external send. Provider runtime events then enter another hot bus, runtime ingestion, and an internal command that returns to the engine. A crash between commit and either hot consumer leaves durable state without a durable pending job in the inspected implementation." sources={["engine-receipt-publication-boundary", "provider-reactor-hot-subscription", "provider-reactor-forked-send", "provider-runtime-publish", "runtime-ingestion-buffer-dispatch"]}>
+<Figure number="27.1" title="Durable intent crosses a hot delivery seam" hint="the red break is a real process-crash window" caption="A successfully returned dispatch has committed the SQL transaction and completed its publication loop. It does not prove that every subscriber dequeued the event or that a provider accepted work. The inspected paths contain no durable outbox row joining the two halves." textEquivalent="The command worker decides events and commits the event log, SQL projection tables, and accepted receipt in one SQLite transaction. After commit it swaps the in-memory command model and publishes to a hot process-local event bus. Independent reactor workers consume that bus. The provider reactor can fork an external send. Provider runtime events then enter another hot bus, runtime ingestion, and an internal command that returns to the engine. A crash between commit and either hot consumer leaves durable state without a durable pending job in the inspected implementation." sources={["engine-receipt-publication-boundary", "provider-reactor-hot-subscription", "provider-reactor-forked-send", "provider-runtime-publish", "runtime-ingestion-buffer-dispatch"]}>
   <Mermaid id="post-commit-delivery-seam" label="Post-commit reactor delivery seam" chart={`flowchart LR
     C[command queue] --> D[decide]
     D --> TX[(event + projections + receipt)]
@@ -70,7 +70,7 @@ command execution; it does not repair the post-commit side-effect bridge.
   subscriptions are fresh streams created from process-local PubSubs. The provider
   reactor explicitly says pending hot-stream work cannot resume. No reactor progress
   row, outbox append beside the command transaction, or startup event-store replay
-  appears in these paths at the pinned revision.
+  appears in these paths.
 </EvidenceClaim>
 
 <DeliveryGapLab />

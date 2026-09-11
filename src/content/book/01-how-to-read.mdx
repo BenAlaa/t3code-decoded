@@ -4,67 +4,85 @@ order: 1
 kind: front
 part: Start here
 partOrder: 0
-title: How to read a changing system
+title: How to read this guide
 shortTitle: Reading guide
-summary: The evidence rules, source labels, revision contract, and reading paths used throughout the book.
+summary: Choose a product, workflow, or architecture route and understand the evidence labels used throughout the book.
 status: source-checked
-gates: [sources]
+gates: [sources, links, editorial]
 objectives:
-  - Distinguish verbatim source, abridged source, diagrams, and interpretation.
-  - Choose a linear, feature-first, or implementation-first reading path.
-  - Understand what the pinned revision does and does not promise.
-keywords: [evidence, source references, revision, reading path]
-sourceAreas: [sources/t3code.lock.json, sources/excerpts.manifest.json]
-visuals: [evidence legend]
-updatedAt: 2026-08-24
+  - Choose the shortest reading path for your goal.
+  - Move from a product task to the implementation that supports it.
+  - Distinguish verified behavior, documented intent, inference, and proposals.
+keywords: [product guide, evidence, source references, reading path]
+sourceAreas: [sources/t3code.lock.json, sources/excerpts.manifest.json, docs/user]
+visuals: [reading routes, evidence legend]
+updatedAt: "2026-09-11"
 ---
 
 import Callout from "../../components/Callout.astro";
-import EvidenceClaim from "../../components/EvidenceClaim.astro";
-import SourceExcerpt from "../../components/SourceExcerpt.astro";
-import SourceSnapshot from "../../components/SourceSnapshot.astro";
+import Mermaid from "../../components/Mermaid.astro";
 
-This is a field guide to a moving codebase. It therefore treats provenance as part of the interface, not a footnote.
+The book has a product path and a technical path. Read them in order for the full
+story, or enter through the task you need to complete.
 
-<SourceSnapshot />
+<Mermaid id="reading-routes" label="Reading routes through the product and technical guides" chart={`flowchart LR
+  G[Your goal] --> P{Need to use T3 Code?}
+  P -->|yes| PG[Product guide\nChapters 1–13]
+  PG --> R[Complete recipes\nand troubleshooting]
+  P -->|understand or extend it| M[System map\nand request trace]
+  M --> T[Technical guide\nChapters 16–53]
+  PG -. product question .-> T`} />
 
-## Four evidence labels
+## Product-first route
 
-1. **Verified behavior** is backed by executable code, a test, schema, migration, or workflow at the pinned revision.
-2. **Documented intent** reports what a maintainer document says without silently upgrading prose into runtime behavior.
-3. **Inference** names a design consequence derived from cited evidence. The sources prove the inputs; the book owns the interpretation.
-4. **Future / proposed** is explicitly unshipped. A builder capability, community request, or future-work paragraph is never called a supported feature.
+Read Chapters 1–13 if you want a complete operating guide. They move from first
+installation to parallel tasks, rich prompts, provider choice, workbench tools,
+source control, remote access, mobile supervision, device testing, personalization,
+usage, updates, and troubleshooting. No architecture knowledge is assumed.
 
-Exact source cards are a separate presentation device. Their code is read directly
-from the locked Git object—not the possibly dirty working tree—and shows real line
-numbers, a visible checksum prefix, and an immutable GitHub permalink.
+## Workflow-first route
 
-<SourceExcerpt id="orchestration-rpc-methods" focus={[27, 28, 34, 35]} note="The book's source cards use the repository's actual line positions. These eight RPC names are the public orchestration surface on the pinned revision, not a reconstructed list." />
+Use Contents or search to jump directly to the relevant product chapter. The final
+product chapter includes complete recipes for local feature work, parallel worktrees,
+remote supervision, pull-request review, and device verification. Follow its links
+backward when a recipe needs setup or a feature decision.
 
-<EvidenceClaim kind="inference" title="Why source lock beats a link to main" refs={["orchestration-rpc-methods"]}>
-  A stable source lock makes an explanation reproducible. It does not make it permanently current; later editions must deliberately refresh and review the evidence.
-</EvidenceClaim>
+## Architecture-first route
 
-## Three reading paths
+Open **The complete system map**, then **One request, every boundary**. Continue with
+Chapter 16 to follow execution ownership, boot, RPC, authorization, the durable
+domain kernel, six providers, work lifecycle, clients, access routes, distribution,
+and operations.
 
-### Linear: follow one task
+## From product questions to technical chapters
 
-Start with **The request trace**, then read the numbered chapters in order. This follows a user action from client state through authenticated RPC, commands, events, provider I/O, checkpoints, and back to every UI.
+| Product question | Technical destination |
+| --- | --- |
+| Why can I close one client and continue elsewhere? | Turn lifecycle, projections, shared client runtime, and reconnect. |
+| Why do providers expose different choices? | ProviderAdapter, provider instances, and the provider-specific chapters. |
+| What exactly does revert restore? | Checkpoints and context ownership. |
+| Why does remote setup belong to one machine? | Environment auth, access transports, and T3 Connect. |
+| How can a simulator run on another host? | Device hosts, targets, sessions, and agent control. |
+| Why can a thread hold several reviews? | Projections, workbench services, and source-control integration. |
 
-### Architecture-first: map then zoom
+## Evidence labels
 
-Open **The complete system map**, choose a layer, and follow its cross-links. This is useful when you already know event sourcing, provider protocols, or Electron/React Native and want the unfamiliar seams.
+1. **Verified behavior** is backed by executable code, a test, schema, migration,
+   or workflow.
+2. **Documented intent** reports what a maintainer document says without turning
+   prose into runtime behavior.
+3. **Inference** names a design consequence derived from cited evidence. The
+   sources prove the inputs; the book owns the interpretation.
+4. **Future / proposed** is explicitly unshipped. A builder capability, community
+   request, or idea is never called a supported feature.
 
-### Transfer-first: design another orchestrator
+Exact source cards are read from the locked Git object and show line numbers,
+checksum prefixes, and immutable permalinks. When documentation and executable
+behavior disagree, the book calls out the discrepancy and follows the executable
+contract for statements about behavior.
 
-Read the ownership model, adapter boundary, domain kernel, connection runtime, and final transfer guide. Those chapters separate reusable patterns from choices that only make sense for T3 Code's bring-your-own-subscription model.
-
-<Callout title="Freshness rule" tone="warning">
-  The live repository moves quickly. A source link with `fa219001d` is intentionally historical and stable. A link to `main` may be newer, but it cannot prove what this edition read. The book prefers reproducibility over silently chasing HEAD.
+<Callout title="Status words" tone="info">
+  **Draft** means the explanation still needs a source pass. **Source checked** means
+  claims and diagrams were reconciled to the locked checkout. **Verified** adds link,
+  interaction, build, and editorial review.
 </Callout>
-
-## Status words
-
-- **Draft**: structured and cited, but still awaiting a second source pass.
-- **Source checked**: claims and diagrams have been reconciled to the pinned checkout.
-- **Verified**: source checked, link checked, and reviewed in the end-to-end narrative.

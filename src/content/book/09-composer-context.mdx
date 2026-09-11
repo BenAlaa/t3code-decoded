@@ -1,0 +1,209 @@
+---
+slug: composer-context
+order: 50
+number: "5"
+kind: chapter
+part: Part I · Product guide
+partOrder: 1
+title: Compose tasks with the right context
+shortTitle: Composer and context
+summary: Write actionable prompts and add files, citations, skills, commands, SnapShots, and follow-up answers without losing drafts or overloading a turn.
+status: source-checked
+gates: [sources, links, interaction, editorial]
+objectives:
+  - Build a task message from goal, constraints, evidence, and finish condition.
+  - Choose the right context mechanism for each kind of information.
+  - Recover and reuse prompts safely across devices and environments.
+keywords: [composer, context, attachments, citations, skills, commands, snapshots, prompts]
+sourceAreas: [docs/user/composer.md, docs/user/question-attachments.md, docs/user/snap-shot.md, docs/user/keybindings.md]
+visuals: [context selection flow]
+updatedAt: "2026-09-11"
+---
+
+import Callout from "../../components/Callout.astro";
+import Mermaid from "../../components/Mermaid.astro";
+
+The composer turns intent into an agent turn. A strong request says what outcome
+you want, names the relevant boundary, supplies evidence the agent cannot infer,
+and defines how to know the work is done. T3 Code then lets you attach different
+kinds of context without flattening everything into pasted prose.
+
+## Build a useful task
+
+A practical message has four parts:
+
+1. **Outcome:** the behavior, answer, or artifact you want.
+2. **Scope:** the project area and what is in or out.
+3. **Evidence and constraints:** files, screenshots, quoted responses, issue text,
+   compatibility needs, or repository instructions.
+4. **Finish condition:** tests, review evidence, file format, or an explicit report.
+
+For example: “Fix the empty search result state in the mobile project. Match the
+attached design and preserve tablet layout. Run the focused component tests and
+report the files changed.” The task is concrete without prescribing an internal
+implementation before the agent inspects the code.
+
+<Mermaid id="context-selection-flow" label="Choose the smallest useful context mechanism" chart={`flowchart TD
+  N[What does the agent need?] --> F{A file or media asset?}
+  F -->|yes| A[Attach or paste it]
+  F -->|no| R{Exact part of an earlier response?}
+  R -->|yes| C[Cite selected text]
+  R -->|no| V{Another app window is the evidence?}
+  V -->|yes| S[Capture a SnapShot on desktop]
+  V -->|no| K{Reusable provider workflow?}
+  K -->|yes| SK[Select a skill with dollar]
+  K -->|no| M{Provider or T3 operation?}
+  M -->|yes| CMD[Select a slash command]
+  M -->|no| P[Write it directly in the prompt]
+  A --> Q[Review task, model, and permission mode]
+  C --> Q
+  S --> Q
+  SK --> Q
+  CMD --> Q
+  P --> Q
+  Q --> SEND[Send when uploads finish]`} />
+
+## Attach files and media
+
+Each message accepts up to eight files. Images may be up to 10 MB and other files
+up to 50 MB, subject to the selected environment's upload support and limit.
+Uploads start immediately but the message cannot send until all finish. Retry or
+remove a failed upload.
+
+Web and desktop accept dragged or pasted images. HEIC and HEIF photos become JPEG
+in those clients and when selected from iOS; the size limit applies after
+conversion. Mobile also accepts files through the system share sheet.
+
+Attachments upload to the environment machine. That matters for two reasons:
+
+- a remote provider receives environment-side paths, not paths on your phone;
+- a stash containing uploaded files can only be restored in its original
+  environment.
+
+Mobile keeps local draft attachments and queued messages through disconnects and
+app restarts, then resumes uploads. Signing out of T3 Connect keeps that work on
+the device, but it is restored only after signing back into the same account. On
+web and desktop, reloading during an upload means attaching that file again.
+
+### Preview and keep message files
+
+Select an image or video to preview it. On web and desktop, its context menu can
+save the media or copy its path or URL; on mobile, touch and hold to save or share.
+Playback support depends on the client, so save a video when its format cannot play
+in place. A linked environment file remains the original file: moving or deleting
+it can break the preview.
+
+Agent links can open files outside the workspace read-only. An outside-workspace
+HTML file cannot load neighboring scripts, styles, or images. Web and desktop can
+render HTML and PDF; switch HTML to source when markup matters, and a line link
+opens source automatically. Rendered HTML cannot access the T3 Code session.
+Mobile opens PDFs through the native iOS viewer or Android's system chooser.
+
+## Cite, recall, or stash instead of rewriting
+
+On web and desktop, select text inside one assistant response and choose **Cite in
+composer**. Add a comment explaining what should change. The quote remains readable
+even if its source later becomes unavailable; selecting it navigates back when the
+source still exists. Mobile displays citations but does not create them.
+
+Press `ArrowUp` in an empty composer to recall sent prompt text in the current
+thread, and `ArrowDown` to move forward. Recall restores only typed text—not
+attachments, terminal context, or other extras. Once you edit recalled text it
+becomes a normal draft.
+
+Use `Cmd+S` or `Ctrl+S` on web/desktop to stash the current prompt and attachments.
+With an empty composer, the shortcut restores one stash or opens the stash menu.
+Uploaded files remain available for 24 hours; after expiry, restore the text and
+attach the missing file again.
+
+<Callout title="A saved prompt is not a portable upload" tone="warning">
+  Text can be reused broadly, but an uploaded file belongs to the environment that
+  received it and expires from a stash after 24 hours. Keep the source file if the
+  task may move machines or wait longer.
+</Callout>
+
+## Use commands and skills
+
+Type `/` to open commands and `$` to select a skill available for the chosen
+environment and provider. Mobile exposes both on **New task** as well.
+
+Provider-native commands must begin the message. T3 Code commands such as
+`/model` and `/plan`, plus skill mentions, can appear on any line. `/compact`
+reduces context for a supported existing conversation; web and desktop also expose
+this action from the context meter.
+
+Skills are best for repeatable procedures with their own instructions or tools.
+Choose one when the task matches it; do not add skills merely because they are
+available. Provider configuration controls which skills appear, and provider rules
+can affect whether several named skills run in one message. Provider-specific skill
+rules are collected in [Choose providers, models, accounts, and permissions](../providers-models-permissions/).
+
+## Dictate a draft on iPhone
+
+On a supported iPhone with iOS 26 or later, choose the microphone, record for up to
+five minutes, and confirm to transcribe. The text is inserted at the selection you
+had when recording began; review names, paths, and commands before sending.
+
+The first use may download Apple's speech model and needs a network connection.
+Later transcription for that language runs on the device and can work offline.
+Canceling, leaving the screen, or an audio interruption discards the recording but
+keeps the existing draft. T3 Code deletes temporary audio after transcription or
+cancellation; the submitted message contains the text.
+
+## Capture visual context with SnapShots
+
+The desktop app can capture another application window and attach the image to the
+current draft. A SnapShot carries the app name and window title and can include
+accessibility text, controls, and element positions. That richer context helps an
+agent reason about an error dialog or target interface beyond raw pixels.
+
+Enable **Settings → SnapShots**, grant platform permissions, and choose a global
+shortcut. The default on macOS and Windows is both Shift keys. Switch to the target
+window and press the shortcut; T3 Code attaches the capture and returns to the
+draft. Captures persist on disk until attached, so closing the app during handoff
+does not necessarily lose them.
+
+Turn **Include app text** off when the screenshot alone is appropriate. Accessible
+content varies by application, and T3 Code falls back to the image if an app is too
+slow. SnapShots support macOS, Windows, and Wayland Linux; X11 is unsupported and
+individual Wayland desktops have different setup requirements.
+
+## Answer questions without disturbing the main draft
+
+When an agent asks a question with custom input, its answer can include up to eight
+attachments across the answer set. Each question keeps its own files, separate from
+the normal composer draft. Files upload to the thread's environment and remain in
+history after submission. Questions restricted to fixed choices do not accept
+attachments.
+
+A failed response keeps its answer draft so you can retry. Reverting a thread
+removes files attached to discarded answers; deleting the thread applies the same
+cleanup as other message attachments. If attachment controls do not appear on a
+custom-answer question, update the environment server.
+
+This is useful when the agent discovers missing evidence mid-turn: attach the
+failing screenshot or sample document directly to the question rather than canceling
+the task and rebuilding the main prompt.
+
+## Context hygiene for long-running work
+
+- Start a new thread for a separate task; context relevance usually matters more
+  than conversation length.
+- Use a follow-up in the same thread when it depends on its decisions and changes.
+- Cite the exact disputed sentence instead of pasting a whole response.
+- Attach source evidence; summarize what the agent should learn from it.
+- Compact a supported long conversation when the context meter or provider suggests
+  it, then restate any constraint that must survive summarization.
+- Remember that links to environment files can break if those files move or are
+  deleted. Save durable artifacts inside the project when appropriate.
+
+Messages support up to 120,000 characters. An oversized draft stays in the composer
+so you can split it. Several focused turns are usually easier to review than one
+message that combines unrelated work.
+
+### Source trail
+
+Sources: [messages and context](https://github.com/pingdotgg/t3code/blob/859304b7808ab9a4be87b1bddcd07c6485bf9c4f/docs/user/composer.md),
+[question attachments](https://github.com/pingdotgg/t3code/blob/859304b7808ab9a4be87b1bddcd07c6485bf9c4f/docs/user/question-attachments.md),
+[SnapShots](https://github.com/pingdotgg/t3code/blob/859304b7808ab9a4be87b1bddcd07c6485bf9c4f/docs/user/snap-shot.md), and
+[keybindings](https://github.com/pingdotgg/t3code/blob/859304b7808ab9a4be87b1bddcd07c6485bf9c4f/docs/user/keybindings.md).

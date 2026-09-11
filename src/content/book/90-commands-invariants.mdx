@@ -1,10 +1,10 @@
 ---
 slug: commands-invariants
-order: 90
-number: "9"
+order: 240
+number: "24"
 kind: chapter
-part: Part III · Transactional domain core and post-commit delivery
-partOrder: 3
+part: Part IV · Transactional domain core and post-commit delivery
+partOrder: 4
 title: Commands, invariants, and the boundary of atomicity
 shortTitle: Commands and invariants
 summary: Client commands are authenticated and normalized before a serialized, Effectful decider plans events; an existing-thread turn commits atomically, while first-turn bootstrap is a WebSocket saga with narrower compensation.
@@ -18,7 +18,7 @@ objectives:
 keywords: [commands, invariants, normalization, decider, aggregate, transaction, bootstrap, compensation]
 sourceAreas: [packages/contracts/src/orchestration.ts, apps/server/src/orchestration/Normalizer.ts, apps/server/src/orchestration/decider.ts, apps/server/src/orchestration/Layers/OrchestrationEngine.ts, apps/server/src/ws.ts, apps/server/src/orchestration/http.ts]
 visuals: [command boundary map, existing-turn event batch, bootstrap saga, failure-position explorer]
-updatedAt: 2026-08-24
+updatedAt: "2026-09-11"
 ---
 
 import Callout from "../../components/Callout.astro";
@@ -78,7 +78,7 @@ internal commands enter the engine's command union.
 
 ## The full command boundary
 
-<Figure number="9.1" title="Decision is before the SQL transaction" hint="solid arrows are synchronous; dashed arrows cross trust or delivery boundaries" caption="A client command is authorized and normalized before it joins trusted internal commands at the serialized engine queue. Receipt lookup and domain decision happen before the transaction. The transaction commits events, synchronous projections, and the accepted receipt together; in-memory folding and hot publication happen afterward." textEquivalent="An authenticated client command passes schema and scope checks, then normalization. Trusted internal commands enter through a separate boundary. Both reach one serialized command queue. The engine first checks a command receipt. A receipt hit returns its stored outcome. On a miss, an Effectful decider reads the in-memory command model and plans one or more events. Only after decision does one SQL transaction append those events, update synchronous projections, and save an accepted receipt. After commit, the engine replaces its in-memory model and publishes each event to an in-memory PubSub. The last sequence is returned only after that publication loop. Reactors consume the hot events asynchronously." sources={["command-union-boundary", "normalizer-staging-boundary", "event-engine-runtime", "orchestration-dispatch", "decider-effect-dependencies", "engine-commit-publication", "command-receipt-handling"]}>
+<Figure number="24.1" title="Decision is before the SQL transaction" hint="solid arrows are synchronous; dashed arrows cross trust or delivery boundaries" caption="A client command is authorized and normalized before it joins trusted internal commands at the serialized engine queue. Receipt lookup and domain decision happen before the transaction. The transaction commits events, synchronous projections, and the accepted receipt together; in-memory folding and hot publication happen afterward." textEquivalent="An authenticated client command passes schema and scope checks, then normalization. Trusted internal commands enter through a separate boundary. Both reach one serialized command queue. The engine first checks a command receipt. A receipt hit returns its stored outcome. On a miss, an Effectful decider reads the in-memory command model and plans one or more events. Only after decision does one SQL transaction append those events, update synchronous projections, and save an accepted receipt. After commit, the engine replaces its in-memory model and publishes each event to an in-memory PubSub. The last sequence is returned only after that publication loop. Reactors consume the hot events asynchronously." sources={["command-union-boundary", "normalizer-staging-boundary", "event-engine-runtime", "orchestration-dispatch", "decider-effect-dependencies", "engine-commit-publication", "command-receipt-handling"]}>
   <Mermaid id="command-boundary-map" label="T3 Code command boundary from client admission to post-commit reactors" chart={`flowchart LR
     C[client command] --> A[schema + scope]
     A --> N[normalize + stage]
@@ -130,7 +130,7 @@ That placement has two consequences:
 <Callout title="Atomic command does not mean atomic filesystem" tone="warning">
   “Atomic” in the existing-turn path refers to the SQL event, projection, and
   receipt writes. It does not include normalization-time directories and attachment
-  bytes. Chapter 13 maps file retention and cleanup in detail.
+  bytes. Chapter 28 maps file retention and cleanup in detail.
 </Callout>
 
 ## The decider is isolated, but not a deterministic pure function
@@ -206,7 +206,7 @@ setup script, and then start the turn. Those operations cannot share the
 existing-turn transaction: Git and process launch are external effects, and several
 domain subcommands each commit independently.
 
-<Figure number="9.2" title="Bootstrap crosses four commit classes" hint="Tx labels are independent command receipts, not savepoints" caption="Only WebSocket dispatch interprets the bootstrap payload as a saga. Thread creation, metadata update, and final turn start are separately receipted domain commands around Git and setup effects. A later non-interruption failure can dispatch thread.delete, but that compensation does not undo the worktree." textEquivalent="A WebSocket client sends a turn-start command with bootstrap data. After normalization, the WebSocket handler may dispatch thread.create as SQL transaction A with a server-generated command id. It can then fetch and create a Git worktree outside SQL. It dispatches thread.meta.update as SQL transaction B, refreshes Git status, and optionally launches a setup script outside SQL. Setup launch failure is recorded best effort and the saga continues. The handler strips bootstrap data and dispatches the final thread.turn.start as SQL transaction C using the outer command id. If a later non-interruption failure occurs after this saga created the thread, it dispatches thread.delete as compensation transaction D. The compensation tombstones domain state but contains no Git-worktree removal." sources={["bootstrap-saga-full", "bootstrap-command-path", "turn-atomic-batch", "engine-commit-publication"]}>
+<Figure number="24.2" title="Bootstrap crosses four commit classes" hint="Tx labels are independent command receipts, not savepoints" caption="Only WebSocket dispatch interprets the bootstrap payload as a saga. Thread creation, metadata update, and final turn start are separately receipted domain commands around Git and setup effects. A later non-interruption failure can dispatch thread.delete, but that compensation does not undo the worktree." textEquivalent="A WebSocket client sends a turn-start command with bootstrap data. After normalization, the WebSocket handler may dispatch thread.create as SQL transaction A with a server-generated command id. It can then fetch and create a Git worktree outside SQL. It dispatches thread.meta.update as SQL transaction B, refreshes Git status, and optionally launches a setup script outside SQL. Setup launch failure is recorded best effort and the saga continues. The handler strips bootstrap data and dispatches the final thread.turn.start as SQL transaction C using the outer command id. If a later non-interruption failure occurs after this saga created the thread, it dispatches thread.delete as compensation transaction D. The compensation tombstones domain state but contains no Git-worktree removal." sources={["bootstrap-saga-full", "bootstrap-command-path", "turn-atomic-batch", "engine-commit-publication"]}>
   <Mermaid id="bootstrap-saga" label="WebSocket first-turn bootstrap saga and compensating delete" chart={`flowchart TD
     W[WS turn.start + bootstrap] --> N[normalize]
     N --> A[Tx A: thread.create]
@@ -235,7 +235,7 @@ The saga's real boundaries are easy to miss:
 <EvidenceClaim kind="inference" title="Bootstrap compensation does not remove Git state" refs={["bootstrap-saga-full"]}>
   The compensation function dispatches <code>thread.delete</code>. The shown failure
   path contains no worktree or branch removal. That is an absence-of-code inference
-  at the pinned revision, not a promise that future cleanup will remain narrow.
+  in the implementation, not a promise that future cleanup will remain narrow.
 </EvidenceClaim>
 
 <EvidenceClaim kind="verified" title="Bootstrap behavior is not transport-neutral" refs={["bootstrap-saga-full", "ws-dispatch-handler", "orchestration-http-snapshots"]}>
@@ -264,7 +264,7 @@ state exists. Move the boundary and compare what survives.
 The durable unit is deliberately small: an accepted engine command and its event
 batch. Everything before it can leave staging residue; everything after it can miss
 hot delivery; and the bootstrap path composes several such units with external
-effects. Chapter 10 now examines the receipt and publication windows inside that
+effects. Chapter 25 examines the receipt and publication windows inside that
 unit.
 
 <SourceList ids={[

@@ -1,3 +1,4 @@
+
 .callout {
   position: relative;
   margin: 30px 0;
@@ -252,6 +253,7 @@ html:not(.js) .mermaid,
 .evidence-claim-body > :last-child { margin-bottom: 0; }
 .evidence-claim-sources { display: grid; gap: 5px; padding: 10px 15px 13px; border-top: 1px solid var(--line); font: 500 9px/1.35 var(--font-ui); }
 .evidence-claim-sources a { overflow-wrap: anywhere; color: var(--signal-deep); text-decoration: none; }
+
 
 .scenario-lab { margin: 34px 0; overflow: hidden; border: 1px solid var(--line); border-radius: 13px; background: var(--paper-raised); }
 .scenario-head { padding: 18px 20px 13px; }

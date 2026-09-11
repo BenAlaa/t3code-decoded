@@ -1,10 +1,10 @@
 ---
 slug: repository-atlas
-order: 30
-number: "3"
+order: 180
+number: "18"
 kind: chapter
-part: Part I · Boundaries and vocabulary
-partOrder: 1
+part: Part II · Boundaries and vocabulary
+partOrder: 2
 title: Repository and dependency atlas
 shortTitle: Repository atlas
 summary: The monorepo is a product graph—five apps, shared contracts and runtime packages, protocol bridges, remote infrastructure, native modules, and release machinery.
@@ -17,7 +17,7 @@ objectives:
 keywords: [monorepo, packages, apps, dependencies, build graph, inventory]
 sourceAreas: [apps, packages, infra, native, scripts, pnpm-workspace.yaml]
 visuals: [monorepo dependency flow, package atlas, reproducible inventory]
-updatedAt: 2026-08-24
+updatedAt: "2026-09-11"
 ---
 
 import Callout from "../../components/Callout.astro";
@@ -65,7 +65,7 @@ are excluded; generated protocol source remains part of the implementation surfa
 
 ## Dependency is not the same as deployment
 
-<Figure number="3.1" title="Typed product graph" hint="solid: package/build · dotted: separately deployed control plane" caption="This deliberately heterogeneous map distinguishes shared-package imports and build/copy edges from the relay's separately deployed control-plane relationship. The npm server package copies the already-built web output as static assets." textEquivalent="Contracts feed the server, shared client runtime, web, desktop, and mobile by package dependency. The client runtime feeds web and mobile. Web has a build-order and copy edge into the server distribution and also becomes the Electron renderer and hosted app. The server and web are packaged into local CLI and desktop shapes. Relay infrastructure is separately deployed and connected by a control-plane relationship, not a package dependency." sources={["pnpm-workspace", "contracts-package", "client-runtime-package", "cli-build-dependency", "cli-web-bundle", "desktop-package", "mobile-package"]}>
+<Figure number="18.1" title="Typed product graph" hint="solid: package/build · dotted: separately deployed control plane" caption="This deliberately heterogeneous map distinguishes shared-package imports and build/copy edges from the relay's separately deployed control-plane relationship. The npm server package copies the already-built web output as static assets." textEquivalent="Contracts feed the server, shared client runtime, web, desktop, and mobile by package dependency. The client runtime feeds web and mobile. Web has a build-order and copy edge into the server distribution and also becomes the Electron renderer and hosted app. The server and web are packaged into local CLI and desktop shapes. Relay infrastructure is separately deployed and connected by a control-plane relationship, not a package dependency." sources={["pnpm-workspace", "contracts-package", "client-runtime-package", "cli-build-dependency", "cli-web-bundle", "desktop-package", "mobile-package"]}>
   <Mermaid id="typed-product-graph" label="T3 Code monorepo build dependency graph" chart={`flowchart LR
     C[packages/contracts] --> S[apps/server]
     C --> R[packages/client-runtime]

@@ -1,10 +1,10 @@
 ---
 slug: codex-app-server-json-rpc
-order: 160
-number: "16"
+order: 310
+number: "31"
 kind: chapter
-part: Part IV · Five harnesses, one product model
-partOrder: 4
+part: Part V · Six providers, one product model
+partOrder: 5
 title: Codex through app-server JSON-RPC
 shortTitle: Codex app-server
 summary: Codex runs as a local app-server child speaking typed JSON-RPC over stdio; T3 translates its volatile native requests and notifications into canonical runtime events without making provider delivery durable.
@@ -14,7 +14,7 @@ objectives: [Trace the Codex process and JSON-RPC lifecycle, Distinguish native 
 keywords: [Codex, app-server, JSON-RPC, stdio, resume, approvals, plans, token usage]
 sourceAreas: [packages/effect-codex-app-server/src, apps/server/src/provider/Layers/CodexAdapter.ts]
 visuals: [Codex JSON-RPC normalization flow, native-to-canonical boundary ledger]
-updatedAt: 2026-08-24
+updatedAt: "2026-09-11"
 ---
 
 import Callout from "../../components/Callout.astro";
@@ -40,7 +40,7 @@ incoming server requests to handlers, and fails pending work when the stream end
 Spawn, process-exit, protocol, transport, and native request failures stay typed
 until the adapter maps them into T3’s shared provider-error taxonomy.
 
-<Figure number="16.1" title="Codex native protocol becomes a canonical event stream" hint="the lower hot-stream edge is not a transaction" caption="T3 spawns a Codex app-server child and initializes a typed stdio JSON-RPC client. A session runtime starts or resumes a native thread and sends turns. Native notifications and server requests are normalized by the adapter, then runtime ingestion dispatches internal commands whose successful transactions become durable orchestration state." textEquivalent="A Codex app-server child communicates over JSON-RPC stdio. The Codex runtime starts or resumes a native thread, sends or interrupts turns, reads or rolls back a thread, and responds to approval or input requests. The adapter maps selected native observations into an in-memory canonical provider-event stream. Runtime ingestion dispatches internal commands. Only the resulting event, projection, and receipt transaction is durable; the child, pending map, adapter queue, and hot stream are process-local." sources={["codex-app-server-client-typed-stdio", "codex-app-server-protocol-lifecycle", "codex-adapter-session-runtime", "provider-runtime-ingestion"]}>
+<Figure number="31.1" title="Codex native protocol becomes a canonical event stream" hint="the lower hot-stream edge is not a transaction" caption="T3 spawns a Codex app-server child and initializes a typed stdio JSON-RPC client. A session runtime starts or resumes a native thread and sends turns. Native notifications and server requests are normalized by the adapter, then runtime ingestion dispatches internal commands whose successful transactions become durable orchestration state." textEquivalent="A Codex app-server child communicates over JSON-RPC stdio. The Codex runtime starts or resumes a native thread, sends or interrupts turns, reads or rolls back a thread, and responds to approval or input requests. The adapter maps selected native observations into an in-memory canonical provider-event stream. Runtime ingestion dispatches internal commands. Only the resulting event, projection, and receipt transaction is durable; the child, pending map, adapter queue, and hot stream are process-local." sources={["codex-app-server-client-typed-stdio", "codex-app-server-protocol-lifecycle", "codex-adapter-session-runtime", "provider-runtime-ingestion"]}>
   <Mermaid id="codex-app-server-normalization" label="Codex app-server JSON-RPC normalization flow" chart={`flowchart LR
     O[durable turn-start intent] --> R[provider command reactor]
     R --> A[Codex adapter]

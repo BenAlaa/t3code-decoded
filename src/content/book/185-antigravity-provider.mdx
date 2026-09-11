@@ -1,0 +1,119 @@
+---
+slug: antigravity-provider
+order: 335
+number: "33A"
+kind: chapter
+part: Part V · Six providers, one product model
+partOrder: 5
+title: Antigravity through ACP, managed auth, and account catalogs
+shortTitle: Antigravity provider
+summary: How T3 Code turns Antigravity's managed runtime, Google authentication, ACP extensions, attachments, skills, and subagent batches into the shared product model.
+status: source-checked
+gates: [sources, links, interaction, editorial]
+objectives:
+  - Separate Antigravity installation, authentication, ACP transport, and session state.
+  - Trace an account sign-in and a turn through their distinct boundaries.
+  - Identify capability differences that the shared UI must preserve.
+keywords: [Antigravity, ACP, Google auth, Gemini, provider adapter, attachments, subagents]
+sourceAreas: [apps/server/src/provider/Layers/AntigravityAdapter.ts, apps/server/src/provider/acp, docs/user/providers-antigravity.md]
+visuals: [Antigravity control and runtime lanes, capability table]
+updatedAt: "2026-09-11"
+---
+
+import Callout from "../../components/Callout.astro";
+import Mermaid from "../../components/Mermaid.astro";
+
+Antigravity is the sixth built-in provider. Calling it “another ACP adapter” misses
+most of the design. ACP carries session traffic, but installation, Google account
+authentication, callback recovery, model discovery, usage limits, attachments,
+skills, and subagent presentation each cross a separate boundary.
+
+## Four boundaries, one provider card
+
+<Mermaid id="antigravity-boundaries" label="Antigravity control and runtime boundaries" chart={`flowchart LR
+  UI[Provider settings] --> I[Managed runtime\ninstallation and version]
+  UI --> AU[Auth controller\nGoogle · ADC · API key]
+  AU --> CB[Browser callback\nor pasted code]
+  AU --> AC[Saved account access]
+  AC --> CAT[Account model catalog\nand usage limits]
+  UI --> T[Start thread]
+  T --> AD[AntigravityAdapter]
+  AD --> ACP[ACP session transport]
+  ACP --> AG[Antigravity runtime]
+  AG --> EV[Native events]
+  EV --> AD
+  AD --> OR[Canonical T3 events]
+  OR --> CL[Web · desktop · mobile]`} />
+
+The driver constructs the configured instance and its presentation. The provider
+snapshot reports installation, account status, models, commands, skills, and limits.
+The adapter owns live sessions and translates native ACP events. Orchestration owns
+the durable T3 thread. A healthy provider snapshot does not prove a particular
+thread’s native session is still alive.
+
+## Authentication is not environment pairing
+
+Environment pairing answers “may this client control the T3 server?” Antigravity
+authentication answers “which Google or API-backed account may this provider use?”
+The web or desktop client asks the server’s provider-auth service to begin sign-in.
+Google normally returns to a loopback callback. When the browser is on another
+device, the user can paste the final callback URL or code so the environment that
+owns the provider finishes the exchange.
+
+The supported sign-in shapes are Google account, Application Default Credentials,
+Gemini API key, and Vertex AI configuration. Their credentials and available models
+are different, so the provider snapshot must come from the configured environment
+and account rather than a static global list.
+
+## Models and capabilities stay account-shaped
+
+Antigravity uses the account catalog and does not support T3 Code custom models. A
+resumed thread keeps its selected model; if the account later loses access, the user
+must choose an available model before continuing. Planning uses Antigravity’s native
+`/plan` command rather than T3’s separate Plan mode.
+
+| Capability | Antigravity behavior | Product consequence |
+| --- | --- | --- |
+| Permissions | Native ACP permission requests are normalized | The UI presents shared choices without claiming identical provider policy. |
+| Attachments | Images, PDFs, text, and supported audio with provider limits | T3 validates and translates before session input. |
+| Skills | User skills are discovered from the Gemini home | Availability belongs to the selected provider instance. |
+| Subagents | Child activity arrives in batches | The client shows the batch; it cannot open or steer every child independently. |
+| Rewind | Provider conversation rewind is unavailable | A filesystem checkpoint must not pretend it also rolled back native context. |
+| Models | Account-discovered catalog | Refresh after account or entitlement changes. |
+
+<Callout title="The adapter preserves differences" tone="warning">
+  A shared composer does not imply a least-common-denominator runtime. T3 Code
+  normalizes what can be represented honestly and keeps unsupported operations
+  unavailable. Antigravity’s missing rewind and custom-model paths are visible
+  capability decisions, not errors to hide behind another provider’s behavior.
+</Callout>
+
+## Session and event path
+
+Starting a thread resolves the exact provider instance, model, working directory,
+mode, attachments, and runtime instructions. The adapter starts or resumes its ACP
+session and consumes native updates. Text, tool calls, permissions, questions,
+plans, usage, errors, and batched child activity become canonical provider events.
+Those observations re-enter orchestration, update projections, and stream to every
+client that follows the thread.
+
+Attachment preparation enforces Antigravity’s own sizes and supported formats. The
+current user contract documents 1 MiB per text file, 10 MiB per image, 20 MiB per
+audio clip, and 50 MiB total per message. Workspace visibility and provider input
+support are separate checks: a file visible in T3 Code is not automatically valid
+provider input.
+
+## Recovery model
+
+Google sign-in is persisted across server restarts. Provider status can be refreshed
+from Settings or mobile thread settings to reload access, models, skills, and limits.
+A live thread still depends on ACP continuation data and the exact configured
+instance. Losing a native session, removing the instance, changing account access,
+and reverting Git state are four different events and require different recovery.
+
+### Current source trail
+
+- [Antigravity adapter](https://github.com/pingdotgg/t3code/blob/859304b7808ab9a4be87b1bddcd07c6485bf9c4f/apps/server/src/provider/Layers/AntigravityAdapter.ts)
+- [ACP support](https://github.com/pingdotgg/t3code/blob/859304b7808ab9a4be87b1bddcd07c6485bf9c4f/apps/server/src/provider/acp/AntigravityAcpSupport.ts)
+- [Authentication support](https://github.com/pingdotgg/t3code/blob/859304b7808ab9a4be87b1bddcd07c6485bf9c4f/apps/server/src/provider/antigravityAuthSupport.ts)
+- [Product guide](https://github.com/pingdotgg/t3code/blob/859304b7808ab9a4be87b1bddcd07c6485bf9c4f/docs/user/providers-antigravity.md)

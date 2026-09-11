@@ -1,10 +1,10 @@
 ---
 slug: threads-and-work-items
-order: 250
-number: "25"
+order: 400
+number: "40"
 kind: chapter
-part: Part V · The work lifecycle
-partOrder: 5
+part: Part VI · The work lifecycle
+partOrder: 6
 title: Threads, provider tasks, plans, skills, and subagents
 shortTitle: Threads and work items
 summary: A T3 thread is the durable work record. Provider task and subagent activity is normalized into activities and roster projections; high-frequency progress and usage streams are bounded, while liveness and plan progress stay explicitly ephemeral.
@@ -18,7 +18,7 @@ objectives:
 keywords: [thread, work item, task, subagent, workflow, liveness, plan progress, pin, snooze, work log]
 sourceAreas: [packages/contracts/src/orchestration.ts, apps/server/src/orchestration, packages/client-runtime/src/state/subagentRuntime.ts, apps/web/src/components, apps/mobile/src/features/threads]
 visuals: [interactive work-log projector, durable and ephemeral state map]
-updatedAt: 2026-08-24
+updatedAt: "2026-09-11"
 ---
 
 import Callout from "../../components/Callout.astro";
@@ -98,14 +98,14 @@ roster merely because their task type looks agent-like.
 
 <SourceExcerpt id="work-task-usage-contract" focus={[477, 480, 486, 493, 504, 519, 527, 533, 539]} note="The shared contract defines typed per-task usage and a denylist-based agent/background classifier; provider type-name drift is expected." />
 
-Codex and Claude have concrete task normalization paths in the pinned source.
+Codex and Claude have concrete task normalization paths.
 Codex turns collaboration-agent notifications into task lifecycle/progress events.
 Claude maps SDK task, workflow, and member progress messages into task events,
 including typed usage when present. This audit does not establish equivalent
 task-rollup coverage for Cursor, Grok, or OpenCode; absence here is an evidence
 boundary, not a claim they can never support it.
 
-<Figure number="25.1" title="Provider tasks become thread evidence, then surface-specific views" hint="progress and usage are bounded latest-state streams; lifecycle events retain provider ids" caption="Codex and Claude normalize native task observations into the shared runtime vocabulary. Runtime ingestion stamps task linkage and writes thread activities; progress, typed usage, and agent tool heartbeats use stable latest-state ids, while start/update/completion keep provider event ids. Clients fold retained activity into a web Agents roster and surface-specific quiet views. In parallel, the server updates in-memory background liveness and plan progress. Those ephemeral services are read for current status but are not a second durable task projection." textEquivalent="Native Codex or Claude task signals pass through provider adapters into canonical task events. Runtime ingestion creates thread activities. Progress, usage, and agent tool heartbeat streams use stable latest-state identifiers; lifecycle start, update, and completion retain provider event identifiers. The web Agents panel and web/mobile work logs derive different views from those activities. A separate branch updates in-memory liveness and plan progress, which disappear on restart or settlement according to service rules." sources={["codex-task-normalization", "claude-task-event-lifecycle", "work-task-linkage-ingestion", "work-task-stable-streams", "work-subagent-fold", "work-web-quiet-timeline", "work-mobile-quiet-timeline", "work-task-live-services"]}>
+<Figure number="40.1" title="Provider tasks become thread evidence, then surface-specific views" hint="progress and usage are bounded latest-state streams; lifecycle events retain provider ids" caption="Codex and Claude normalize native task observations into the shared runtime vocabulary. Runtime ingestion stamps task linkage and writes thread activities; progress, typed usage, and agent tool heartbeats use stable latest-state ids, while start/update/completion keep provider event ids. Clients fold retained activity into a web Agents roster and surface-specific quiet views. In parallel, the server updates in-memory background liveness and plan progress. Those ephemeral services are read for current status but are not a second durable task projection." textEquivalent="Native Codex or Claude task signals pass through provider adapters into canonical task events. Runtime ingestion creates thread activities. Progress, usage, and agent tool heartbeat streams use stable latest-state identifiers; lifecycle start, update, and completion retain provider event identifiers. The web Agents panel and web/mobile work logs derive different views from those activities. A separate branch updates in-memory liveness and plan progress, which disappear on restart or settlement according to service rules." sources={["codex-task-normalization", "claude-task-event-lifecycle", "work-task-linkage-ingestion", "work-task-stable-streams", "work-subagent-fold", "work-web-quiet-timeline", "work-mobile-quiet-timeline", "work-task-live-services"]}>
   <Mermaid id="provider-task-projections" label="Provider tasks through durable and ephemeral projections" chart={`flowchart LR
     N[native task / subagent] --> A[provider adapter]
     A -. canonical task event .-> I[runtime ingestion]
@@ -137,11 +137,11 @@ For Codex and Claude task data, the normalizer can roll up per-task `totalTokens
 input/cache/output/reasoning fields, `toolUses`, and `durationMs` when typed usage
 supplies them. These are task-local, provider-observed rollups. They are not invoice
 records. **Inference from the separate ingestion paths:** they do not feed either
-Chapter 20 lane; neither the live thread-context meter nor the transcript-scan
+Chapter 35 lane; neither the live thread-context meter nor the transcript-scan
 historical usage total consumes this task rollup.
 
-<Callout title="Do not join these token columns to Chapter 20" tone="info">
-  Chapter 20’s live lane selects one context-window snapshot for a thread; its
+<Callout title="Do not join these token columns to Chapter 35" tone="info">
+  Chapter 35’s live lane selects one context-window snapshot for a thread; its
   historical lane scans selected Codex and Claude transcript homes. Task usage is
   activity payload for an Agents/work-log projection. No common accumulator joins
   those three measurements in the pinned implementation.
@@ -151,7 +151,7 @@ historical usage total consumes this task rollup.
   The inspected task path terminates in activity payloads and the Agents fold. The
   live context path admits <code>thread.token-usage.updated</code>, while historical
   accounting reads provider transcript sources. No inspected accumulator joins the
-  task rollup into either Chapter 20 total; that negative conclusion is bounded to
+  task rollup into either Chapter 35 total; that negative conclusion is bounded to
   these concrete paths.
 </EvidenceClaim>
 

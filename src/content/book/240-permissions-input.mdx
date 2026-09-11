@@ -1,10 +1,10 @@
 ---
 slug: permissions-and-input
-order: 240
-number: "24"
+order: 390
+number: "39"
 kind: chapter
-part: Part V · The work lifecycle
-partOrder: 5
+part: Part VI · The work lifecycle
+partOrder: 6
 title: Permission modes, approvals, and structured input
 shortTitle: Permissions and input
 summary: T3 Code persists a four-value runtime-mode choice on a thread, but each provider maps that choice into its own controls; live approval and structured-input requests travel through distinct canonical flows.
@@ -17,7 +17,7 @@ objectives:
 keywords: [runtime mode, permission, approval, structured input, reactor, pending state, provider adapter, security]
 sourceAreas: [packages/contracts/src/orchestration.ts, packages/contracts/src/provider.ts, apps/server/src/provider, apps/server/src/orchestration/Layers, apps/web/src/session-logic.ts, apps/mobile/src/state/use-selected-thread-requests.ts]
 visuals: [permission mapping matrix, interactive request router]
-updatedAt: 2026-08-24
+updatedAt: "2026-09-11"
 ---
 
 import Callout from "../../components/Callout.astro";
@@ -51,7 +51,7 @@ policy, not an independent per-turn override hidden in the start command.
 | `auto` | `on-request`, `workspace-write`, `auto_review` reviewer | `auto` | prefers an implement-mode alias when offered; permission callbacks still wait | no ACP session-mode mapping; a raised permission callback waits for an explicit response | broad operations ask; `question` is allowed |
 | `full-access` | `never`, `danger-full-access`, user reviewer | `bypassPermissions` plus `allowDangerouslySkipPermissions: true` | prefers an implement-mode alias and auto-selects an offered allow option; otherwise waits on the callback | auto-selects an offered allow-always or allow-once option; otherwise waits on the callback | allows all permission rules |
 
-The table records executed mappings at this pinned revision. It does **not** turn
+The table records the executed mappings. It does **not** turn
 the blank Claude map entry, Cursor mode aliases, Grok callback policy, or OpenCode's
 shared non-full-access ruleset into claims of equivalent safety. Codex, for example,
 also selects a native sandbox and reviewer for every mode. Claude intercepts
@@ -96,7 +96,8 @@ map.
 - OpenCode maps `permission.asked` and `question.asked` separately, then calls
   `permission.reply` or `question.reply`.
 
-All five adapters implement both response operations in the current source. That
+All six adapters implement the shared response boundary, with provider-specific
+support for originating each request shape. That
 does not promise every provider originates both request kinds in every configuration.
 The adapter capability surfaces are the positive evidence here; they are not a
 guarantee that a native runtime will open a given request type during every session.
@@ -141,7 +142,7 @@ runtime ingestion and become durable activities.
 Acceptance of the client command is not a synchronous certificate that a provider
 completed the action, and the hot provider bridge is not a replayable outbox.
 
-<Figure number="24.1" title="A request has a durable shell around a live callback" hint="resolution state can survive longer than the provider callback that created it" caption="A provider adapter emits a canonical approval or structured-input request. Runtime ingestion flushes the current assistant segment and records request activity; approvals also receive a dedicated projection. A client later records durable response intent. The provider command reactor must still find the live bound session and callback before the adapter can reply. A later native resolution returns through runtime ingestion. Persistence therefore preserves the product conversation, not the callback closure itself." textEquivalent="Provider runtime request flows to ingestion, durable activity and optional pending-approval projection, then a client response command that records durable response intent. A provider command reactor routes that intent to the live bound adapter callback, which may emit a later resolution activity. A restart boundary separates durable request records from the in-memory provider callback." sources={["permission-request-contract", "permission-runtime-activities", "permission-assistant-pause-flush", "permission-response-intent-decider", "permission-response-reactor", "permission-approval-projection"]}>
+<Figure number="39.1" title="A request has a durable shell around a live callback" hint="resolution state can survive longer than the provider callback that created it" caption="A provider adapter emits a canonical approval or structured-input request. Runtime ingestion flushes the current assistant segment and records request activity; approvals also receive a dedicated projection. A client later records durable response intent. The provider command reactor must still find the live bound session and callback before the adapter can reply. A later native resolution returns through runtime ingestion. Persistence therefore preserves the product conversation, not the callback closure itself." textEquivalent="Provider runtime request flows to ingestion, durable activity and optional pending-approval projection, then a client response command that records durable response intent. A provider command reactor routes that intent to the live bound adapter callback, which may emit a later resolution activity. A restart boundary separates durable request records from the in-memory provider callback." sources={["permission-request-contract", "permission-runtime-activities", "permission-assistant-pause-flush", "permission-response-intent-decider", "permission-response-reactor", "permission-approval-projection"]}>
   <Mermaid id="permission-request-path" label="Approval and structured-input request path" chart={`flowchart LR
     N[adapter / native runtime] -. canonical request .-> I[runtime ingestion]
     I --> A[(request activity)]
@@ -170,7 +171,7 @@ addressed to a thread; each client chooses its controls.
 | Person operating the client | the authorization decision | that a broad mode replaces reviewing a specific request |
 
 Permission capability metadata could make these differences easier to negotiate in
-a UI, but none exists at this pinned revision. That is a **future design direction**,
+a UI, but no central inbox is implemented. That is a **future design direction**,
 not current behavior.
 
 <SourceList ids={[

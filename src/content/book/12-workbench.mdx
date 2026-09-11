@@ -1,0 +1,136 @@
+---
+slug: workbench
+order: 70
+number: "7"
+kind: chapter
+part: "Part I · Product guide"
+partOrder: 1
+title: "The workbench: files, terminals, browser preview, and SnapShots"
+shortTitle: The workbench
+summary: "Use T3 Code's thread-side tools to inspect the workspace, run commands, test a web app, and bring visual context from another application into the same conversation."
+status: source-checked
+gates: [sources, links, interaction, editorial]
+objectives:
+  - Choose the right workbench surface for inspection, execution, web testing, or visual context.
+  - Keep terminal and browser evidence attached to the thread where it is useful.
+  - Configure SnapShots safely on each supported desktop.
+keywords: [workbench, files, terminal, browser preview, browser profiles, SnapShots]
+sourceAreas: [docs/user/terminal.md, docs/user/browser-import.md, docs/user/snap-shot.md, apps/web/src/components/files, apps/web/src/components/preview, apps/web/src/components/TerminalPanel.tsx]
+visuals: [workbench feedback loop, tool choice table]
+updatedAt: "2026-09-11"
+---
+
+import Callout from "../../components/Callout.astro";
+import Mermaid from "../../components/Mermaid.astro";
+
+T3 Code keeps the conversation and the evidence for a change in one place. The
+agent can edit code while you inspect a file, watch a command, open the running
+app, or attach the state of another desktop window. These surfaces are most useful
+as a loop: **inspect, ask, run, observe, refine**.
+
+<Mermaid id="product-workbench-loop" label="The T3 Code workbench feedback loop" chart={`flowchart LR
+  P[Prompt and plan] --> F[Files and diffs]
+  F --> T[Terminal command]
+  T --> B[Browser preview]
+  B --> O[Observe behavior]
+  O -->|page issue| A[Annotate or describe]
+  O -->|external app issue| S[SnapShot]
+  A --> P
+  S --> P
+  T -->|failure output| P`} />
+
+## Choose the surface that answers the question
+
+| Question | Open | Why it helps | Watch for |
+| --- | --- | --- | --- |
+| “What is in this file?” | **Files** | Browse the project tree and inspect source or media without leaving the thread. | A rendered preview can hide exact source; use the source view when syntax matters. |
+| “Does this command pass?” | **Terminal** | Run a shell on the environment that owns the project. | A remote project's terminal runs remotely, not on the device showing the UI. |
+| “Does the page behave correctly?” | **Preview/Browser** | Exercise the app beside the conversation and give the agent concrete UI feedback. | A server must listen on a reachable port; signed-in state belongs to the selected browser profile. |
+| “What is wrong in this other app?” | **SnapShot** | Capture the active desktop window and attach its visual and, when available, accessibility context. | Review sensitive content before sending; SnapShots are desktop-only and opt-in. |
+
+### Files: inspect before you redirect the agent
+
+Open the thread's right panel and choose **Files**. Navigate the workspace tree,
+select a file, and use the appropriate source, image, video, Markdown, or web
+preview. This is ideal for answering a narrow question—whether the agent edited
+the right component, whether a generated asset looks correct, or where a setting
+lives—without asking it to spend another turn rediscovering the file.
+
+Files are read from the selected environment. If you are controlling a server over
+SSH, Tailscale, or T3 Connect, the phone or laptop is only the viewer; the path and
+contents remain on the host. Treat the panel as an inspection surface, and use the
+conversation to request changes so the thread preserves the reason for the edit.
+
+### Terminal: run on the project's machine
+
+Open the terminal drawer from the thread or command palette, create a terminal,
+and run the smallest command that answers your question. Multiple terminals are
+useful when one process must keep running while another runs tests or Git commands.
+The terminal is a real shell owned by the environment, so its installed tools,
+credentials, filesystem, and network are those of the host.
+
+Terminal history survives client reconnection, within server limits: up to **5,000
+lines and 8 MiB per terminal**. The server removes the oldest output when either
+limit is crossed, and a client may display less than the server retained. Save
+important results in the project or summarize them in the thread; scrollback is a
+working buffer rather than permanent documentation. See the immutable
+[terminal history guide](https://github.com/pingdotgg/t3code/blob/859304b7808ab9a4be87b1bddcd07c6485bf9c4f/docs/user/terminal.md).
+
+<Callout title="Give the agent the useful slice" tone="info">
+  When a failure is already visible in a terminal, attach or reference that terminal
+  context instead of pasting a huge log. Include the command, the first meaningful
+  error, and what you expected. Long-running noise makes diagnosis harder.
+</Callout>
+
+### Browser preview: close the implementation loop
+
+Start the application in a terminal, then open its discovered port in the preview.
+Use the preview to navigate, refresh, inspect the current page, and report behavior
+in the same thread that owns the code. If annotation tools are available, point to
+the affected region and describe the intended result. The useful prompt is concrete:
+“This menu clips at this width; keep it inside the viewport,” rather than “fix UI.”
+
+Desktop preview profiles can keep separate browsing identities. To reuse an
+existing signed-in session, open **Settings → Integrations → Browser profiles →
+Add profile**, select **Import from**, close the source browser, and complete any OS
+keyring prompt. Import is a **one-time cookie copy**: future sign-ins diverge, some
+sites require authentication again, and partitioned cookies are skipped. Safari
+import on macOS needs temporary Full Disk Access; Windows supports Firefox and
+Helium profiles with standard profile encryption. The exact platform limits are in
+the [browser import guide](https://github.com/pingdotgg/t3code/blob/859304b7808ab9a4be87b1bddcd07c6485bf9c4f/docs/user/browser-import.md).
+
+## SnapShots: bring another window into the draft
+
+A SnapShot captures the active window, records its app name and title, and attaches
+it to the current draft. With **Include app text**, it can also carry accessibility
+data—visible text, controls, and positions—so an agent can reason beyond pixels.
+If an app responds slowly or exposes little accessibility data, capture continues
+with the image.
+
+1. In the desktop app, open **Settings → SnapShots** and enable the feature.
+2. Allow capture and choose a shortcut. macOS asks for Screen Recording and asks
+   for Accessibility only when app text is enabled. Windows needs no setup.
+3. Switch to the window, press the shortcut, then review the attachment in the
+   draft before sending. If no thread is open, T3 Code creates a draft in the
+   current project.
+4. Tune sound, flash, and the fly-to-draft animation independently. Reduced-motion
+   OS settings disable the animation.
+
+Pending captures are saved until the draft attachment is recorded, so closing the
+app mid-capture does not normally lose them. **Finish later** disables capture but
+keeps installed setup pieces. Turning SnapShots off releases the shortcut.
+
+On Linux, SnapShots require Wayland. GNOME uses a bundled extension, KDE Plasma 6
+uses a helper, and Hyprland or Niri asks you to review the exact compositor config
+change before saving. Other Wayland desktops can fall back to a manual window
+picker; X11 is unsupported. Follow the desktop-specific recovery steps in the
+[SnapShots guide](https://github.com/pingdotgg/t3code/blob/859304b7808ab9a4be87b1bddcd07c6485bf9c4f/docs/user/snap-shot.md).
+
+## A practical workbench pass
+
+For a UI bug, ask the agent to identify the likely files, inspect the resulting diff,
+start the app in one terminal, and run a focused check in another. Open the preview,
+reproduce the issue, and attach an annotation or a SnapShot when the missing context
+lives outside the preview. Before accepting the work, refresh the preview, inspect
+the final diff, and keep the command result in the thread. That path makes your
+acceptance based on visible evidence rather than a confident status message.

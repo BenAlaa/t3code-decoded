@@ -1,10 +1,10 @@
 ---
 slug: events-receipts
-order: 100
-number: "10"
+order: 250
+number: "25"
 kind: chapter
-part: Part III · Transactional domain core and post-commit delivery
-partOrder: 3
+part: Part IV · Transactional domain core and post-commit delivery
+partOrder: 4
 title: Events, receipts, idempotency, and the post-commit gap
 shortTitle: Events and receipts
 summary: Events record durable domain facts, command receipts bind an id to one aggregate but not its payload, and hot publication after commit leaves a crash window that an acknowledgement cannot close.
@@ -18,7 +18,7 @@ objectives:
 keywords: [events, command receipts, idempotency, retry, sequence, publication, PubSub, crash window]
 sourceAreas: [packages/contracts/src/orchestration.ts, apps/server/src/persistence/Layers/OrchestrationEventStore.ts, apps/server/src/persistence/Services/OrchestrationCommandReceipts.ts, apps/server/src/orchestration/Layers/OrchestrationEngine.ts, apps/server/src/orchestration/Layers/ProviderCommandReactor.ts]
 visuals: [event envelope ledger, transaction boundary, duplicate-command matrix, crash-window explorer]
-updatedAt: 2026-08-24
+updatedAt: "2026-09-11"
 ---
 
 import Callout from "../../components/Callout.astro";
@@ -75,7 +75,7 @@ The event store therefore has two orders with different visibility:
 - a per-stream `stream_version`, computed and stored internally.
 
 The per-stream version is not an expected-version token in the command protocol.
-As Chapter 9 showed, one serialized command worker prevents concurrent decisions
+As Chapter 24 showed, one serialized command worker prevents concurrent decisions
 inside a server process.
 
 ## A receipt is smaller than the command it deduplicates
@@ -111,7 +111,7 @@ cannot catch changed intent within the same aggregate.
 
 <SourceExcerpt id="engine-commit-publication" focus={[197, 198, 203, 204, 205, 206, 210, 218, 219, 220, 221, 223, 224, 228, 234, 243, 244, 245, 259]} note="Decision has already finished when this excerpt begins. Event append, temporary model fold, synchronous SQLite projections, and the accepted receipt run inside withTransaction. The authoritative in-memory assignment and PubSub loop follow the commit; the last sequence returns after that loop." />
 
-<Figure number="10.1" title="One SQL commit, then a volatile delivery bridge" hint="the dashed branch marks the hard-crash window" caption="Event rows, synchronous projection rows, and the accepted receipt commit atomically. The engine then swaps its in-memory command model and publishes the batch event by event to an in-memory PubSub. The RPC result follows publication but cannot make that post-commit bridge durable." textEquivalent="The decider first plans an event batch outside SQL. One SQL transaction appends every event, applies every synchronous SQLite projection, and writes an accepted command receipt holding the last sequence. Commit makes all three durable at once. After commit, the engine assigns its next in-memory read model. It then publishes each committed event to an in-memory PubSub. A process crash between commit and the first publication leaves durable intent and a receipt but no hot event. A process crash midway can leave only a publication prefix. Only after the publication loop does the engine return the last sequence. Provider and other reactors consume those hot events asynchronously." sources={["engine-commit-publication", "command-receipt-schema", "hot-reactor-no-replay", "provider-turn-reactor"]}>
+<Figure number="25.1" title="One SQL commit, then a volatile delivery bridge" hint="the dashed branch marks the hard-crash window" caption="Event rows, synchronous projection rows, and the accepted receipt commit atomically. The engine then swaps its in-memory command model and publishes the batch event by event to an in-memory PubSub. The RPC result follows publication but cannot make that post-commit bridge durable." textEquivalent="The decider first plans an event batch outside SQL. One SQL transaction appends every event, applies every synchronous SQLite projection, and writes an accepted command receipt holding the last sequence. Commit makes all three durable at once. After commit, the engine assigns its next in-memory read model. It then publishes each committed event to an in-memory PubSub. A process crash between commit and the first publication leaves durable intent and a receipt but no hot event. A process crash midway can leave only a publication prefix. Only after the publication loop does the engine return the last sequence. Provider and other reactors consume those hot events asynchronously." sources={["engine-commit-publication", "command-receipt-schema", "hot-reactor-no-replay", "provider-turn-reactor"]}>
   <Mermaid id="receipt-transaction-boundary" label="Durable transaction followed by in-memory event publication" chart={`flowchart LR
     D[decide event batch] --> T
     subgraph T[one SQL transaction]

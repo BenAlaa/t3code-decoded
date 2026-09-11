@@ -1,10 +1,10 @@
 ---
 slug: cli-bootstrap
-order: 50
-number: "5"
+order: 200
+number: "20"
 kind: chapter
-part: Part II · Boot and connect
-partOrder: 2
+part: Part III · Boot and connect
+partOrder: 3
 title: The `npx t3` bootstrap path
 shortTitle: CLI bootstrap
 summary: The published package resolves commands and configuration, locates its copied web client, and hands one readonly ServerConfig value to the layered runtime.
@@ -17,7 +17,7 @@ objectives:
 keywords: [npx t3, CLI, ServerConfig, bootstrap, static assets, npm package]
 sourceAreas: [apps/server/src/bin.ts, apps/server/src/cli, apps/server/scripts/cli.ts, apps/server/vite.config.ts]
 visuals: [package exploder, interactive bootstrap stepper, configuration scenario resolver]
-updatedAt: 2026-08-24
+updatedAt: "2026-09-11"
 ---
 
 import Callout from "../../components/Callout.astro";
@@ -31,7 +31,7 @@ import SourceList from "../../components/SourceList.astro";
 
 `npx t3` looks like one command, but it crosses three distinct systems: npm
 selects a published executable, the Effect CLI selects a command and resolves
-configuration, and the server runtime acquires the services described in Chapter 6.
+configuration, and the server runtime acquires the services described in Chapter 21.
 Keeping those stages separate makes several otherwise surprising behaviors obvious.
 
 ## What npm actually installs
@@ -52,7 +52,7 @@ publishes only `dist`. That directory is deliberately more than one JavaScript f
 </table>
 </div>
 
-<Figure number="5.1" title="Published package exploder" hint="build edges are not runtime calls" caption="The server build waits for the web build, bundles the CLI and service launcher, copies the web output, and leaves the native dependency closure external. Publish then asserts that the required executable, launcher, and client entry exist." textEquivalent="The source CLI and service launcher become separate files in dist. The web build is copied to dist/client. Native packages remain in installed node_modules. package.json maps the t3 executable to dist/bin.mjs and publishes only dist." sources={["cli-package-surface", "cli-bundle-policy", "cli-web-bundle", "cli-publish-assertions", "cli-native-dependency-boundary", "service-launcher-trial-handoff"]}>
+<Figure number="20.1" title="Published package exploder" hint="build edges are not runtime calls" caption="The server build waits for the web build, bundles the CLI and service launcher, copies the web output, and leaves the native dependency closure external. Publish then asserts that the required executable, launcher, and client entry exist." textEquivalent="The source CLI and service launcher become separate files in dist. The web build is copied to dist/client. Native packages remain in installed node_modules. package.json maps the t3 executable to dist/bin.mjs and publishes only dist." sources={["cli-package-surface", "cli-bundle-policy", "cli-web-bundle", "cli-publish-assertions", "cli-native-dependency-boundary", "service-launcher-trial-handoff"]}>
   <Mermaid id="cli-package-artifacts" label="T3 CLI package artifact graph" chart={`flowchart LR
     B[apps/server/src/bin.ts] -->|bundle| CLI[dist/bin.mjs]
     L[src/service-launcher.ts] -->|bundle| SL[dist/service-launcher.mjs]
@@ -151,7 +151,7 @@ compiled-adjacent `client` directory before the monorepo fallback. If neither ha
 index, the catch-all route returns HTTP 503 instead of an application shell.
 
 <EvidenceClaim kind="verified" title="Pairing secrets stay out of the initial request path and query" refs={["startup-headless-access", "startup-pairing-fragment", "client-pairing-fragment-strip"]}>
-  Startup output constructs `/pair#token=…`. URL fragments are not sent in the HTTP request; the browser client extracts and removes the fragment before exchanging the credential in Chapter 8.
+  Startup output constructs `/pair#token=…`. URL fragments are not sent in the HTTP request; the browser client extracts and removes the fragment before exchanging the credential in Chapter 23.
 </EvidenceClaim>
 
 <SourceList ids={[

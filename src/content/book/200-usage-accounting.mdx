@@ -1,24 +1,25 @@
 ---
 slug: usage-accounting
-order: 200
-number: "20"
+order: 350
+number: "35"
 kind: chapter
-part: Part IV · Five harnesses, one product model
-partOrder: 4
+part: Part V · Six providers, one product model
+partOrder: 5
 title: Usage accounting without a false ledger
 shortTitle: Usage accounting
-summary: "The live context meter and historical transcript usage view are deliberately different measurements: one projects the latest usable context snapshot for a thread, while the other scans provider-owned files into a deduplicated, priced historical estimate."
+summary: "Live thread context, historical transcript accounting, and provider-reported subscription limits answer different questions and keep separate evidence, merge, pricing, and refresh rules."
 status: source-checked
 gates: [sources, interaction]
 objectives:
   - Trace the live context-window snapshot from provider adapter to the web composer.
   - Trace historical Claude and Codex transcript records through parsing, deduplication, bucketing, pricing, and environment merge.
+  - Explain Grok transcript accounting, custom prices, pooled subscription windows, hubs, and reset credits.
   - Interpret coverage, source fingerprints, cache state, and cost provenance without claiming a billing settlement.
   - Keep task and subagent accounting as a distinct later concern.
 keywords: [usage, context window, transcripts, pricing, deduplication, cache, RPC, provenance, environments]
 sourceAreas: [packages/contracts/src/providerRuntime.ts, packages/contracts/src/usage.ts, apps/server/src/provider/Layers, apps/server/src/orchestration/Layers, apps/server/src/usage, packages/shared/src/usageMerge.ts, apps/web/src/components/usage, apps/mobile/src/features/usage]
 visuals: [two-lane usage pipeline, usage accounting lab, source-fingerprint merge]
-updatedAt: 2026-08-24
+updatedAt: "2026-09-11"
 ---
 
 import Callout from "../../components/Callout.astro";
@@ -29,19 +30,22 @@ import SourceExcerpt from "../../components/SourceExcerpt.astro";
 import SourceList from "../../components/SourceList.astro";
 import UsageAccountingLab from "../../components/UsageAccountingLab.astro";
 
-“Usage” names two different questions in T3 Code.
+“Usage” names three different questions in T3 Code.
 
 The composer asks: **how full is this thread's context window at the latest valid
-provider update?** The Usage screens ask: **what token-shaped records can this
-environment read from selected provider transcript directories over a historical
-time range?** They share words such as model, tokens, and session, but they do not
-share a source of truth, an update cadence, or a settlement guarantee.
+provider update?** The Usage history asks: **what token-shaped records can this
+environment read from provider transcript directories over a historical time
+range?** The Limits view asks: **how much provider-reported subscription capacity
+remains across the selected accounts and environments?** They share words such as
+model, tokens, account, and session, but they do not share a source of truth, an
+update cadence, or a settlement guarantee.
 
-<Callout title="Read the two lanes separately" tone="warning">
+<Callout title="Read the three lanes separately" tone="warning">
   A current context snapshot is not added to the historical Usage total. Conversely,
   a historical transcript scan cannot certify that the currently displayed context
   meter is complete, current, or billed. The first is a live operational aid; the
-  second is an evidence-limited accounting estimate.
+  second is an evidence-limited accounting estimate. A subscription-limit bar is a
+  provider-reported rolling window; it is neither of those token totals.
 </Callout>
 
 ## The live lane projects a current context snapshot
@@ -55,7 +59,7 @@ identity.
 
 <SourceExcerpt id="usage-live-contract" focus={[309, 310, 312, 315, 319, 323, 327, 331]} note="This union member carries the context snapshot payload. Provider, thread, timestamp, and optional turn/instance identity come from the canonical runtime-event base fields catalogued with the chapter sources." />
 
-At this pinned revision, source inspection finds canonical token-usage emission in
+Source inspection finds canonical token-usage emission in
 two adapters:
 
 <div class="table-scroll" tabindex="0" role="region" aria-label="Live token usage adapter coverage">
@@ -88,7 +92,7 @@ files.
 
 <SourceExcerpt id="usage-live-activity" focus={[766, 770, 774, 778, 782, 784]} note="Ingestion turns an accepted runtime token snapshot into a context-window activity." />
 
-<SourceExcerpt id="usage-web-context-meter" focus={[50, 54, 61, 69, 78, 86, 92, 96]} note="The selector chooses the latest valid activity; the composer meter renders that one snapshot rather than a historical accumulation." />
+<SourceExcerpt id="usage-web-context-meter" focus={[50, 54, 61, 69, 78, 86, 90]} note="The selector chooses the latest valid activity and derives remaining-token values from that one snapshot rather than a historical accumulation." />
 
 <EvidenceClaim kind="verified" title="The live meter is provider-conditional current state" refs={["provider-runtime-event-base", "usage-live-contract", "usage-codex-normalization", "usage-codex-emission", "usage-claude-emission", "provider-service-runtime-correlation", "usage-live-admission", "usage-live-activity", "usage-web-context-meter"]}>
   The meter can be absent because no valid activity has reached it, because an
@@ -99,16 +103,17 @@ files.
   metadata—not a cross-thread, cross-day, or cost total.
 </EvidenceClaim>
 
-## The historical lane scans files, not orchestration state
+## The historical lane scans three provider homes, not orchestration state
 
-The version-4 usage contract intentionally reads selected CLI homes: Claude JSONL
+The version-5 usage contract reads selected CLI homes: Claude JSONL
 under a resolved Claude home (preferring `.claude/projects`, with a `projects`
-fallback) and Codex JSONL under the resolved Codex shared-home `sessions` tree. The
+fallback), Codex JSONL under the resolved Codex shared-home `sessions` tree, and
+Grok `updates.jsonl` files under its resolved sessions home. The
 server exposes preaggregated buckets, never raw transcript records. Consequently it
 can include provider turns made outside T3 Code, but it cannot account for a
-provider whose history is not in those two scanned layouts.
+provider whose history is not in those three scanned layouts.
 
-<SourceExcerpt id="usage-summary-contract" focus={[4, 10, 20, 24, 26, 48, 53, 59, 64, 74, 82, 95, 100]} note="The contract fixes version 4, two scan providers, time-zone semantics, and token/cost categories." />
+<SourceExcerpt id="usage-summary-contract" focus={[4, 6, 10, 20, 24, 29, 33, 35, 51, 62, 73, 86, 94, 100]} note="The contract fixes version 5, three scan providers, compatibility with version 4 summaries, time-zone semantics, and token/cost categories." />
 
 <SourceExcerpt id="usage-home-discovery" focus={[187, 192, 198, 205, 212, 218, 225]} note="Discovery follows the legacy Claude and Codex settings paths. Window validation and candidate-file slack are catalogued separately below." />
 
@@ -123,7 +128,9 @@ Parser rules are provider-specific. Claude accepts assistant records with a usag
 object and deduplicates repeated content-block accounting by message/request key.
 Codex follows turn-context model state and `last_token_usage` deltas; it subtracts
 cached tokens from the reported input count and applies a one-second fork-copy
-suppression heuristic. Codex records carry no global duplicate key: consecutive
+suppression heuristic. Grok reads completed-turn updates, can split model-level
+usage, converts provider cost ticks, and uses session, prompt, and model identity
+for deduplication when available. Codex records carry no global duplicate key: consecutive
 delta suppression and fork-copy suppression are parser-local. That one-second
 threshold is implementation behavior, not a portable provider promise.
 
@@ -172,11 +179,51 @@ one session repeatedly across day/model buckets.
   passes answered summaries to the shared versioned merge.
 </EvidenceClaim>
 
+## Custom prices are environment settings
+
+Automatic model pricing is a convenience, not an authority. Web and desktop let a
+user set exact per-million input, output, cache-read, and cache-write rates for a
+model on one or several environments. Blank cache rates inherit the input rate;
+zero means free. Saving is fan-out work: each destination reports success, and a
+failed destination can be retried without rewriting the environments that already
+accepted the change. Closing the dialog does not create an offline write queue.
+
+The historical scan applies these overrides before automatic pricing. A client that
+selects several environments can therefore see a mixed value when their local price
+settings differ. This is an intentional consequence of environment ownership.
+
+## Subscription limits are provider and account state
+
+Provider snapshots can carry normalized rolling windows with stable ids, a kind,
+label, used percentage, optional reset time, and optional duration. Sparse updates
+merge by window id so one rate-limit event does not erase unrelated windows. An
+unavailable reason distinguishes an account that cannot report limits from a probe
+that failed while a prior good snapshot may still be useful.
+
+The Limits view pools equivalent accounts across selected environments and optional
+CLIProxyAPI hubs. It presents **remaining** capacity, keeps the same account segment
+in the same visual column across windows, and explains the next reset. Codex accounts
+may also report banked reset credits; redemption pins the request to the displayed
+credit id so a retry cannot silently consume a different credit.
+
+`/usage-limits` reads the same snapshot inside a thread. It does not run an agent or
+refresh provider state. API-key accounts and some proxy configurations may never
+report subscription windows, which is different from a temporary probe failure.
+
+<Mermaid id="usage-three-products" label="Three independent usage products" chart={`flowchart LR
+  A[Provider runtime event] --> L[Latest thread context\noperational meter]
+  B[Claude · Codex · Grok\ntranscript files] --> H[Historical tokens and\nAPI-equivalent estimate]
+  C[Provider account probes\nand optional hubs] --> Q[Remaining subscription\nlimit windows]
+  P[Environment model-price overrides] --> H
+  R[Sparse rate-limit updates] --> Q
+  L ~~~ H
+  H ~~~ Q`} />
+
 <SourceExcerpt id="usage-rpc-contract" focus={[260, 264, 268, 272, 276, 280, 284]} note="The server exposes a typed, versioned Usage summary rather than raw transcript rows." />
 
 <SourceExcerpt id="usage-environment-merge" focus={[102, 108, 115, 123, 132, 141, 151, 163]} note="The client merge rejects stale contract versions and uses exact source fingerprints to choose one environment's contribution. Total reconstruction is catalogued separately." />
 
-<Figure number="20.1" title="Two measurements travel through different evidence chains" hint="the lanes share no accumulator" caption="Live context updates become a latest-valid thread activity and a composer meter. Historical usage scans selected provider transcript homes, normalizes and deduplicates records, optionally prices buckets, then merges equivalent physical sources across environments. No edge is drawn between the lanes: neither lane settles the other." textEquivalent="The left lane starts with Codex or Claude provider events, validates a positive used-token snapshot, persists a context-window activity, selects the newest valid activity for one thread, and renders a context meter. The right lane starts with selected Claude and Codex transcript directories, streams JSONL records, parses provider-specific usage, removes within-file and cross-file duplicates, applies time bounds and buckets, obtains provider-reported or rate-table cost provenance, and merges environment summaries by a host/provider/home/volume fingerprint. There is no arrow from the context meter into the historical total." sources={["usage-live-contract", "usage-live-activity", "usage-web-context-meter", "usage-summary-contract", "usage-dedup-buckets", "usage-pricing-cache", "usage-rpc-contract", "usage-environment-merge"]}>
+<Figure number="35.1" title="Operational context and historical accounting travel through different evidence chains" hint="the lanes share no accumulator" caption="Live context updates become a latest-valid thread activity and a composer meter. Historical usage scans provider transcript homes, normalizes and deduplicates records, optionally prices buckets, then merges equivalent physical sources across environments. No edge is drawn between the lanes: neither lane settles the other." textEquivalent="The left lane starts with a provider event, validates a positive used-token snapshot, persists a context-window activity, selects the newest valid activity for one thread, and renders a context meter. The right lane starts with Claude, Codex, and Grok transcript directories, streams JSONL records, parses provider-specific usage, removes duplicates, applies time bounds and buckets, obtains provider-reported or configured/rate-table cost provenance, and merges environment summaries by a host/provider/home/volume fingerprint. There is no arrow from the context meter into the historical total." sources={["usage-live-contract", "usage-live-activity", "usage-web-context-meter", "usage-summary-contract", "usage-dedup-buckets", "usage-pricing-cache", "usage-rpc-contract", "usage-environment-merge"]}>
   <Mermaid id="two-lane-usage-accounting" label="Live context and historical transcript accounting" chart={`flowchart LR
     subgraph L[Live thread context · current state]
       A[Codex / Claude adapter event] --> B{usedTokens > 0?}
@@ -185,7 +232,7 @@ one session repeatedly across day/model buckets.
       D --> E[composer context meter]
     end
     subgraph H[Historical transcript accounting · selected files]
-      F[Claude / Codex JSONL homes] --> G[parse + normalize]
+      F[Claude / Codex / Grok JSONL homes] --> G[parse + normalize]
       G --> I[within-file and cross-file dedupe]
       I --> J[time bounds + day/hour buckets]
       J --> K[reported cost or rate-table estimate]
@@ -196,7 +243,7 @@ one session repeatedly across day/model buckets.
     A ~~~ F`} />
 </Figure>
 
-There is an important diagnostic limitation at this pinned revision. The contract
+There is an important diagnostic limitation. The contract
 permits `ok`, `missing`, `partial`, and `failed` source states, but the service path
 observed here emits `missing` when the directory is absent—or when the existence
 check itself fails—and otherwise reports `ok`. Directory listing errors are swallowed
@@ -244,7 +291,7 @@ live `88,000 / 200,000` context snapshot remains deliberately outside that total
 <Callout title="Deferred: task and subagent usage" tone="info">
   Runtime task/subagent work has its own lifecycle and optional usage-shaped data.
   This chapter intentionally does not roll it into thread context telemetry or
-  provider-transcript accounting. The planned Chapter 25 will define its identity,
+  provider-transcript accounting. Chapter 40 defines its identity,
   fan-out, retries, and attribution rules before a task-level total is presented.
 </Callout>
 
